@@ -11,6 +11,9 @@ jobs:
 
     - name: Setup Tools
       uses: junminahn/actions/asdf-tools@v0.2.0
+      with:
+        plugins: |
+          mongodb=https://github.com/junminahn/asdf-mongodb.git
 
     - name: Rerun Pre-Commit Hooks on CI
       run: pre-commit run --color=always --show-diff-on-failure --all-files
