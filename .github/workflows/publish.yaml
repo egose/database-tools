@@ -1,0 +1,35 @@
+name: Publish Docker image
+
+on:
+  push:
+    tags:
+    - v*.*.*
+
+env:
+  DOCKER_REGISTRY: ghcr.io
+  IMAGE_NAME: junminahn/mongo-tools-ext
+
+jobs:
+  build-push-frontend:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+
+    steps:
+    - uses: hmarr/debug-action@v2
+    - uses: actions/checkout@v3
+
+    - name: Setup Tools
+      uses: junminahn/actions/asdf-tools@v0.2.0
+
+    - name: Build and Push
+      uses: junminahn/actions/docker-build-push@v0.2.0
+      with:
+        registry-url: ${{ env.DOCKER_REGISTRY }}
+        registry-username: ${{ github.actor }}
+        registry-password: ${{ secrets.GITHUB_TOKEN }}
+        image-name: ${{ env.IMAGE_NAME }}
+        metadata-tags: |
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{major}}
