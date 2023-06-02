@@ -180,6 +180,24 @@ An example of `updates.json`:
 
 This JSON file provides an example of updating the users collection in the restored database.
 
+### Execute Binary Using Docker Container Image
+
+To execute a binary using a Docker container image, you can use the following command:
+
+```sh
+docker run --rm \
+    -v "$(pwd)/tmp:/tmp" \
+    -e MONGOARCHIVE__DUMP_PATH=/tmp/datadump \
+    ghcr.io/junminahn/mongo-tools-ext:latest \
+    mongoarchive \
+    --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+    --db=<dbname> \
+    --azAccountName=<az_account_name> \
+    --azAccountKey=<az_account_key> \
+    --azContainerName=<az_container_name> \
+    --keep
+```
+
 ## Backlog
 
 1. Support for Other Major Cloud Storage Services
