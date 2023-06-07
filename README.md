@@ -61,6 +61,10 @@ The binaries provided in this repository utilize MongoDB Tools directly, ensurin
 | azAccountName               | MONGOARCHIVE\_\_AZ_ACCOUNT_NAME                | string | Azure Blob Storage Account Name                                    |
 | azAccountKey                | MONGOARCHIVE\_\_AZ_ACCOUNT_KEY                 | string | Azure Blob Storage Account Key                                     |
 | azContainerName             | MONGOARCHIVE\_\_AZ_CONTAINER_NAME              | string | Azure Blob Storage Container Name                                  |
+| awsAccessKeyId              | MONGOARCHIVE\_\_AWS_ACCESS_KEY_ID              | string | AWS access key associated with an IAM account                      |
+| awsSecretAccessKey          | MONGOARCHIVE\_\_AWS_SECRET_ACCESS_KEY          | string | AWS secret key associated with the access keyName                  |
+| awsRegion                   | MONGOARCHIVE\_\_AWS_REGION                     | string | AWS Region whose servers you want to send your requests to         |
+| awsBucket                   | MONGOARCHIVE\_\_AWS_BUCKET                     | string | AWS S3 bucket name                                                 |
 | cron                        | MONGOARCHIVE\_\_CRON                           | bool   | run a cron schedular and block current execution path              |
 | cronExpression              | MONGOARCHIVE\_\_CRON_EXPRESSION                | string | a string describes individual details of the cron schedule         |
 | tz                          | MONGOARCHIVE\_\_TZ                             | string | user-specified time zone                                           |
@@ -110,7 +114,11 @@ The binaries provided in this repository utilize MongoDB Tools directly, ensurin
 | azAccountName                    | MONGOUNARCHIVE\_\_AZ_ACCOUNT_NAME                      | string | Azure Blob Storage Account Name                                     |
 | azAccountKey                     | MONGOUNARCHIVE\_\_AZ_ACCOUNT_KEY                       | string | Azure Blob Storage Account Key                                      |
 | azContainerName                  | MONGOUNARCHIVE\_\_AZ_CONTAINER_NAME                    | string | Azure Blob Storage Container Name                                   |
-| blobName                         | MONGOUNARCHIVE\_\_BLOB_NAME                            | bool   | Blob name of the archived file in the storage                       |
+| awsAccessKeyId                   | MONGOARCHIVE\_\_AWS_ACCESS_KEY_ID                      | string | AWS access key associated with an IAM account                       |
+| awsSecretAccessKey               | MONGOARCHIVE\_\_AWS_SECRET_ACCESS_KEY                  | string | AWS secret key associated with the access keyName                   |
+| awsRegion                        | MONGOARCHIVE\_\_AWS_REGION                             | string | AWS Region whose servers you want to send your requests to          |
+| awsBucket                        | MONGOARCHIVE\_\_AWS_BUCKET                             | string | AWS S3 bucket name                                                  |
+| objectName                       | MONGOUNARCHIVE\_\_OBJECT_NAME                          | bool   | Object name of the archived file in the storage                     |
 | dir                              | MONGOUNARCHIVE\_\_DIR                                  | bool   | directory name that contains the dumped files                       |
 | updates                          | MONGOUNARCHIVE\_\_UPDATES                              | bool   | array of update specifications in JSON string                       |
 | updatesFile                      | MONGOUNARCHIVE\_\_UPDATES_FILE                         | bool   | path to a file containing an array of update specifications         |
@@ -201,7 +209,4 @@ docker run --rm \
 ## Backlog
 
 1. Support for Other Major Cloud Storage Services
-   - Add functionality to support AWS S3 storage as a target for database archival.
    - Implement integration with Google Cloud Storage to enable archiving databases to Google Cloud Storage.
-   - Provide options and configuration parameters to specify the desired cloud storage service for database archival.
-   - Ensure compatibility with the existing command structure and interface to maintain consistency for users.

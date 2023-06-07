@@ -2,13 +2,12 @@ package mongounarchive
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"io/ioutil"
 	"os"
 	"path"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/junminahn/mongo-tools-ext/common"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -68,8 +67,13 @@ var (
 	azAccountKeyPtr    *string
 	azContainerNamePtr *string
 
-	blobNamePtr *string
-	dirPtr      *string
+	awsAccessKeyIdPtr     *string
+	awsSecretAccessKeyPtr *string
+	awsRegionPtr          *string
+	awsBucketPtr          *string
+
+	objectNamePtr *string
+	dirPtr        *string
 
 	updatesPtr     *string
 	updatesFilePtr *string
@@ -135,7 +139,12 @@ func ParseFlags() {
 	azAccountKeyPtr = flag.String("azAccountKey", os.Getenv(envPrefix+"AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
 	azContainerNamePtr = flag.String("azContainerName", os.Getenv(envPrefix+"AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
 
-	blobNamePtr = flag.String("blobName", os.Getenv(envPrefix+"BLOB_NAME"), "Blob name of the archived file in the storage (optional)")
+	awsAccessKeyIdPtr = flag.String("awsAccessKeyId", os.Getenv(envPrefix+"AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
+	awsSecretAccessKeyPtr = flag.String("awsSecretAccessKey", os.Getenv(envPrefix+"AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
+	awsRegionPtr = flag.String("awsRegion", os.Getenv(envPrefix+"AWS_REGION"), "AWS Region whose servers you want to send your requests to")
+	awsBucketPtr = flag.String("awsBucket", os.Getenv(envPrefix+"AWS_BUCKET"), "AWS S3 bucket name")
+
+	objectNamePtr = flag.String("objectName", os.Getenv(envPrefix+"OBJECT_NAME"), "Object name of the archived file in the storage (optional)")
 	dirPtr = flag.String("dir", os.Getenv(envPrefix+"DIR"), "directory name that contains the dumped files")
 
 	updatesPtr = flag.String("updates", os.Getenv(envPrefix+"UPDATES"), "array of update specifications in JSON string")
@@ -312,40 +321,40 @@ func GetMongounarchiveOptions(destPath string) []string {
 	return options
 }
 
-func GetAzBlobContainerClient() (*container.Client, error) {
-	return common.GetAzBlobContainerClient(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr)
-}
-
-func GetAzBlockBlobClient(containerClient *container.Client, blobName string) *blockblob.Client {
-	return containerClient.NewBlockBlobClient(blobName)
-}
-
-func GetTargetAzBlobName(containerClient *container.Client) (string, error) {
-	blobName := ""
-
-	pager := containerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Include: container.ListBlobsInclude{Snapshots: false, Versions: true},
-	})
-
-	for pager.More() {
-		resp, err := pager.NextPage(context.Background())
-		if err != nil {
-			return "", err
-		}
-
-		for _, blob := range resp.Segment.BlobItems {
-			if *blobNamePtr == "" || *blobNamePtr == *blob.Name {
-				blobName = *blob.Name
-				break
-			}
-		}
-
-		if blobName != "" {
-			break
-		}
+func getAzBlob() (*common.AzBlob, error) {
+	az := new(common.AzBlob)
+	err := az.Init(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr)
+	if err != nil {
+		return nil, err
 	}
 
-	return blobName, nil
+	return az, nil
+}
+
+func getAwsS3() (*common.AwsS3, error) {
+	s3 := new(common.AwsS3)
+	err := s3.Init(*awsAccessKeyIdPtr, *awsSecretAccessKeyPtr, *awsRegionPtr, *awsBucketPtr)
+	if err != nil {
+		return nil, err
+	}
+
+	return s3, nil
+}
+
+func GetStorage() (common.Storage, error) {
+	if useAzure() == true {
+		return getAzBlob()
+	}
+
+	if useAWS() == true {
+		return getAwsS3()
+	}
+
+	return nil, errors.New("No storage provider detected.")
+}
+
+func GetObjectName() string {
+	return *objectNamePtr
 }
 
 func GetMongoClient() (*mongo.Client, *mongo.Database, error) {
@@ -375,4 +384,12 @@ func HasUpdates() bool {
 
 func HasKeep() bool {
 	return *keepPtr == true
+}
+
+func useAzure() bool {
+	return *azAccountNamePtr != "" && *azAccountKeyPtr != "" && *azContainerNamePtr != ""
+}
+
+func useAWS() bool {
+	return *awsAccessKeyIdPtr != "" && *awsSecretAccessKeyPtr != "" && *awsRegionPtr != "" && *awsBucketPtr != ""
 }

@@ -1,11 +1,11 @@
 package mongoarchive
 
 import (
+	"errors"
 	"flag"
 	"os"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/go-co-op/gocron"
 	"github.com/junminahn/mongo-tools-ext/common"
 )
@@ -51,6 +51,11 @@ var (
 	azAccountNamePtr   *string
 	azAccountKeyPtr    *string
 	azContainerNamePtr *string
+
+	awsAccessKeyIdPtr     *string
+	awsSecretAccessKeyPtr *string
+	awsRegionPtr          *string
+	awsBucketPtr          *string
 
 	cronPtr           *bool
 	cronExpressionPtr *string
@@ -106,6 +111,11 @@ func ParseFlags() {
 	azAccountNamePtr = flag.String("azAccountName", os.Getenv(envPrefix+"AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
 	azAccountKeyPtr = flag.String("azAccountKey", os.Getenv(envPrefix+"AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
 	azContainerNamePtr = flag.String("azContainerName", os.Getenv(envPrefix+"AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
+
+	awsAccessKeyIdPtr = flag.String("awsAccessKeyId", os.Getenv(envPrefix+"AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
+	awsSecretAccessKeyPtr = flag.String("awsSecretAccessKey", os.Getenv(envPrefix+"AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
+	awsRegionPtr = flag.String("awsRegion", os.Getenv(envPrefix+"AWS_REGION"), "AWS Region whose servers you want to send your requests to")
+	awsBucketPtr = flag.String("awsBucket", os.Getenv(envPrefix+"AWS_BUCKET"), "AWS S3 bucket name")
 
 	// cron options:
 	cronPtr = flag.Bool("cron", os.Getenv(envPrefix+"CRON") == "true", "run a cron schedular and block current execution path")
@@ -236,8 +246,36 @@ func GetMongodumpOptions() []string {
 	return options
 }
 
-func GetAzBlobContainerClient() (*container.Client, error) {
-	return common.GetAzBlobContainerClient(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr)
+func getAzBlob() (*common.AzBlob, error) {
+	az := new(common.AzBlob)
+	err := az.Init(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr)
+	if err != nil {
+		return nil, err
+	}
+
+	return az, nil
+}
+
+func getAwsS3() (*common.AwsS3, error) {
+	s3 := new(common.AwsS3)
+	err := s3.Init(*awsAccessKeyIdPtr, *awsSecretAccessKeyPtr, *awsRegionPtr, *awsBucketPtr)
+	if err != nil {
+		return nil, err
+	}
+
+	return s3, nil
+}
+
+func GetStorage() (common.Storage, error) {
+	if useAzure() == true {
+		return getAzBlob()
+	}
+
+	if useAWS() == true {
+		return getAwsS3()
+	}
+
+	return nil, errors.New("No storage provider detected.")
 }
 
 func GetCronScheduler() *gocron.Scheduler {
@@ -256,4 +294,12 @@ func HasCron() bool {
 
 func HasKeep() bool {
 	return *keepPtr == true
+}
+
+func useAzure() bool {
+	return *azAccountNamePtr != "" && *azAccountKeyPtr != "" && *azContainerNamePtr != ""
+}
+
+func useAWS() bool {
+	return *awsAccessKeyIdPtr != "" && *awsSecretAccessKeyPtr != "" && *awsRegionPtr != "" && *awsBucketPtr != ""
 }

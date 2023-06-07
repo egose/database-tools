@@ -1,14 +1,10 @@
 package main
 
 import (
-	"bytes"
-	"context"
 	"os"
 	"path"
 	"time"
 
-	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/junminahn/mongo-tools-ext/common"
 	"github.com/junminahn/mongo-tools-ext/mongoarchive"
 	"github.com/junminahn/mongo-tools-ext/utils"
@@ -82,6 +78,11 @@ func runTask() error {
 	finishedChan := signals.HandleWithInterrupt(dump.HandleInterrupt)
 	defer close(finishedChan)
 
+	storage, err := mongoarchive.GetStorage()
+	if err != nil {
+		return err
+	}
+
 	err = dump.Init()
 	if err != nil {
 		return err
@@ -97,22 +98,12 @@ func runTask() error {
 		return err
 	}
 
-	containerClient, err := mongoarchive.GetAzBlobContainerClient()
-	if err != nil {
-		return err
-	}
-
 	buffer, err := utils.ReadFileToBuffer(tarfilePath)
 	if err != nil {
 		return err
 	}
 
-	blockBlobClient := containerClient.NewBlockBlobClient(filename)
-	blockBlobUploadOptions := blockblob.UploadOptions{
-		// Metadata: map[string]string{"meta": "value"},
-		// Tags:     map[string]string{"tag": "value"},
-	}
-	uploadResp, err := blockBlobClient.Upload(context.Background(), streaming.NopCloser(bytes.NewReader(buffer)), &blockBlobUploadOptions)
+	result, err := storage.Upload(filename, buffer)
 	if err != nil {
 		return err
 	}
@@ -129,7 +120,7 @@ func runTask() error {
 		}
 	}
 
-	mlog.Logvf(mlog.Always, "Archive completed successfully; ETag: %v", uploadResp.ETag)
+	mlog.Logvf(mlog.Always, "Archive completed successfully; ETag: %v", result)
 
 	return nil
 }

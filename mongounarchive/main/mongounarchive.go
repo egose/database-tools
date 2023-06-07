@@ -3,12 +3,9 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path"
 	"time"
-
-	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 
 	"github.com/junminahn/mongo-tools-ext/common"
 	"github.com/junminahn/mongo-tools-ext/mongounarchive"
@@ -43,29 +40,16 @@ func runTask() {
 		restorePath = "/tmp/datarestore"
 	}
 
-	containerClient, err := mongounarchive.GetAzBlobContainerClient()
+	storage, err := mongounarchive.GetStorage()
 	common.HandleError(err)
 
-	blobName, err := mongounarchive.GetTargetAzBlobName(containerClient)
+	objectName, err := storage.GetTargetObjectName(mongounarchive.GetObjectName())
 	common.HandleError(err)
 
-	tarfilePath := path.Join(restorePath, blobName)
-	destPath := path.Join(restorePath, utils.GetFileNameWithoutExtension(blobName))
+	tarfilePath := path.Join(restorePath, objectName)
+	destPath := path.Join(restorePath, utils.GetFileNameWithoutExtension(objectName))
 
-	blockBlobClient := mongounarchive.GetAzBlockBlobClient(containerClient, blobName)
-
-	destFile, err := utils.CreateFile(tarfilePath)
-	common.HandleError(err)
-
-	_, err = blockBlobClient.DownloadFile(context.Background(),
-		destFile,
-		&blob.DownloadFileOptions{
-			// If Progress is non-nil, this function is called periodically as bytes are uploaded.
-			Progress: func(bytesTransferred int64) {
-				fmt.Printf("Downloaded %d.\n", bytesTransferred)
-			}})
-
-	destFile.Close()
+	err = storage.Download(objectName, tarfilePath)
 	common.HandleError(err)
 
 	err = utils.UnTar(tarfilePath, destPath)
