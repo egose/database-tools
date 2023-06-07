@@ -9,7 +9,7 @@ require (
 	github.com/go-co-op/gocron v1.28.1
 	github.com/mholt/archiver v3.1.1+incompatible
 	github.com/mongodb/mongo-tools v0.0.0-20230605170329-b462ee70a09b
-	go.mongodb.org/mongo-driver v1.11.6
+	go.mongodb.org/mongo-driver v1.11.7
 )
 
 require (
