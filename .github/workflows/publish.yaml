@@ -14,7 +14,9 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
+      actions: read
       packages: write
+      security-events: write
 
     steps:
     - uses: hmarr/debug-action@v2
