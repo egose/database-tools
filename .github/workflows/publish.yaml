@@ -53,3 +53,10 @@ jobs:
       uses: github/codeql-action/upload-sarif@v2
       with:
         sarif_file: snyk.sarif
+
+    - name: Upload result to Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: snyk.sarif
+        path: snyk.sarif
+        retention-days: 7
