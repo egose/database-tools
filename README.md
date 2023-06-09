@@ -2,8 +2,8 @@
 
 This repository provides additional MongoDB Tools with the following functionalities:
 
-- **mongoarchive** - dump MongoDB backups to disk and upload them to cloud storage.
-- **mongounarchive** - download MongoDB dump files from cloud storage and restore them to a live database.
+- **mongo-archive** - dump MongoDB backups to disk and upload them to cloud storage.
+- **mongo-unarchive** - download MongoDB dump files from cloud storage and restore them to a live database.
 
 ## Building Tools
 
@@ -29,7 +29,7 @@ This will ensure that all the necessary dependencies are installed and then buil
 
 The binaries provided in this repository utilize MongoDB Tools directly, ensuring a familiar interface for users with minimal modifications to the command arguments. The design closely resembles the behavior and command structure of MongoDB's native tools such as `mongodump` and `mongorestore`.
 
-### mongoarchive
+### mongo-archive
 
 | flags                          | environments                                   | type   | description                                                        |
 | ------------------------------ | ---------------------------------------------- | ------ | ------------------------------------------------------------------ |
@@ -77,7 +77,7 @@ The binaries provided in this repository utilize MongoDB Tools directly, ensurin
 | tz                             | MONGOARCHIVE\_\_TZ                             | string | user-specified time zone                                           |
 | keep                           | MONGOARCHIVE\_\_KEEP                           | bool   | keep data dump                                                     |
 
-### mongounarchive
+### mongo-unarchive
 
 | flags                                | environments                                           | type   | description                                                         |
 | ------------------------------------ | ------------------------------------------------------ | ------ | ------------------------------------------------------------------- |
@@ -143,7 +143,7 @@ The binaries provided in this repository utilize MongoDB Tools directly, ensurin
 ### Dump Database and Upload to Azure Storage
 
 ```sh
-mongoarchive \
+mongo-archive \
 --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
 --db=<dbname> \
 --az-account-name=<az_account_name> \
@@ -156,7 +156,7 @@ This example demonstrates how to dump the data from a specified database and upl
 ### Run Persistent Server for Regular Database Archival
 
 ```sh
-mongoarchive \
+mongo-archive \
 --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
 --db=<dbname> \
 --az-account-name=<az_account_name> \
@@ -171,7 +171,7 @@ This example demonstrates how to run a persistent server that regularly archives
 ### Restore the Target Database from Azure Storage
 
 ```sh
-mongounarchive \
+mongo-unarchive \
 --uri="mongodb://localhost:27017" \
 --db=<dbname> \
 --az-account-name=<az_account_name> \
@@ -184,7 +184,7 @@ This example shows how to restore the target database from Azure storage. Replac
 ### Restore the Target Database from Azure Storage and Apply Changes
 
 ```sh
-mongounarchive \
+mongo-unarchive \
 --uri="mongodb://localhost:27017" \
 --db=<dbname> \
 --az-account-name=<az_account_name> \
@@ -234,7 +234,7 @@ docker run --rm \
     -v "$(pwd)/tmp:/tmp" \
     -e MONGOARCHIVE__DUMP_PATH=/tmp/datadump \
     ghcr.io/junminahn/mongo-tools-ext:latest \
-    mongoarchive \
+    mongo-archive \
     --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
     --db=<dbname> \
     --az-account-name=<az_account_name> \

@@ -2,8 +2,8 @@ SHELL := /usr/bin/env bash
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 go build -o dist/mongoarchive ./mongoarchive/main/mongoarchive.go
-	CGO_ENABLED=0 go build -o dist/mongounarchive ./mongounarchive/main/mongounarchive.go
+	CGO_ENABLED=0 go build -o dist/mongo-archive ./mongoarchive/main/mongoarchive.go
+	CGO_ENABLED=0 go build -o dist/mongo-unarchive ./mongounarchive/main/mongounarchive.go
 
 .PHONY: format
 format:
