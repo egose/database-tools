@@ -1,4 +1,4 @@
-package common
+package storage
 
 import (
 	"bytes"
@@ -29,13 +29,13 @@ func (this *AzBlob) Init(accountName string, accountKey string, containerName st
 
 	serviceClient, err := this.getBlobServiceClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create blob service client: %v", err)
 	}
 	this.BlobServiceClient = serviceClient
 
 	this.BlobContainerClient, err = this.getBlobContainerClient()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create blob container client: %v", err)
 	}
 
 	return nil
@@ -72,7 +72,7 @@ func (this *AzBlob) GetTargetObjectName(blobName string) (string, error) {
 	for pager.More() {
 		resp, err := pager.NextPage(context.Background())
 		if err != nil {
-			return "", err
+			return "", fmt.Errorf("failed to list objects: %v", err)
 		}
 
 		for _, blob := range resp.Segment.BlobItems {
@@ -88,7 +88,7 @@ func (this *AzBlob) GetTargetObjectName(blobName string) (string, error) {
 	}
 
 	if bname == "" {
-		return "", errors.New("No target object name found.")
+		return "", errors.New("no target object name found")
 	}
 
 	return bname, nil
@@ -102,7 +102,7 @@ func (this *AzBlob) Upload(blobName string, buffer []byte) (string, error) {
 	}
 	uploadResp, err := blockBlobClient.Upload(context.Background(), streaming.NopCloser(bytes.NewReader(buffer)), &blockBlobUploadOptions)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to upload object: %v", err)
 	}
 
 	etag := toGeneratedETagString(uploadResp.ETag)
@@ -121,7 +121,7 @@ func toGeneratedETagString(etag *azcore.ETag) *string {
 func (this *AzBlob) Download(blobName string, filePath string) error {
 	dest, err := utils.CreateFile(filePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create destination file: %w", err)
 	}
 	defer dest.Close()
 
@@ -133,5 +133,9 @@ func (this *AzBlob) Download(blobName string, filePath string) error {
 	}
 
 	_, err = blockBlobClient.DownloadFile(context.Background(), dest, downloadOptions)
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to download object: %w", err)
+	}
+
+	return nil
 }

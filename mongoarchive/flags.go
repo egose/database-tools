@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-co-op/gocron"
-	"github.com/junminahn/mongo-tools-ext/common"
+	"github.com/junminahn/mongo-tools-ext/storage"
 )
 
 const (
@@ -57,6 +57,14 @@ var (
 	awsRegionPtr          *string
 	awsBucketPtr          *string
 
+	gcpBucketPtr       *string
+	gcpCredsFilePtr    *string
+	gcpProjectIDPtr    *string
+	gcpPrivateKeyIdPtr *string
+	gcpPrivateKeyPtr   *string
+	gcpClientEmailPtr  *string
+	gcpClientIDPtr     *string
+
 	cronPtr           *bool
 	cronExpressionPtr *string
 	tzPtr             *string
@@ -77,23 +85,23 @@ func ParseFlags() {
 
 	// ssl options:
 	sslPtr = flag.Bool("ssl", os.Getenv(envPrefix+"SSL") == "true", "connect to a mongod or mongos that has ssl enabled")
-	sslCAFilePtr = flag.String("sslCAFile", os.Getenv(envPrefix+"SSL_CA_FILE"), "the .pem file containing the root certificate chain from the certificate authority")
-	sslPEMKeyFilePtr = flag.String("sslPEMKeyFile", os.Getenv(envPrefix+"SSL_PEM_KEY_FILE"), "the .pem file containing the certificate and key")
-	sslPEMKeyPasswordPtr = flag.String("sslPEMKeyPassword", os.Getenv(envPrefix+"SSL_PEM_KEY_PASSWORD"), "the password to decrypt the sslPEMKeyFile, if necessary")
-	sslCRLFilePtr = flag.String("sslCRLFile", os.Getenv(envPrefix+"SSL_CRL_File"), "the .pem file containing the certificate revocation list")
-	sslAllowInvalidCertificatesPtr = flag.Bool("sslAllowInvalidCertificates", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_CERTIFICATES") == "true", "bypass the validation for server certificates")
-	sslAllowInvalidHostnamesPtr = flag.Bool("sslAllowInvalidHostnames", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_HOSTNAMES") == "true", "bypass the validation for server name")
-	sslFIPSModePtr = flag.Bool("sslFIPSMode", os.Getenv(envPrefix+"SSL_FIPS_MODE") == "true", "use FIPS mode of the installed openssl library")
+	sslCAFilePtr = flag.String("ssl-ca-file", os.Getenv(envPrefix+"SSL_CA_FILE"), "the .pem file containing the root certificate chain from the certificate authority")
+	sslPEMKeyFilePtr = flag.String("ssl-pem-key-file", os.Getenv(envPrefix+"SSL_PEM_KEY_FILE"), "the .pem file containing the certificate and key")
+	sslPEMKeyPasswordPtr = flag.String("ssl-pem-key-password", os.Getenv(envPrefix+"SSL_PEM_KEY_PASSWORD"), "the password to decrypt the sslPEMKeyFile, if necessary")
+	sslCRLFilePtr = flag.String("ssl-crl-file", os.Getenv(envPrefix+"SSL_CRL_File"), "the .pem file containing the certificate revocation list")
+	sslAllowInvalidCertificatesPtr = flag.Bool("ssl-allow-invalid-certificates", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_CERTIFICATES") == "true", "bypass the validation for server certificates")
+	sslAllowInvalidHostnamesPtr = flag.Bool("ssl-allow-invalid-hostnames", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_HOSTNAMES") == "true", "bypass the validation for server name")
+	sslFIPSModePtr = flag.Bool("ssl-fips-mode", os.Getenv(envPrefix+"SSL_FIPS_MODE") == "true", "use FIPS mode of the installed openssl library")
 
 	// authentication options:
 	usernamePtr = flag.String("username", os.Getenv(envPrefix+"USERNAME"), "username for authentication")
 	passwordPtr = flag.String("password", os.Getenv(envPrefix+"PASSWORD"), "password for authentication")
-	authenticationDatabasePtr = flag.String("authenticationDatabase", os.Getenv(envPrefix+"AUTHENTICATION_DATABASE"), "database that holds the user's credentials")
-	authenticationMechanismPtr = flag.String("authenticationMechanism", os.Getenv(envPrefix+"AUTHENTICATION_MECHANISM"), "authentication mechanism to use")
+	authenticationDatabasePtr = flag.String("authentication-database", os.Getenv(envPrefix+"AUTHENTICATION_DATABASE"), "database that holds the user's credentials")
+	authenticationMechanismPtr = flag.String("authentication-mechanism", os.Getenv(envPrefix+"AUTHENTICATION_MECHANISM"), "authentication mechanism to use")
 
 	// kerberos options:
-	gssapiServiceNamePtr = flag.String("gssapiServiceName", os.Getenv(envPrefix+"GSSAPI_SERVICE_NAME"), "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)")
-	gssapiHostNamePtr = flag.String("gssapiHostName", os.Getenv(envPrefix+"GSSAPI_HOST_NAME"), "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)")
+	gssapiServiceNamePtr = flag.String("gssapi-service-name", os.Getenv(envPrefix+"GSSAPI_SERVICE_NAME"), "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)")
+	gssapiHostNamePtr = flag.String("gssapi-host-name", os.Getenv(envPrefix+"GSSAPI_HOST_NAME"), "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)")
 
 	// namespace options:
 	dbPtr = flag.String("db", os.Getenv(envPrefix+"DB"), "database to use")
@@ -104,22 +112,30 @@ func ParseFlags() {
 
 	// query options:
 	queryPtr = flag.String("query", os.Getenv(envPrefix+"QUERY"), "query filter, as a v2 Extended JSON string")
-	queryFilePtr = flag.String("queryFile", os.Getenv(envPrefix+"QUERY_FILE"), "path to a file containing a query filter (v2 Extended JSON)")
-	readPreferencePtr = flag.String("readPreference", os.Getenv(envPrefix+"READ_PREFERENCE"), "specify either a preference mode (e.g. 'nearest') or a preference json object")
-	forceTableScanPtr = flag.Bool("forceTableScan", os.Getenv(envPrefix+"FORCE_TABLE_SCAN") == "true", "force a table scan")
+	queryFilePtr = flag.String("query-file", os.Getenv(envPrefix+"QUERY_FILE"), "path to a file containing a query filter (v2 Extended JSON)")
+	readPreferencePtr = flag.String("read-preference", os.Getenv(envPrefix+"READ_PREFERENCE"), "specify either a preference mode (e.g. 'nearest') or a preference json object")
+	forceTableScanPtr = flag.Bool("force-table-scan", os.Getenv(envPrefix+"FORCE_TABLE_SCAN") == "true", "force a table scan")
 
-	azAccountNamePtr = flag.String("azAccountName", os.Getenv(envPrefix+"AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
-	azAccountKeyPtr = flag.String("azAccountKey", os.Getenv(envPrefix+"AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
-	azContainerNamePtr = flag.String("azContainerName", os.Getenv(envPrefix+"AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
+	azAccountNamePtr = flag.String("az-account-name", os.Getenv(envPrefix+"AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
+	azAccountKeyPtr = flag.String("az-account-key", os.Getenv(envPrefix+"AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
+	azContainerNamePtr = flag.String("az-container-name", os.Getenv(envPrefix+"AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
 
-	awsAccessKeyIdPtr = flag.String("awsAccessKeyId", os.Getenv(envPrefix+"AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
-	awsSecretAccessKeyPtr = flag.String("awsSecretAccessKey", os.Getenv(envPrefix+"AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
-	awsRegionPtr = flag.String("awsRegion", os.Getenv(envPrefix+"AWS_REGION"), "AWS Region whose servers you want to send your requests to")
-	awsBucketPtr = flag.String("awsBucket", os.Getenv(envPrefix+"AWS_BUCKET"), "AWS S3 bucket name")
+	awsAccessKeyIdPtr = flag.String("aws-access-key-id", os.Getenv(envPrefix+"AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
+	awsSecretAccessKeyPtr = flag.String("aws-secret-access-key", os.Getenv(envPrefix+"AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
+	awsRegionPtr = flag.String("aws-region", os.Getenv(envPrefix+"AWS_REGION"), "AWS Region whose servers you want to send your requests to")
+	awsBucketPtr = flag.String("aws-bucket", os.Getenv(envPrefix+"AWS_BUCKET"), "AWS S3 bucket name")
+
+	gcpBucketPtr = flag.String("gcp-bucket", os.Getenv(envPrefix+"GCP_BUCKET"), "GCP storage bucket name")
+	gcpCredsFilePtr = flag.String("gcp-creds-file", os.Getenv(envPrefix+"GCP_CREDS_FILE"), "GCP service account's credentials file")
+	gcpProjectIDPtr = flag.String("gcp-project-id", os.Getenv(envPrefix+"GCP_PROJECT_ID"), "GCP service account's project id")
+	gcpPrivateKeyIdPtr = flag.String("gcp-private-key-id", os.Getenv(envPrefix+"GCP_PRIVATE_KEY_ID"), "GCP service account's private key id")
+	gcpPrivateKeyPtr = flag.String("gcp-private-key", os.Getenv(envPrefix+"GCP_PRIVATE_KEY"), "GCP service account's private key")
+	gcpClientEmailPtr = flag.String("gcp-client-email", os.Getenv(envPrefix+"GCP_CLIENT_EMAIL"), "GCP service account's client email")
+	gcpClientIDPtr = flag.String("gcp-client-id", os.Getenv(envPrefix+"GCP_CLIENT_ID"), "GCP service account's client id")
 
 	// cron options:
 	cronPtr = flag.Bool("cron", os.Getenv(envPrefix+"CRON") == "true", "run a cron schedular and block current execution path")
-	cronExpressionPtr = flag.String("cronExpression", os.Getenv(envPrefix+"CRON_EXPRESSION"), "a string describes individual details of the cron schedule")
+	cronExpressionPtr = flag.String("cron-expression", os.Getenv(envPrefix+"CRON_EXPRESSION"), "a string describes individual details of the cron schedule")
 
 	// See https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
 	tzPtr = flag.String("tz", os.Getenv("TZ"), "user-specified time zone")
@@ -246,8 +262,8 @@ func GetMongodumpOptions() []string {
 	return options
 }
 
-func getAzBlob() (*common.AzBlob, error) {
-	az := new(common.AzBlob)
+func getAzBlob() (*storage.AzBlob, error) {
+	az := new(storage.AzBlob)
 	err := az.Init(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr)
 	if err != nil {
 		return nil, err
@@ -256,8 +272,8 @@ func getAzBlob() (*common.AzBlob, error) {
 	return az, nil
 }
 
-func getAwsS3() (*common.AwsS3, error) {
-	s3 := new(common.AwsS3)
+func getAwsS3() (*storage.AwsS3, error) {
+	s3 := new(storage.AwsS3)
 	err := s3.Init(*awsAccessKeyIdPtr, *awsSecretAccessKeyPtr, *awsRegionPtr, *awsBucketPtr)
 	if err != nil {
 		return nil, err
@@ -266,7 +282,17 @@ func getAwsS3() (*common.AwsS3, error) {
 	return s3, nil
 }
 
-func GetStorage() (common.Storage, error) {
+func getGCP() (*storage.GcpStorage, error) {
+	storage := new(storage.GcpStorage)
+	err := storage.Init(*gcpBucketPtr, *gcpCredsFilePtr, *gcpProjectIDPtr, *gcpPrivateKeyIdPtr, *gcpPrivateKeyPtr, *gcpClientEmailPtr, *gcpClientIDPtr)
+	if err != nil {
+		return nil, err
+	}
+
+	return storage, nil
+}
+
+func GetStorage() (storage.Storage, error) {
 	if useAzure() == true {
 		return getAzBlob()
 	}
@@ -275,7 +301,11 @@ func GetStorage() (common.Storage, error) {
 		return getAwsS3()
 	}
 
-	return nil, errors.New("No storage provider detected.")
+	if useGCP() == true {
+		return getGCP()
+	}
+
+	return nil, errors.New("no storage provider detected")
 }
 
 func GetCronScheduler() *gocron.Scheduler {
@@ -302,4 +332,8 @@ func useAzure() bool {
 
 func useAWS() bool {
 	return *awsAccessKeyIdPtr != "" && *awsSecretAccessKeyPtr != "" && *awsRegionPtr != "" && *awsBucketPtr != ""
+}
+
+func useGCP() bool {
+	return *gcpBucketPtr != ""
 }

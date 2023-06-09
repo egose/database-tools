@@ -1,4 +1,4 @@
-package common
+package storage
 
 type Storage interface {
 	Upload(string, []byte) (string, error)

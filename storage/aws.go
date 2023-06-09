@@ -1,8 +1,9 @@
-package common
+package storage
 
 import (
 	"bytes"
 	"errors"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -43,7 +44,7 @@ func (this *AwsS3) Init(accessKeyId string, secretAccessKey string, region strin
 
 func (this *AwsS3) GetTargetObjectName(objectKey string) (string, error) {
 	if objectKey == "" {
-		return this.getLastUpdatedObjectKey()
+		return this.getLastUpdatedObjectName()
 	}
 
 	input := &s3.HeadObjectInput{
@@ -54,26 +55,26 @@ func (this *AwsS3) GetTargetObjectName(objectKey string) (string, error) {
 	_, err := this.Service.HeadObject(input)
 	if err != nil {
 		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == "NotFound" {
-			return this.getLastUpdatedObjectKey()
+			return this.getLastUpdatedObjectName()
 		}
-		return "", err
+		return "", fmt.Errorf("failed to retrieve metadata: %w", err)
 	}
 
 	return objectKey, nil
 }
 
-func (this *AwsS3) getLastUpdatedObjectKey() (string, error) {
+func (this *AwsS3) getLastUpdatedObjectName() (string, error) {
 	input := &s3.ListObjectsV2Input{
 		Bucket: aws.String(this.Bucket),
 	}
 
 	result, err := this.Service.ListObjectsV2(input)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to list objects: %v", err)
 	}
 
 	if len(result.Contents) == 0 {
-		return "", errors.New("No objects found in the bucket.")
+		return "", errors.New("no objects found in the bucket")
 	}
 
 	lastUpdatedObject := result.Contents[0]
@@ -90,7 +91,7 @@ func (this *AwsS3) Upload(blobName string, buffer []byte) (string, error) {
 
 	output, err := uploader.Upload(input)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to upload object: %v", err)
 	}
 
 	return *output.ETag, nil
@@ -99,7 +100,7 @@ func (this *AwsS3) Upload(blobName string, buffer []byte) (string, error) {
 func (this *AwsS3) Download(objectName string, filePath string) error {
 	dest, err := utils.CreateFile(filePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create destination file: %w", err)
 	}
 	defer dest.Close()
 
@@ -109,5 +110,9 @@ func (this *AwsS3) Download(objectName string, filePath string) error {
 		Key:    aws.String(objectName),
 	})
 
-	return err
+	if err != nil {
+		return fmt.Errorf("failed to download object: %w", err)
+	}
+
+	return nil
 }

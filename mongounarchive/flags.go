@@ -8,7 +8,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/junminahn/mongo-tools-ext/common"
+	"github.com/junminahn/mongo-tools-ext/storage"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -72,6 +72,14 @@ var (
 	awsRegionPtr          *string
 	awsBucketPtr          *string
 
+	gcpBucketPtr       *string
+	gcpCredsFilePtr    *string
+	gcpProjectIDPtr    *string
+	gcpPrivateKeyIdPtr *string
+	gcpPrivateKeyPtr   *string
+	gcpClientEmailPtr  *string
+	gcpClientIDPtr     *string
+
 	objectNamePtr *string
 	dirPtr        *string
 
@@ -92,23 +100,23 @@ func ParseFlags() {
 
 	// ssl options:
 	sslPtr = flag.Bool("ssl", os.Getenv(envPrefix+"SSL") == "true", "connect to a mongod or mongos that has ssl enabled")
-	sslCAFilePtr = flag.String("sslCAFile", os.Getenv(envPrefix+"SSL_CA_FILE"), "the .pem file containing the root certificate chain from the certificate authority")
-	sslPEMKeyFilePtr = flag.String("sslPEMKeyFile", os.Getenv(envPrefix+"SSL_PEM_KEY_FILE"), "the .pem file containing the certificate and key")
-	sslPEMKeyPasswordPtr = flag.String("sslPEMKeyPassword", os.Getenv(envPrefix+"SSL_PEM_KEY_PASSWORD"), "the password to decrypt the sslPEMKeyFile, if necessary")
-	sslCRLFilePtr = flag.String("sslCRLFile", os.Getenv(envPrefix+"SSL_CRL_File"), "the .pem file containing the certificate revocation list")
-	sslAllowInvalidCertificatesPtr = flag.Bool("sslAllowInvalidCertificates", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_CERTIFICATES") == "true", "bypass the validation for server certificates")
-	sslAllowInvalidHostnamesPtr = flag.Bool("sslAllowInvalidHostnames", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_HOSTNAMES") == "true", "bypass the validation for server name")
-	sslFIPSModePtr = flag.Bool("sslFIPSMode", os.Getenv(envPrefix+"SSL_FIPS_MODE") == "true", "use FIPS mode of the installed openssl library")
+	sslCAFilePtr = flag.String("ssl-ca-file", os.Getenv(envPrefix+"SSL_CA_FILE"), "the .pem file containing the root certificate chain from the certificate authority")
+	sslPEMKeyFilePtr = flag.String("ssl-pem-key-file", os.Getenv(envPrefix+"SSL_PEM_KEY_FILE"), "the .pem file containing the certificate and key")
+	sslPEMKeyPasswordPtr = flag.String("ssl-pem-key-password", os.Getenv(envPrefix+"SSL_PEM_KEY_PASSWORD"), "the password to decrypt the sslPEMKeyFile, if necessary")
+	sslCRLFilePtr = flag.String("ssl-crl-file", os.Getenv(envPrefix+"SSL_CRL_File"), "the .pem file containing the certificate revocation list")
+	sslAllowInvalidCertificatesPtr = flag.Bool("ssl-allow-invalid-certificates", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_CERTIFICATES") == "true", "bypass the validation for server certificates")
+	sslAllowInvalidHostnamesPtr = flag.Bool("ssl-allow-invalid-hostnames", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_HOSTNAMES") == "true", "bypass the validation for server name")
+	sslFIPSModePtr = flag.Bool("ssl-fips-mode", os.Getenv(envPrefix+"SSL_FIPS_MODE") == "true", "use FIPS mode of the installed openssl library")
 
 	// authentication options:
 	usernamePtr = flag.String("username", os.Getenv(envPrefix+"USERNAME"), "username for authentication")
 	passwordPtr = flag.String("password", os.Getenv(envPrefix+"PASSWORD"), "password for authentication")
-	authenticationDatabasePtr = flag.String("authenticationDatabase", os.Getenv(envPrefix+"AUTHENTICATION_DATABASE"), "database that holds the user's credentials")
-	authenticationMechanismPtr = flag.String("authenticationMechanism", os.Getenv(envPrefix+"AUTHENTICATION_MECHANISM"), "authentication mechanism to use")
+	authenticationDatabasePtr = flag.String("authentication-database", os.Getenv(envPrefix+"AUTHENTICATION_DATABASE"), "database that holds the user's credentials")
+	authenticationMechanismPtr = flag.String("authentication-mechanism", os.Getenv(envPrefix+"AUTHENTICATION_MECHANISM"), "authentication mechanism to use")
 
 	// kerberos options:
-	gssapiServiceNamePtr = flag.String("gssapiServiceName", os.Getenv(envPrefix+"GSSAPI_SERVICE_NAME"), "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)")
-	gssapiHostNamePtr = flag.String("gssapiHostName", os.Getenv(envPrefix+"GSSAPI_HOST_NAME"), "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)")
+	gssapiServiceNamePtr = flag.String("gssapi-service-name", os.Getenv(envPrefix+"GSSAPI_SERVICE_NAME"), "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)")
+	gssapiHostNamePtr = flag.String("gssapi-host-name", os.Getenv(envPrefix+"GSSAPI_HOST_NAME"), "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)")
 
 	// uri options:
 	uriPtr = flag.String("uri", os.Getenv(envPrefix+"URI"), "MongoDB uri connection string")
@@ -116,39 +124,47 @@ func ParseFlags() {
 	// namespace options:
 	dbPtr = flag.String("db", os.Getenv(envPrefix+"DB"), "database to use")
 	collectionPtr = flag.String("collection", os.Getenv(envPrefix+"COLLECTION"), "collection to use")
-	nsExcludePtr = flag.String("nsExclude", os.Getenv(envPrefix+"NS_EXCLUDE"), "exclude matching namespaces")
-	nsIncludePtr = flag.String("nsInclude", os.Getenv(envPrefix+"NS_INCLUDE"), "include matching namespaces")
-	nsFromPtr = flag.String("nsFrom", os.Getenv(envPrefix+"NS_FROM"), "rename matching namespaces, must have matching nsTo")
-	nsToPtr = flag.String("nsTo", os.Getenv(envPrefix+"NS_TO"), "rename matched namespaces, must have matching nsFrom")
+	nsExcludePtr = flag.String("ns-exclude", os.Getenv(envPrefix+"NS_EXCLUDE"), "exclude matching namespaces")
+	nsIncludePtr = flag.String("ns-include", os.Getenv(envPrefix+"NS_INCLUDE"), "include matching namespaces")
+	nsFromPtr = flag.String("ns-from", os.Getenv(envPrefix+"NS_FROM"), "rename matching namespaces, must have matching nsTo")
+	nsToPtr = flag.String("ns-to", os.Getenv(envPrefix+"NS_TO"), "rename matched namespaces, must have matching nsFrom")
 
 	// restore options:
 	dropPtr = flag.Bool("drop", os.Getenv(envPrefix+"DROP") == "true", "drop each collection before import")
-	dryRunPtr = flag.Bool("dryRun", os.Getenv(envPrefix+"DRY_RUN") == "true", "view summary without importing anything. recommended with verbosity")
-	writeConcernPtr = flag.String("writeConcern", os.Getenv(envPrefix+"WRITE_CONCERN"), "write concern options")
-	noIndexRestorePtr = flag.Bool("noIndexRestore", os.Getenv(envPrefix+"NO_INDEX_RESTORE") == "true", "don't restore indexes")
-	noOptionsRestorePtr = flag.Bool("noOptionsRestore", os.Getenv(envPrefix+"NO_OPTIONS_RESTORE") == "true", "don't restore collection options")
-	keepIndexVersionPtr = flag.Bool("keepIndexVersion", os.Getenv(envPrefix+"KEEP_INDEX_VERSION") == "true", "don't update index version")
-	maintainInsertionOrderPtr = flag.Bool("maintainInsertionOrder", os.Getenv(envPrefix+"MAINTAIN_INSERTION_ORDER") == "true", "restore the documents in the order of their appearance in the input source. By default the insertions will be performed in an arbitrary order. Setting this flag also enables the behavior of --stopOnError and restricts NumInsertionWorkersPerCollection to 1")
-	numParallelCollectionsPtr = flag.String("numParallelCollections", os.Getenv(envPrefix+"NUM_PARALLEL_COLLECTIONS"), "number of collections to restore in parallel (default: 4)")
-	numInsertionWorkersPerCollectionPtr = flag.String("numInsertionWorkersPerCollection", os.Getenv(envPrefix+"NUM_INSERTION_WORKERS_PER_COLLECTION"), "number of insert operations to run concurrently per collection (default: 1)")
-	stopOnErrorPtr = flag.Bool("stopOnError", os.Getenv(envPrefix+"STOP_ON_ERROR") == "true", "halt after encountering any error during insertion. By default, mongorestore will attempt to continue through document validation and DuplicateKey errors, but with this option enabled, the tool will stop instead. A small number of documents may be inserted after encountering an error even with this option enabled; use --maintainInsertionOrder to halt immediately after an error")
-	bypassDocumentValidationPtr = flag.Bool("bypassDocumentValidation", os.Getenv(envPrefix+"BYPASS_DOCUMENT_VALIDATION") == "true", "bypass document validation")
-	preserveUUIDPtr = flag.Bool("preserveUUID", os.Getenv(envPrefix+"PRESERVE_UUID") == "true", "preserve original collection UUIDs (off by default, requires drop)")
+	dryRunPtr = flag.Bool("dry-run", os.Getenv(envPrefix+"DRY_RUN") == "true", "view summary without importing anything. recommended with verbosity")
+	writeConcernPtr = flag.String("write-concern", os.Getenv(envPrefix+"WRITE_CONCERN"), "write concern options")
+	noIndexRestorePtr = flag.Bool("no-index-restore", os.Getenv(envPrefix+"NO_INDEX_RESTORE") == "true", "don't restore indexes")
+	noOptionsRestorePtr = flag.Bool("no-options-restore", os.Getenv(envPrefix+"NO_OPTIONS_RESTORE") == "true", "don't restore collection options")
+	keepIndexVersionPtr = flag.Bool("keep-index-version", os.Getenv(envPrefix+"KEEP_INDEX_VERSION") == "true", "don't update index version")
+	maintainInsertionOrderPtr = flag.Bool("maintain-insertion-order", os.Getenv(envPrefix+"MAINTAIN_INSERTION_ORDER") == "true", "restore the documents in the order of their appearance in the input source. By default the insertions will be performed in an arbitrary order. Setting this flag also enables the behavior of --stopOnError and restricts NumInsertionWorkersPerCollection to 1")
+	numParallelCollectionsPtr = flag.String("num-parallel-collections", os.Getenv(envPrefix+"NUM_PARALLEL_COLLECTIONS"), "number of collections to restore in parallel (default: 4)")
+	numInsertionWorkersPerCollectionPtr = flag.String("num-insertion-workers-per-collection", os.Getenv(envPrefix+"NUM_INSERTION_WORKERS_PER_COLLECTION"), "number of insert operations to run concurrently per collection (default: 1)")
+	stopOnErrorPtr = flag.Bool("stop-on-error", os.Getenv(envPrefix+"STOP_ON_ERROR") == "true", "halt after encountering any error during insertion. By default, mongorestore will attempt to continue through document validation and DuplicateKey errors, but with this option enabled, the tool will stop instead. A small number of documents may be inserted after encountering an error even with this option enabled; use --maintainInsertionOrder to halt immediately after an error")
+	bypassDocumentValidationPtr = flag.Bool("bypass-document-validation", os.Getenv(envPrefix+"BYPASS_DOCUMENT_VALIDATION") == "true", "bypass document validation")
+	preserveUUIDPtr = flag.Bool("preserve-uuid", os.Getenv(envPrefix+"PRESERVE_UUID") == "true", "preserve original collection UUIDs (off by default, requires drop)")
 
-	azAccountNamePtr = flag.String("azAccountName", os.Getenv(envPrefix+"AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
-	azAccountKeyPtr = flag.String("azAccountKey", os.Getenv(envPrefix+"AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
-	azContainerNamePtr = flag.String("azContainerName", os.Getenv(envPrefix+"AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
+	azAccountNamePtr = flag.String("az-account-name", os.Getenv(envPrefix+"AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
+	azAccountKeyPtr = flag.String("az-account-key", os.Getenv(envPrefix+"AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
+	azContainerNamePtr = flag.String("az-container-name", os.Getenv(envPrefix+"AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
 
-	awsAccessKeyIdPtr = flag.String("awsAccessKeyId", os.Getenv(envPrefix+"AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
-	awsSecretAccessKeyPtr = flag.String("awsSecretAccessKey", os.Getenv(envPrefix+"AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
-	awsRegionPtr = flag.String("awsRegion", os.Getenv(envPrefix+"AWS_REGION"), "AWS Region whose servers you want to send your requests to")
-	awsBucketPtr = flag.String("awsBucket", os.Getenv(envPrefix+"AWS_BUCKET"), "AWS S3 bucket name")
+	awsAccessKeyIdPtr = flag.String("aws-access-key-id", os.Getenv(envPrefix+"AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
+	awsSecretAccessKeyPtr = flag.String("aws-secret-access-key", os.Getenv(envPrefix+"AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
+	awsRegionPtr = flag.String("aws-region", os.Getenv(envPrefix+"AWS_REGION"), "AWS Region whose servers you want to send your requests to")
+	awsBucketPtr = flag.String("aws-bucket", os.Getenv(envPrefix+"AWS_BUCKET"), "AWS S3 bucket name")
 
-	objectNamePtr = flag.String("objectName", os.Getenv(envPrefix+"OBJECT_NAME"), "Object name of the archived file in the storage (optional)")
+	gcpBucketPtr = flag.String("gcp-bucket", os.Getenv(envPrefix+"GCP_BUCKET"), "GCP storage bucket name")
+	gcpCredsFilePtr = flag.String("gcp-creds-file", os.Getenv(envPrefix+"GCP_CREDS_FILE"), "GCP service account's credentials file")
+	gcpProjectIDPtr = flag.String("gcp-project-id", os.Getenv(envPrefix+"GCP_PROJECT_ID"), "GCP service account's project id")
+	gcpPrivateKeyIdPtr = flag.String("gcp-private-key-id", os.Getenv(envPrefix+"GCP_PRIVATE_KEY_ID"), "GCP service account's private key id")
+	gcpPrivateKeyPtr = flag.String("gcp-private-key", os.Getenv(envPrefix+"GCP_PRIVATE_KEY"), "GCP service account's private key")
+	gcpClientEmailPtr = flag.String("gcp-client-email", os.Getenv(envPrefix+"GCP_CLIENT_EMAIL"), "GCP service account's client email")
+	gcpClientIDPtr = flag.String("gcp-client-id", os.Getenv(envPrefix+"GCP_CLIENT_ID"), "GCP service account's client id")
+
+	objectNamePtr = flag.String("object-name", os.Getenv(envPrefix+"OBJECT_NAME"), "Object name of the archived file in the storage (optional)")
 	dirPtr = flag.String("dir", os.Getenv(envPrefix+"DIR"), "directory name that contains the dumped files")
 
 	updatesPtr = flag.String("updates", os.Getenv(envPrefix+"UPDATES"), "array of update specifications in JSON string")
-	updatesFilePtr = flag.String("updatesFile", os.Getenv(envPrefix+"UPDATES_FILE"), "path to a file containing an array of update specifications")
+	updatesFilePtr = flag.String("updates-file", os.Getenv(envPrefix+"UPDATES_FILE"), "path to a file containing an array of update specifications")
 
 	keepPtr = flag.Bool("keep", os.Getenv(envPrefix+"KEEP") == "true", "keep data dump")
 
@@ -321,8 +337,8 @@ func GetMongounarchiveOptions(destPath string) []string {
 	return options
 }
 
-func getAzBlob() (*common.AzBlob, error) {
-	az := new(common.AzBlob)
+func getAzBlob() (*storage.AzBlob, error) {
+	az := new(storage.AzBlob)
 	err := az.Init(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr)
 	if err != nil {
 		return nil, err
@@ -331,8 +347,8 @@ func getAzBlob() (*common.AzBlob, error) {
 	return az, nil
 }
 
-func getAwsS3() (*common.AwsS3, error) {
-	s3 := new(common.AwsS3)
+func getAwsS3() (*storage.AwsS3, error) {
+	s3 := new(storage.AwsS3)
 	err := s3.Init(*awsAccessKeyIdPtr, *awsSecretAccessKeyPtr, *awsRegionPtr, *awsBucketPtr)
 	if err != nil {
 		return nil, err
@@ -341,7 +357,18 @@ func getAwsS3() (*common.AwsS3, error) {
 	return s3, nil
 }
 
-func GetStorage() (common.Storage, error) {
+func getGCP() (*storage.GcpStorage, error) {
+	storage := new(storage.GcpStorage)
+
+	err := storage.Init(*gcpBucketPtr, *gcpCredsFilePtr, *gcpProjectIDPtr, *gcpPrivateKeyIdPtr, *gcpPrivateKeyPtr, *gcpClientEmailPtr, *gcpClientIDPtr)
+	if err != nil {
+		return nil, err
+	}
+
+	return storage, nil
+}
+
+func GetStorage() (storage.Storage, error) {
 	if useAzure() == true {
 		return getAzBlob()
 	}
@@ -350,7 +377,11 @@ func GetStorage() (common.Storage, error) {
 		return getAwsS3()
 	}
 
-	return nil, errors.New("No storage provider detected.")
+	if useGCP() == true {
+		return getGCP()
+	}
+
+	return nil, errors.New("no storage provider detected")
 }
 
 func GetObjectName() string {
@@ -392,4 +423,8 @@ func useAzure() bool {
 
 func useAWS() bool {
 	return *awsAccessKeyIdPtr != "" && *awsSecretAccessKeyPtr != "" && *awsRegionPtr != "" && *awsBucketPtr != ""
+}
+
+func useGCP() bool {
+	return *gcpBucketPtr != ""
 }
