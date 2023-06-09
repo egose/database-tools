@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-co-op/gocron"
-	"github.com/junminahn/mongo-tools-ext/storage"
+	"github.com/junminahn/database-tools/storage"
 )
 
 const (

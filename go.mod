@@ -1,4 +1,4 @@
-module github.com/junminahn/mongo-tools-ext
+module github.com/junminahn/database-tools
 
 go 1.20
 

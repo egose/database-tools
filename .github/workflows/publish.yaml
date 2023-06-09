@@ -7,7 +7,7 @@ on:
 
 env:
   DOCKER_REGISTRY: ghcr.io
-  IMAGE_NAME: junminahn/mongo-tools-ext
+  IMAGE_NAME: junminahn/database-tools
 
 jobs:
   build-push:

@@ -12,8 +12,8 @@ To build the MongoDB Tools, follow these steps:
 1. Clone the repository:
 
    ```sh
-   git clone https://github.com/junminahn/mongo-tools-ext
-   cd mongo-tools-ext
+   git clone https://github.com/junminahn/database-tools
+   cd database-tools
    ```
 
 1. Install dependencies and build the Go binaries:
@@ -233,7 +233,7 @@ To execute a binary using a Docker container image, you can use the following co
 docker run --rm \
     -v "$(pwd)/tmp:/tmp" \
     -e MONGOARCHIVE__DUMP_PATH=/tmp/datadump \
-    ghcr.io/junminahn/mongo-tools-ext:latest \
+    ghcr.io/junminahn/database-tools:latest \
     mongo-archive \
     --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
     --db=<dbname> \

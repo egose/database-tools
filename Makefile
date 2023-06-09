@@ -11,5 +11,5 @@ format:
 
 .PHONY: db
 db:
-	mkdir -p ../_mongodb/mongo-tools-ext
-	mongod --dbpath ../_mongodb/mongo-tools-ext
+	mkdir -p ../_mongodb/database-tools
+	mongod --dbpath ../_mongodb/database-tools

@@ -8,7 +8,7 @@ import (
 	"os"
 	"path"
 
-	"github.com/junminahn/mongo-tools-ext/storage"
+	"github.com/junminahn/database-tools/storage"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )

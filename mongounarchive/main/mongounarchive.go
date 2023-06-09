@@ -7,9 +7,9 @@ import (
 	"path"
 	"time"
 
-	"github.com/junminahn/mongo-tools-ext/common"
-	"github.com/junminahn/mongo-tools-ext/mongounarchive"
-	"github.com/junminahn/mongo-tools-ext/utils"
+	"github.com/junminahn/database-tools/common"
+	"github.com/junminahn/database-tools/mongounarchive"
+	"github.com/junminahn/database-tools/utils"
 
 	mlog "github.com/mongodb/mongo-tools/common/log"
 	"github.com/mongodb/mongo-tools/common/signals"

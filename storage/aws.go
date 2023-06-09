@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"github.com/junminahn/mongo-tools-ext/utils"
+	"github.com/junminahn/database-tools/utils"
 )
 
 type AwsS3 struct {
