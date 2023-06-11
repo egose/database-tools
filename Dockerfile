@@ -10,6 +10,7 @@ RUN make build
 FROM alpine:3.18
 
 RUN adduser -D -u 1000 mongotool
+RUN chown mongotool:mongotool /tmp
 
 COPY --from=builder /app/dist /usr/local/bin
 

@@ -21,5 +21,6 @@
 go.work
 
 dist
+tmp
 *.tar.gz
 note.md
