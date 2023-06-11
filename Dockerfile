@@ -9,13 +9,12 @@ RUN make build
 # See https://hub.docker.com/_/alpine/tags
 FROM alpine:3.18
 
-RUN adduser -D -u 1000 mongotool
-RUN chown mongotool:mongotool /tmp
+RUN adduser -D -u 1000 nonroot
 
 COPY --from=builder /app/dist /usr/local/bin
 
-USER mongotool
+USER nonroot
 
-WORKDIR /home/mongotool
+WORKDIR /home/nonroot
 
 ENV TZ America/Vancouver

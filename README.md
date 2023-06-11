@@ -190,10 +190,10 @@ mongo-unarchive \
 --az-account-name=<az_account_name> \
 --az-account-key=<az_account_key> \
 --az-container-name=<az_container_name> \
---updates-file=/home/mongotool/updates.json
+--updates-file=/home/nonroot/updates.json
 ```
 
-This example demonstrates how to restore the target database from Azure storage and apply changes contained in an updates file. Replace <dbname>, <az_account_name>, <az_account_key>, <az_container_name>, and /home/mongotool/updates.json with your own values. The updates file should contain the necessary instructions to modify the restored database.
+This example demonstrates how to restore the target database from Azure storage and apply changes contained in an updates file. Replace <dbname>, <az_account_name>, <az_account_key>, <az_container_name>, and /home/nonroot/updates.json with your own values. The updates file should contain the necessary instructions to modify the restored database.
 
 An example of `updates.json`:
 
