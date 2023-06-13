@@ -245,5 +245,71 @@ docker run --rm \
     --keep
 ```
 
+### Run k8s CronJob on mounted volume
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongo-archive
+spec:
+  schedule: "0 12 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: Never
+          initContainers:
+            - name: backup-permission
+              image: alpine:3.18
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  rm -rf /tmp/*;
+                  adduser -D -u 1000 nonroot;
+                  chown nonroot:nonroot /tmp;
+              volumeMounts:
+                - mountPath: /tmp
+                  name: backup-volume
+          containers:
+            - name: backup-job
+              image: ghcr.io/junminahn/database-tools:0.2.6
+              imagePullPolicy: IfNotPresent
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  mongo-archive --db=mydb --read-preference=primary --force-table-scan
+              env:
+                - name: MONGOARCHIVE__URI
+                  value: "mongodb+srv://user:password@cluster0.my.mongodb.net"
+                - name: MONGOARCHIVE__AZ_ACCOUNT_NAME
+                  value: mystorage
+                - name: MONGOARCHIVE__AZ_ACCOUNT_KEY
+                  value: myaccountkey
+                - name: MONGOARCHIVE__AZ_CONTAINER_NAME
+                  value: mybackup
+              volumeMounts:
+                - mountPath: /tmp
+                  name: backup-volume
+          volumes:
+            - name: backup-volume
+              persistentVolumeClaim:
+                claimName: backup-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+```
+
 ## Backlog
 ...
