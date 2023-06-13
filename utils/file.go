@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -15,7 +16,7 @@ func Tar(root string, destPath string) error {
 		return err
 	}
 
-	paths, err := GetAllFilesAndDirectories(root)
+	paths, err := getChildren(root)
 	if err != nil {
 		return err
 	}
@@ -96,21 +97,24 @@ func GetFileNameWithoutExtension(filePath string) string {
 	return fileNameWithoutExt
 }
 
-func GetAllFilesAndDirectories(root string) ([]string, error) {
-	var paths []string
+func getChildren(targetDir string) ([]string, error) {
+	var children []string
 
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	err := filepath.WalkDir(targetDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		// Skip the root directory itself
-		if path == root {
+		// Skip the target directory itself
+		if path == targetDir {
 			return nil
 		}
 
-		// Append directory or file path to the slice
-		paths = append(paths, path)
+		// Check if the entry is a direct child of the target directory
+		parentDir := filepath.Dir(path)
+		if parentDir == targetDir {
+			children = append(children, path)
+		}
 
 		return nil
 	})
@@ -119,5 +123,5 @@ func GetAllFilesAndDirectories(root string) ([]string, error) {
 		return nil, err
 	}
 
-	return paths, nil
+	return children, nil
 }

@@ -245,7 +245,7 @@ docker run --rm \
     --keep
 ```
 
-### Run k8s CronJob on mounted volume
+### Run Kubernetes CronJob with Mounted Volume
 
 ```yaml
 apiVersion: batch/v1
