@@ -76,6 +76,7 @@ The binaries provided in this repository utilize MongoDB Tools directly, ensurin
 | cron-expression                | MONGOARCHIVE\_\_CRON_EXPRESSION                | string | a string describes individual details of the cron schedule         |
 | tz                             | MONGOARCHIVE\_\_TZ                             | string | user-specified time zone                                           |
 | keep                           | MONGOARCHIVE\_\_KEEP                           | bool   | keep data dump                                                     |
+| uri-prune                      | MONGOARCHIVE\_\_URI_PRUNE                      | bool   | prune MongoDB uri connection string                                |
 
 ### mongo-unarchive
 
@@ -137,6 +138,7 @@ The binaries provided in this repository utilize MongoDB Tools directly, ensurin
 | updates                              | MONGOUNARCHIVE\_\_UPDATES                              | bool   | array of update specifications in JSON string                       |
 | updates-file                         | MONGOUNARCHIVE\_\_UPDATES_FILE                         | bool   | path to a file containing an array of update specifications         |
 | keep                                 | MONGOUNARCHIVE\_\_KEEP                                 | bool   | keep data dump                                                      |
+| uri-prune                            | MONGOUNARCHIVE\_\_URI_PRUNE                            | bool   | prune MongoDB uri connection string                                 |
 
 ## Examples
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-co-op/gocron"
 	"github.com/junminahn/database-tools/storage"
+	"github.com/junminahn/database-tools/utils"
 )
 
 const (
@@ -41,7 +42,8 @@ var (
 	dbPtr         *string
 	collectionPtr *string
 
-	uriPtr *string
+	uriPtr      *string
+	uriPrunePtr *bool
 
 	queryPtr          *string
 	queryFilePtr      *string
@@ -109,6 +111,7 @@ func ParseFlags() {
 
 	// uri options:
 	uriPtr = flag.String("uri", os.Getenv(envPrefix+"URI"), "MongoDB uri connection string")
+	uriPrunePtr = flag.Bool("uri-prune", os.Getenv(envPrefix+"URI_PRUNE") == "true", "prune MongoDB uri connection string")
 
 	// query options:
 	queryPtr = flag.String("query", os.Getenv(envPrefix+"QUERY"), "query filter, as a v2 Extended JSON string")
@@ -240,7 +243,12 @@ func GetMongodumpOptions() []string {
 	}
 
 	if *uriPtr != "" {
-		options = append(options, "--uri="+*uriPtr)
+		uri := *uriPtr
+		if *uriPrunePtr == true {
+			uri = utils.PruneMongoDBURI(uri)
+		}
+
+		options = append(options, "--uri="+uri)
 	}
 
 	if *queryPtr != "" {

@@ -9,6 +9,7 @@ import (
 	"path"
 
 	"github.com/junminahn/database-tools/storage"
+	"github.com/junminahn/database-tools/utils"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -41,7 +42,8 @@ var (
 	gssapiServiceNamePtr *string
 	gssapiHostNamePtr    *string
 
-	uriPtr *string
+	uriPtr      *string
+	uriPrunePtr *bool
 
 	dbPtr         *string
 	collectionPtr *string
@@ -120,6 +122,7 @@ func ParseFlags() {
 
 	// uri options:
 	uriPtr = flag.String("uri", os.Getenv(envPrefix+"URI"), "MongoDB uri connection string")
+	uriPrunePtr = flag.Bool("uri-prune", os.Getenv(envPrefix+"URI_PRUNE") == "true", "prune MongoDB uri connection string")
 
 	// namespace options:
 	dbPtr = flag.String("db", os.Getenv(envPrefix+"DB"), "database to use")
@@ -259,7 +262,12 @@ func GetMongounarchiveOptions(destPath string) []string {
 	}
 
 	if *uriPtr != "" {
-		options = append(options, "--uri="+*uriPtr)
+		uri := *uriPtr
+		if *uriPrunePtr == true {
+			uri = utils.PruneMongoDBURI(uri)
+		}
+
+		options = append(options, "--uri="+uri)
 	}
 
 	if *dbPtr != "" {
