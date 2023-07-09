@@ -5,9 +5,9 @@ import (
 	"path"
 	"time"
 
-	"github.com/junminahn/database-tools/common"
-	"github.com/junminahn/database-tools/mongoarchive"
-	"github.com/junminahn/database-tools/utils"
+	"github.com/egose/database-tools/common"
+	"github.com/egose/database-tools/mongoarchive"
+	"github.com/egose/database-tools/utils"
 	mlog "github.com/mongodb/mongo-tools/common/log"
 	"github.com/mongodb/mongo-tools/common/progress"
 	"github.com/mongodb/mongo-tools/common/signals"

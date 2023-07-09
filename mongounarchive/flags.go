@@ -8,8 +8,8 @@ import (
 	"os"
 	"path"
 
-	"github.com/junminahn/database-tools/storage"
-	"github.com/junminahn/database-tools/utils"
+	"github.com/egose/database-tools/storage"
+	"github.com/egose/database-tools/utils"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )

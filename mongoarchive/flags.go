@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
+	"github.com/egose/database-tools/storage"
+	"github.com/egose/database-tools/utils"
 	"github.com/go-co-op/gocron"
-	"github.com/junminahn/database-tools/storage"
-	"github.com/junminahn/database-tools/utils"
 )
 
 const (

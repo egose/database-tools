@@ -1,4 +1,4 @@
-module github.com/junminahn/database-tools
+module github.com/egose/database-tools
 
 go 1.20
 
