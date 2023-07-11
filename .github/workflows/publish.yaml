@@ -23,13 +23,13 @@ jobs:
     - uses: actions/checkout@v3
 
     - name: Setup Tools
-      uses: junminahn/actions/asdf-tools@v0.2.2
+      uses: egose/actions/asdf-tools@v0.2.2
       with:
         plugins: |
           mongodb=https://github.com/egose/asdf-mongodb.git
 
     - name: Build and Push
-      uses: junminahn/actions/docker-build-push@v0.2.2
+      uses: egose/actions/docker-build-push@v0.2.2
       with:
         registry-url: ${{ env.DOCKER_REGISTRY }}
         registry-username: ${{ github.actor }}
@@ -41,8 +41,8 @@ jobs:
           type=semver,pattern={{major}}
 
     - name: Run Snyk to check Docker image for vulnerabilities
-      continue-on-error: true
-      uses: snyk/actions/docker@master
+      continue-on-error: false
+      uses: snyk/actions/docker@87b58602664ec2c1c4fd286e2dcf71f2c5a331d6
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
       with:
