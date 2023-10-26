@@ -23,10 +23,7 @@ jobs:
     - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
     - name: Setup Tools
-      uses: egose/actions/asdf-tools@cf2f1200f48743cf7974609fe8ac80f0d1b08e56
-      with:
-        plugins: |
-          mongodb=https://github.com/egose/asdf-mongodb.git
+      uses: ./.github/actions/setup-tools
 
     - name: Build and Push
       uses: egose/actions/docker-build-push@cf2f1200f48743cf7974609fe8ac80f0d1b08e56

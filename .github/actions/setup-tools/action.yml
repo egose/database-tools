@@ -6,6 +6,9 @@ runs:
   steps:
   - name: Setup Tools
     uses: egose/actions/asdf-tools@cf2f1200f48743cf7974609fe8ac80f0d1b08e56
+    with:
+      plugins: |
+        mongodb=https://github.com/egose/asdf-mongodb.git
 
   - name: Install python tools
     run: |
