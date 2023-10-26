@@ -9,6 +9,7 @@ import (
 	"github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
 	"github.com/go-co-op/gocron"
+	mlog "github.com/mongodb/mongo-tools/common/log"
 )
 
 const (
@@ -66,6 +67,8 @@ var (
 	gcpPrivateKeyPtr   *string
 	gcpClientEmailPtr  *string
 	gcpClientIDPtr     *string
+
+	localPathPtr *string
 
 	cronPtr           *bool
 	cronExpressionPtr *string
@@ -136,6 +139,8 @@ func ParseFlags() {
 	gcpClientEmailPtr = flag.String("gcp-client-email", os.Getenv(envPrefix+"GCP_CLIENT_EMAIL"), "GCP service account's client email")
 	gcpClientIDPtr = flag.String("gcp-client-id", os.Getenv(envPrefix+"GCP_CLIENT_ID"), "GCP service account's client id")
 
+	localPathPtr = flag.String("local-path", os.Getenv(envPrefix+"LOCAL_PATH"), "Local directory path to store backups")
+
 	// cron options:
 	cronPtr = flag.Bool("cron", os.Getenv(envPrefix+"CRON") == "true", "run a cron schedular and block current execution path")
 	cronExpressionPtr = flag.String("cron-expression", os.Getenv(envPrefix+"CRON_EXPRESSION"), "a string describes individual details of the cron schedule")
@@ -166,7 +171,7 @@ func GetMongodumpOptions() []string {
 		options = append(options, "--verbose="+*verbose)
 	}
 
-	if *quietPtr == true {
+	if *quietPtr {
 		options = append(options, "--quiet")
 	}
 
@@ -178,7 +183,7 @@ func GetMongodumpOptions() []string {
 		options = append(options, "--port="+*portPtr)
 	}
 
-	if *sslPtr == true {
+	if *sslPtr {
 		options = append(options, "--ssl")
 	}
 
@@ -198,15 +203,15 @@ func GetMongodumpOptions() []string {
 		options = append(options, "--sslCRLFile="+*sslCRLFilePtr)
 	}
 
-	if *sslAllowInvalidCertificatesPtr == true {
+	if *sslAllowInvalidCertificatesPtr {
 		options = append(options, "--sslAllowInvalidCertificates")
 	}
 
-	if *sslAllowInvalidHostnamesPtr == true {
+	if *sslAllowInvalidHostnamesPtr {
 		options = append(options, "--sslAllowInvalidHostnames")
 	}
 
-	if *sslFIPSModePtr == true {
+	if *sslFIPSModePtr {
 		options = append(options, "--sslFIPSMode")
 	}
 
@@ -244,7 +249,7 @@ func GetMongodumpOptions() []string {
 
 	if *uriPtr != "" {
 		uri := *uriPtr
-		if *uriPrunePtr == true {
+		if *uriPrunePtr {
 			uri = utils.PruneMongoDBURI(uri)
 		}
 
@@ -263,7 +268,7 @@ func GetMongodumpOptions() []string {
 		options = append(options, "--readPreference="+*readPreferencePtr)
 	}
 
-	if *forceTableScanPtr == true {
+	if *forceTableScanPtr {
 		options = append(options, "--forceTableScan")
 	}
 
@@ -300,17 +305,35 @@ func getGCP() (*storage.GcpStorage, error) {
 	return storage, nil
 }
 
+func getLocal() (*storage.LocalStorage, error) {
+	storage := new(storage.LocalStorage)
+	err := storage.Init(*localPathPtr)
+	if err != nil {
+		return nil, err
+	}
+
+	return storage, nil
+}
+
 func GetStorage() (storage.Storage, error) {
-	if useAzure() == true {
+	if useAzure() {
+		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "Azure")
 		return getAzBlob()
 	}
 
-	if useAWS() == true {
+	if useAWS() {
+		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "AWS")
 		return getAwsS3()
 	}
 
-	if useGCP() == true {
+	if useGCP() {
+		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "GCP")
 		return getGCP()
+	}
+
+	if useLocal() {
+		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "Local")
+		return getLocal()
 	}
 
 	return nil, errors.New("no storage provider detected")
@@ -327,11 +350,11 @@ func GetCronScheduler() *gocron.Scheduler {
 }
 
 func HasCron() bool {
-	return *cronPtr == true
+	return *cronPtr
 }
 
 func HasKeep() bool {
-	return *keepPtr == true
+	return *keepPtr
 }
 
 func useAzure() bool {
@@ -344,4 +367,8 @@ func useAWS() bool {
 
 func useGCP() bool {
 	return *gcpBucketPtr != ""
+}
+
+func useLocal() bool {
+	return *localPathPtr != ""
 }

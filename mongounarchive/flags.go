@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"io/ioutil"
 	"os"
 	"path"
 
 	"github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
+	mlog "github.com/mongodb/mongo-tools/common/log"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -81,6 +81,8 @@ var (
 	gcpPrivateKeyPtr   *string
 	gcpClientEmailPtr  *string
 	gcpClientIDPtr     *string
+
+	localPathPtr *string
 
 	objectNamePtr *string
 	dirPtr        *string
@@ -163,6 +165,8 @@ func ParseFlags() {
 	gcpClientEmailPtr = flag.String("gcp-client-email", os.Getenv(envPrefix+"GCP_CLIENT_EMAIL"), "GCP service account's client email")
 	gcpClientIDPtr = flag.String("gcp-client-id", os.Getenv(envPrefix+"GCP_CLIENT_ID"), "GCP service account's client id")
 
+	localPathPtr = flag.String("local-path", os.Getenv(envPrefix+"LOCAL_PATH"), "Local directory path to store backups")
+
 	objectNamePtr = flag.String("object-name", os.Getenv(envPrefix+"OBJECT_NAME"), "Object name of the archived file in the storage (optional)")
 	dirPtr = flag.String("dir", os.Getenv(envPrefix+"DIR"), "directory name that contains the dumped files")
 
@@ -193,7 +197,7 @@ func GetMongounarchiveOptions(destPath string) []string {
 		options = append(options, "--verbose="+*verbose)
 	}
 
-	if *quietPtr == true {
+	if *quietPtr {
 		options = append(options, "--quiet")
 	}
 
@@ -205,7 +209,7 @@ func GetMongounarchiveOptions(destPath string) []string {
 		options = append(options, "--port="+*portPtr)
 	}
 
-	if *sslPtr == true {
+	if *sslPtr {
 		options = append(options, "--ssl")
 	}
 
@@ -225,15 +229,15 @@ func GetMongounarchiveOptions(destPath string) []string {
 		options = append(options, "--sslCRLFile="+*sslCRLFilePtr)
 	}
 
-	if *sslAllowInvalidCertificatesPtr == true {
+	if *sslAllowInvalidCertificatesPtr {
 		options = append(options, "--sslAllowInvalidCertificates")
 	}
 
-	if *sslAllowInvalidHostnamesPtr == true {
+	if *sslAllowInvalidHostnamesPtr {
 		options = append(options, "--sslAllowInvalidHostnames")
 	}
 
-	if *sslFIPSModePtr == true {
+	if *sslFIPSModePtr {
 		options = append(options, "--sslFIPSMode")
 	}
 
@@ -263,7 +267,7 @@ func GetMongounarchiveOptions(destPath string) []string {
 
 	if *uriPtr != "" {
 		uri := *uriPtr
-		if *uriPrunePtr == true {
+		if *uriPrunePtr {
 			uri = utils.PruneMongoDBURI(uri)
 		}
 
@@ -294,11 +298,11 @@ func GetMongounarchiveOptions(destPath string) []string {
 		options = append(options, "--nsTo="+*nsToPtr)
 	}
 
-	if *dropPtr == true {
+	if *dropPtr {
 		options = append(options, "--drop")
 	}
 
-	if *dryRunPtr == true {
+	if *dryRunPtr {
 		options = append(options, "--dryRun")
 	}
 
@@ -306,19 +310,19 @@ func GetMongounarchiveOptions(destPath string) []string {
 		options = append(options, "--writeConcern="+*writeConcernPtr)
 	}
 
-	if *noIndexRestorePtr == true {
+	if *noIndexRestorePtr {
 		options = append(options, "--noIndexRestore")
 	}
 
-	if *noOptionsRestorePtr == true {
+	if *noOptionsRestorePtr {
 		options = append(options, "--noOptionsRestore")
 	}
 
-	if *keepIndexVersionPtr == true {
+	if *keepIndexVersionPtr {
 		options = append(options, "--keepIndexVersion")
 	}
 
-	if *maintainInsertionOrderPtr == true {
+	if *maintainInsertionOrderPtr {
 		options = append(options, "--maintainInsertionOrder")
 	}
 
@@ -330,15 +334,15 @@ func GetMongounarchiveOptions(destPath string) []string {
 		options = append(options, "--numInsertionWorkersPerCollection="+*numInsertionWorkersPerCollectionPtr)
 	}
 
-	if *stopOnErrorPtr == true {
+	if *stopOnErrorPtr {
 		options = append(options, "--stopOnError")
 	}
 
-	if *bypassDocumentValidationPtr == true {
+	if *bypassDocumentValidationPtr {
 		options = append(options, "--bypassDocumentValidation")
 	}
 
-	if *preserveUUIDPtr == true {
+	if *preserveUUIDPtr {
 		options = append(options, "--preserveUUID")
 	}
 
@@ -376,17 +380,35 @@ func getGCP() (*storage.GcpStorage, error) {
 	return storage, nil
 }
 
+func getLocal() (*storage.LocalStorage, error) {
+	storage := new(storage.LocalStorage)
+	err := storage.Init(*localPathPtr)
+	if err != nil {
+		return nil, err
+	}
+
+	return storage, nil
+}
+
 func GetStorage() (storage.Storage, error) {
-	if useAzure() == true {
+	if useAzure() {
+		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "Azure")
 		return getAzBlob()
 	}
 
-	if useAWS() == true {
+	if useAWS() {
+		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "AWS")
 		return getAwsS3()
 	}
 
-	if useGCP() == true {
+	if useGCP() {
+		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "GCP")
 		return getGCP()
+	}
+
+	if useLocal() {
+		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "Local")
+		return getLocal()
 	}
 
 	return nil, errors.New("no storage provider detected")
@@ -410,7 +432,7 @@ func GetUpdates() ([]byte, error) {
 	if *updatesPtr != "" {
 		return []byte(*updatesPtr), nil
 	} else if *updatesFilePtr != "" {
-		content, err := ioutil.ReadFile(*updatesFilePtr)
+		content, err := os.ReadFile(*updatesFilePtr)
 		return content, err
 	}
 
@@ -422,7 +444,7 @@ func HasUpdates() bool {
 }
 
 func HasKeep() bool {
-	return *keepPtr == true
+	return *keepPtr
 }
 
 func useAzure() bool {
@@ -435,4 +457,8 @@ func useAWS() bool {
 
 func useGCP() bool {
 	return *gcpBucketPtr != ""
+}
+
+func useLocal() bool {
+	return *localPathPtr != ""
 }

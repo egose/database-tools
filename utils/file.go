@@ -2,7 +2,6 @@ package utils
 
 import (
 	"io/fs"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,7 +63,7 @@ func DeleteDirectory(dirPath string) error {
 }
 
 func ReadFileToBuffer(filePath string) ([]byte, error) {
-	buffer, err := ioutil.ReadFile(filePath)
+	buffer, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, err
 	}
