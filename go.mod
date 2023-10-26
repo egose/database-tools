@@ -4,8 +4,8 @@ go 1.20
 
 require (
 	cloud.google.com/go/storage v1.30.1
-	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.6.1
-	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.0.0
+	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.7.0
+	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.0
 	github.com/aws/aws-sdk-go v1.44.277
 	github.com/go-co-op/gocron v1.28.1
 	github.com/mholt/archiver v3.1.1+incompatible
