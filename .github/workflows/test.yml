@@ -15,7 +15,7 @@ jobs:
     - name: Run test
       run: |
         mkdir -p ./dist/mongodb
-        mongod --dbpath ./dist/mongodb -d
+        mongod --fork --dbpath ./dist/mongodb
 
         until nc -z 127.0.0.1 27017
         do
