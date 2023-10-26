@@ -3,7 +3,7 @@ name: Test codebase
 on: push
 
 jobs:
-  pre-commit:
+  test:
     runs-on: ubuntu-22.04
     steps:
     - uses: hmarr/debug-action@a701ed95a46e6f2fb0df25e1a558c16356fae35a
@@ -14,8 +14,8 @@ jobs:
 
     - name: Run test
       run: |
-        mkdir -p ./dist/mongodb
-        mongod --fork --dbpath ./dist/mongodb
+        mkdir -p ./dist/mongo/db
+        mongod --fork --dbpath ./dist/mongo/db --logpath ./dist/mongo/mongod.log
 
         until nc -z 127.0.0.1 27017
         do
