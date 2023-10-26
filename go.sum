@@ -150,6 +150,8 @@ github.com/mholt/archiver v3.1.1+incompatible h1:1dCVxuqs0dJseYEhi5pl7MYPH9zDa1w
 github.com/mholt/archiver v3.1.1+incompatible/go.mod h1:Dh2dOXnSdiLxRiPoVfIr/fI1TwETms9B8CTWfeh7ROU=
 github.com/mongodb/mongo-tools v0.0.0-20230605170329-b462ee70a09b h1:VutvdviGz9NLv8C0tXQJY/z5RUIbj0lkzgUNeMhQuBg=
 github.com/mongodb/mongo-tools v0.0.0-20230605170329-b462ee70a09b/go.mod h1:8QzkY/qlRWK3CjGGdwoUFmf9jGd1ZN9cNQflPL9w3Ik=
+github.com/mongodb/mongo-tools v0.0.0-20231020185853-eb9694b30e21 h1:qgnodhmSrH6wlVPce6oQYo/UX3h9lnA54ikGsuZSnFI=
+github.com/mongodb/mongo-tools v0.0.0-20231020185853-eb9694b30e21/go.mod h1:0oaT83L/28PVsvKPV0Rkkl5l9cKRdJk0714K8/icyRo=
 github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe/go.mod h1:wL8QJuTMNUDYhXwkmfOly8iTdp5TEcJFWZD2D7SIkUc=
 github.com/montanaflynn/stats v0.6.6 h1:Duep6KMIDpY4Yo11iFsvyqJDyfzLF9+sndUKT+v64GQ=
 github.com/montanaflynn/stats v0.6.6/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
