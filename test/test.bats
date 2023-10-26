@@ -1,5 +1,7 @@
 #!/usr/bin/env bats
 
+mkdir -p ./dist/backup
+
 @test "tools build" {
   result="$(make build | tail -n1)"
   [ "$result" == "complete" ]
@@ -16,7 +18,7 @@
 }
 
 @test "archive" {
-  result=$(./dist/mongo-archive --uri=mongodb://localhost:27017 --db=testdb --local-path=./dist/localbackup 2>&1 | tail -n1)
+  result=$(./dist/mongo-archive --uri=mongodb://localhost:27017 --db=testdb --local-path=./dist/backup 2>&1 | tail -n1)
   [[ "$result" == *"Archive completed successfully"* ]]
 }
 
@@ -31,7 +33,7 @@
 }
 
 @test "unarchive" {
-  result=$(./dist/mongo-unarchive --uri=mongodb://localhost:27017 --db=testdb --local-path=./dist/localbackup 2>&1 | tail -n1)
+  result=$(./dist/mongo-unarchive --uri=mongodb://localhost:27017 --db=testdb --local-path=./dist/backup 2>&1 | tail -n1)
   [[ "$result" == *"Unarchive completed successfull"* ]]
 }
 
