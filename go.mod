@@ -10,7 +10,7 @@ require (
 	github.com/go-co-op/gocron v1.28.1
 	github.com/mholt/archiver v3.1.1+incompatible
 	github.com/mongodb/mongo-tools v0.0.0-20230605170329-b462ee70a09b
-	go.mongodb.org/mongo-driver v1.12.0
+	go.mongodb.org/mongo-driver v1.12.1
 	golang.org/x/oauth2 v0.8.0
 	google.golang.org/api v0.125.0
 )
@@ -22,6 +22,7 @@ require (
 	cloud.google.com/go/iam v0.13.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/internal v1.3.0 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
+	github.com/frankban/quicktest v1.14.6 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect

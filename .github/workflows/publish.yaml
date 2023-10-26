@@ -19,17 +19,17 @@ jobs:
       security-events: write
 
     steps:
-    - uses: hmarr/debug-action@v2
-    - uses: actions/checkout@v3
+    - uses: hmarr/debug-action@a701ed95a46e6f2fb0df25e1a558c16356fae35a
+    - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11
 
     - name: Setup Tools
-      uses: egose/actions/asdf-tools@v0.2.2
+      uses: egose/actions/asdf-tools@cf2f1200f48743cf7974609fe8ac80f0d1b08e56
       with:
         plugins: |
           mongodb=https://github.com/egose/asdf-mongodb.git
 
     - name: Build and Push
-      uses: egose/actions/docker-build-push@v0.2.2
+      uses: egose/actions/docker-build-push@cf2f1200f48743cf7974609fe8ac80f0d1b08e56
       with:
         registry-url: ${{ env.DOCKER_REGISTRY }}
         registry-username: ${{ github.actor }}

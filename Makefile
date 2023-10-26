@@ -4,6 +4,7 @@ SHELL := /usr/bin/env bash
 build:
 	CGO_ENABLED=0 go build -o dist/mongo-archive ./mongoarchive/main/mongoarchive.go
 	CGO_ENABLED=0 go build -o dist/mongo-unarchive ./mongounarchive/main/mongounarchive.go
+	echo complete
 
 .PHONY: format
 format:
