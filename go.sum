@@ -156,6 +156,8 @@ github.com/mongodb/mongo-tools v0.0.0-20230605170329-b462ee70a09b h1:VutvdviGz9N
 github.com/mongodb/mongo-tools v0.0.0-20230605170329-b462ee70a09b/go.mod h1:8QzkY/qlRWK3CjGGdwoUFmf9jGd1ZN9cNQflPL9w3Ik=
 github.com/mongodb/mongo-tools v0.0.0-20231020185853-eb9694b30e21 h1:qgnodhmSrH6wlVPce6oQYo/UX3h9lnA54ikGsuZSnFI=
 github.com/mongodb/mongo-tools v0.0.0-20231020185853-eb9694b30e21/go.mod h1:0oaT83L/28PVsvKPV0Rkkl5l9cKRdJk0714K8/icyRo=
+github.com/mongodb/mongo-tools v0.0.0-20231030165537-eeafc24193c0 h1:cA8fVW3mnGclF8XVg06ioJs1Valx0cy7DrcJRKIOSoQ=
+github.com/mongodb/mongo-tools v0.0.0-20231030165537-eeafc24193c0/go.mod h1:2Rl3k3e333g2AJN74N9hx9N4IIhB0IcTU3m92oNsOyE=
 github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe/go.mod h1:wL8QJuTMNUDYhXwkmfOly8iTdp5TEcJFWZD2D7SIkUc=
 github.com/montanaflynn/stats v0.6.6 h1:Duep6KMIDpY4Yo11iFsvyqJDyfzLF9+sndUKT+v64GQ=
 github.com/montanaflynn/stats v0.6.6/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
