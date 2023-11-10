@@ -9,7 +9,7 @@ require (
 	github.com/aws/aws-sdk-go v1.47.6
 	github.com/go-co-op/gocron v1.35.2
 	github.com/mholt/archiver v3.1.1+incompatible
-	github.com/mongodb/mongo-tools v0.0.0-20231030165537-eeafc24193c0
+	github.com/mongodb/mongo-tools v0.0.0-20231109214755-df997aa2ab24
 	go.mongodb.org/mongo-driver v1.12.1
 	golang.org/x/oauth2 v0.13.0
 	google.golang.org/api v0.148.0
