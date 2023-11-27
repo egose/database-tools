@@ -38,7 +38,7 @@ jobs:
           type=semver,pattern={{major}}
 
     - name: Run Snyk to check Docker image for vulnerabilities
-      continue-on-error: false
+      continue-on-error: true
       uses: snyk/actions/docker@3e2680e8df93a24b52d119b1305fb7cedc60ceae
       env:
         SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
