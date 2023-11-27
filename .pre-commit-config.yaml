@@ -1,6 +1,6 @@
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.4.0
+  rev: 7b2234e6dd211438f6416cd261fa2e747ef498cf
   hooks:
   - id: check-added-large-files
   - id: check-case-conflict
@@ -8,12 +8,11 @@ repos:
     files: \.sh
   - id: check-json
   - id: check-vcs-permalinks
-  - id: check-yaml
   - id: end-of-file-fixer
   - id: trailing-whitespace
   - id: check-merge-conflict
 - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-  rev: v2.7.0
+  rev: 628f6aeaeb488ae497b918ceda9cc2b0eaa02079
   hooks:
   - id: pretty-format-yaml
     args: [--autofix, --indent, '2']

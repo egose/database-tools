@@ -8,21 +8,21 @@ spec:
     spec:
       restartPolicy: Never
       containers:
-        - name: backup-job
-          image: ghcr.io/egose/database-tools:0.3
-          imagePullPolicy: IfNotPresent
-          command: ['/bin/sh', '-c']
-          args:
-            - |
-              mkdir -p /tmp/backup
-              mongo-archive --db=olddb --force-table-scan
-              mongo-unarchive --db=newdb --dir=olddb
-          env:
-            - name: MONGOARCHIVE__URI
-              value: mongodb://<user>:<password>@db1.example.net:27017/?authSource=admin
-            - name: MONGOUNARCHIVE__URI
-              value: mongodb://<user>:<password>@db2.example.net:27017/?authSource=admin
-            - name: MONGOARCHIVE__LOCAL_PATH
-              value: /tmp/backup
-            - name: MONGOUNARCHIVE__LOCAL_PATH
-              value: /tmp/backup
+      - name: backup-job
+        image: ghcr.io/egose/database-tools:0.3
+        imagePullPolicy: IfNotPresent
+        command: [/bin/sh, -c]
+        args:
+        - |
+          mkdir -p /tmp/backup
+          mongo-archive --db=olddb --force-table-scan
+          mongo-unarchive --db=newdb --dir=olddb
+        env:
+        - name: MONGOARCHIVE__URI
+          value: mongodb://<user>:<password>@db1.example.net:27017/?authSource=admin
+        - name: MONGOUNARCHIVE__URI
+          value: mongodb://<user>:<password>@db2.example.net:27017/?authSource=admin
+        - name: MONGOARCHIVE__LOCAL_PATH
+          value: /tmp/backup
+        - name: MONGOUNARCHIVE__LOCAL_PATH
+          value: /tmp/backup
