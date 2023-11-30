@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/egose/database-tools/notification"
 	"github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
 	"github.com/go-co-op/gocron"
@@ -69,6 +70,8 @@ var (
 	gcpClientIDPtr     *string
 
 	localPathPtr *string
+
+	rocketChatWebhookUrlPtr *string
 
 	cronPtr           *bool
 	cronExpressionPtr *string
@@ -141,6 +144,8 @@ func ParseFlags() {
 
 	localPathPtr = flag.String("local-path", os.Getenv(envPrefix+"LOCAL_PATH"), "Local directory path to store backups")
 
+	rocketChatWebhookUrlPtr = flag.String("rocketchat-webhook-url", os.Getenv(envPrefix+"ROCKETCHAT_WEBHOOK_URL"), "Rocket Chat Webhook URL")
+
 	// cron options:
 	cronPtr = flag.Bool("cron", os.Getenv(envPrefix+"CRON") == "true", "run a cron schedular and block current execution path")
 	cronExpressionPtr = flag.String("cron-expression", os.Getenv(envPrefix+"CRON_EXPRESSION"), "a string describes individual details of the cron schedule")
@@ -160,6 +165,10 @@ func parseTZ() {
 	} else {
 		loc = time.Local
 	}
+}
+
+func GetTZ() *time.Location {
+	return loc
 }
 
 func GetMongodumpOptions() []string {
@@ -339,6 +348,26 @@ func GetStorage() (storage.Storage, error) {
 	return nil, errors.New("no storage provider detected")
 }
 
+func getRocketChat() (*notification.RocketChat, error) {
+	rc := new(notification.RocketChat)
+	err := rc.Init(*rocketChatWebhookUrlPtr)
+	return rc, err
+}
+
+func GetNotifications() []notification.Notification {
+	notifications := make([]notification.Notification, 0)
+
+	if useRocketChat() {
+		rc, _ := getRocketChat()
+		if rc != nil {
+			mlog.Logvf(mlog.Always, "Found Notification Option: %v", "RocketChat")
+			notifications = append(notifications, rc)
+		}
+	}
+
+	return notifications
+}
+
 func GetCronScheduler() *gocron.Scheduler {
 	var cronExpression string
 	if cronExpressionPtr != nil {
@@ -371,4 +400,8 @@ func useGCP() bool {
 
 func useLocal() bool {
 	return *localPathPtr != ""
+}
+
+func useRocketChat() bool {
+	return *rocketChatWebhookUrlPtr != ""
 }

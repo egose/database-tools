@@ -27,6 +27,11 @@ func main() {
 		runCronJob()
 	} else {
 		err := runTask()
+		if err != nil {
+			sendNotification(false, err.Error())
+			mlog.Logvf(mlog.Always, "Failed: %v", err.Error())
+		}
+
 		common.HandleError(err)
 	}
 }
@@ -37,6 +42,7 @@ func runCronJob() {
 	cron.Do(func() {
 		err := runTask()
 		if err != nil {
+			sendNotification(false, err.Error())
 			mlog.Logvf(mlog.Always, "Failed: %v", err.Error())
 		}
 	})
@@ -122,5 +128,14 @@ func runTask() error {
 
 	mlog.Logvf(mlog.Always, "Archive completed successfully; ETag: %v", result)
 
+	sendNotification(true, filename)
+
 	return nil
+}
+
+func sendNotification(success bool, filenameOrError string) {
+	notifications := mongoarchive.GetNotifications()
+	for _, notification := range notifications {
+		notification.Send(success, mongoarchive.GetTZ(), filenameOrError)
+	}
 }
