@@ -19,4 +19,4 @@ USER nonroot
 
 WORKDIR /home/nonroot
 
-# ENV TZ America/Vancouver
+ENV TZ America/Vancouver
