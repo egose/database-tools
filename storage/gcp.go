@@ -239,3 +239,7 @@ func (this *GcpStorage) Download(objectName string, filePath string) error {
 
 	return nil
 }
+
+func (this *GcpStorage) DeleteOldObjects() error {
+	return nil
+}

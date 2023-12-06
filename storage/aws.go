@@ -116,3 +116,7 @@ func (this *AwsS3) Download(objectName string, filePath string) error {
 
 	return nil
 }
+
+func (this *AwsS3) DeleteOldObjects() error {
+	return nil
+}

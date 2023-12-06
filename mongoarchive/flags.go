@@ -5,6 +5,7 @@ import (
 	"flag"
 	"os"
 	"time"
+	"strconv"
 
 	"github.com/egose/database-tools/notification"
 	"github.com/egose/database-tools/storage"
@@ -70,6 +71,7 @@ var (
 	gcpClientIDPtr     *string
 
 	localPathPtr *string
+	expiryDaysPtr *string
 
 	rocketChatWebhookUrlPtr *string
 
@@ -80,6 +82,7 @@ var (
 	keepPtr *bool
 
 	loc *time.Location
+	expiryDays int
 )
 
 func ParseFlags() {
@@ -143,6 +146,7 @@ func ParseFlags() {
 	gcpClientIDPtr = flag.String("gcp-client-id", os.Getenv(envPrefix+"GCP_CLIENT_ID"), "GCP service account's client id")
 
 	localPathPtr = flag.String("local-path", os.Getenv(envPrefix+"LOCAL_PATH"), "Local directory path to store backups")
+	expiryDaysPtr = flag.String("expiry-days", os.Getenv(envPrefix+"EXPIRY_DAYS"), "The maximum age, in days, for archives to be retained")
 
 	rocketChatWebhookUrlPtr = flag.String("rocketchat-webhook-url", os.Getenv(envPrefix+"ROCKETCHAT_WEBHOOK_URL"), "Rocket Chat Webhook URL")
 
@@ -157,6 +161,7 @@ func ParseFlags() {
 
 	flag.Parse()
 	parseTZ()
+	parseExpiry()
 }
 
 func parseTZ() {
@@ -164,6 +169,19 @@ func parseTZ() {
 		loc, _ = time.LoadLocation(*tzPtr)
 	} else {
 		loc = time.Local
+	}
+
+	mlog.Logvf(mlog.Always, "Use Time Zone: %v", loc)
+}
+
+func parseExpiry() {
+	if *expiryDaysPtr != "" {
+		num, err := strconv.Atoi(*expiryDaysPtr)
+		if err != nil {
+			expiryDays = num
+		}
+	} else {
+		expiryDays = 0
 	}
 }
 
@@ -316,7 +334,7 @@ func getGCP() (*storage.GcpStorage, error) {
 
 func getLocal() (*storage.LocalStorage, error) {
 	storage := new(storage.LocalStorage)
-	err := storage.Init(*localPathPtr)
+	err := storage.Init(*localPathPtr, expiryDays)
 	if err != nil {
 		return nil, err
 	}
@@ -375,6 +393,8 @@ func GetCronScheduler() *gocron.Scheduler {
 	} else {
 		cronExpression = "0 2 * * *"
 	}
+
+	mlog.Logvf(mlog.Always, "Use Cron Expression: %v", cronExpression)
 	return gocron.NewScheduler(loc).Cron(cronExpression)
 }
 

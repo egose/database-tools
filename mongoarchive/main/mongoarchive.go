@@ -89,6 +89,11 @@ func runTask() error {
 		return err
 	}
 
+	err = storage.DeleteOldObjects()
+	if err != nil {
+		return err
+	}
+
 	err = dump.Init()
 	if err != nil {
 		return err

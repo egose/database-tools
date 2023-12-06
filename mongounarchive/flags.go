@@ -382,7 +382,7 @@ func getGCP() (*storage.GcpStorage, error) {
 
 func getLocal() (*storage.LocalStorage, error) {
 	storage := new(storage.LocalStorage)
-	err := storage.Init(*localPathPtr)
+	err := storage.Init(*localPathPtr, 0)
 	if err != nil {
 		return nil, err
 	}

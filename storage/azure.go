@@ -139,3 +139,7 @@ func (this *AzBlob) Download(blobName string, filePath string) error {
 
 	return nil
 }
+
+func (this *AzBlob) DeleteOldObjects() error {
+	return nil
+}

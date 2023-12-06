@@ -11,10 +11,12 @@ FROM alpine:3.18.5
 
 RUN adduser -D -u 1000 nonroot
 
+RUN apk --no-cache add tzdata
+
 COPY --from=builder /app/dist /usr/local/bin
 
 USER nonroot
 
 WORKDIR /home/nonroot
 
-ENV TZ America/Vancouver
+# ENV TZ America/Vancouver

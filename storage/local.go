@@ -13,10 +13,12 @@ import (
 
 type LocalStorage struct {
 	LocalPath string
+	ExpiryDays int
 }
 
-func (this *LocalStorage) Init(localPath string) error {
+func (this *LocalStorage) Init(localPath string, expiryDays int) error {
 	this.LocalPath = localPath
+	this.ExpiryDays = expiryDays
 
 	return nil
 }
@@ -54,6 +56,34 @@ func (this *LocalStorage) Download(objectName string, filePath string) error {
 	}
 
 	return nil
+}
+
+func (this *LocalStorage) DeleteOldObjects() error {
+	// If expiry days is not set, than do not delete backups
+	if this.ExpiryDays == 0 {
+		return nil
+	}
+
+	err := filepath.Walk(this.LocalPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if !info.IsDir() {
+			daysSinceModification := time.Since(info.ModTime()).Hours() / 24
+			if daysSinceModification > float64(this.ExpiryDays) {
+				if err := os.Remove(path); err != nil {
+					return err
+				} else {
+					fmt.Printf("Deleted file: %s\n",  filepath.Base(path))
+				}
+			}
+		}
+
+		return nil
+	})
+
+	return err
 }
 
 func (this *LocalStorage) getLastUpdatedFile() (string, error) {
