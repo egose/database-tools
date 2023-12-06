@@ -10,10 +10,12 @@ import (
 
 type RocketChat struct {
 	WebhookUrl string
+	WebhookPrefix string
 }
 
-func (this *RocketChat) Init(webhookUrl string) error {
+func (this *RocketChat) Init(webhookUrl, webhookPrefix string) error {
 	this.WebhookUrl = webhookUrl
+	this.WebhookPrefix = webhookPrefix
 	return nil
 }
 
@@ -24,7 +26,12 @@ func (this *RocketChat) Send(success bool, loc *time.Location, filenameOrError s
 	var filenameOrErrorLabel string
 
 	if success {
-		text = "Database archiving completed successfully"
+		msg := "Database archiving completed successfully"
+		if this.WebhookPrefix != "" {
+			text = fmt.Sprintf("%s %s", this.WebhookPrefix, msg)
+		} else {
+			text = msg
+		}
 		color = "#00AA00"
 		status = "Success"
 		filenameOrErrorLabel = "Filename"
