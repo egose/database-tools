@@ -12,7 +12,7 @@ import (
 )
 
 type LocalStorage struct {
-	LocalPath string
+	LocalPath  string
 	ExpiryDays int
 }
 
@@ -75,7 +75,7 @@ func (this *LocalStorage) DeleteOldObjects() error {
 				if err := os.Remove(path); err != nil {
 					return err
 				} else {
-					fmt.Printf("Deleted file: %s\n",  filepath.Base(path))
+					fmt.Printf("Deleted file: %s\n", filepath.Base(path))
 				}
 			}
 		}

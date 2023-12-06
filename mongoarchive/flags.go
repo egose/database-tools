@@ -3,9 +3,8 @@ package mongoarchive
 import (
 	"errors"
 	"flag"
-	"os"
-	"time"
 	"strconv"
+	"time"
 
 	"github.com/egose/database-tools/notification"
 	"github.com/egose/database-tools/storage"
@@ -15,7 +14,8 @@ import (
 )
 
 const (
-	envPrefix = "MONGOARCHIVE__"
+	envPrefix         = "MONGOARCHIVE__"
+	fallbackEnvPrefix = "MONGO__"
 )
 
 var (
@@ -70,10 +70,11 @@ var (
 	gcpClientEmailPtr  *string
 	gcpClientIDPtr     *string
 
-	localPathPtr *string
+	localPathPtr  *string
 	expiryDaysPtr *string
 
-	rocketChatWebhookUrlPtr *string
+	rocketChatWebhookUrlPtr    *string
+	rocketChatWebhookPrefixPtr *string
 
 	cronPtr           *bool
 	cronExpressionPtr *string
@@ -81,83 +82,86 @@ var (
 
 	keepPtr *bool
 
-	loc *time.Location
+	loc        *time.Location
 	expiryDays int
 )
 
 func ParseFlags() {
+	env := utils.NewEnv(envPrefix, fallbackEnvPrefix, "")
+
 	// verbosity options:
-	verbose = flag.String("verbose", os.Getenv(envPrefix+"VERBOSE"), "more detailed log output (include multiple times for more verbosity, e.g. -vvvvv, or specify a numeric value, e.g. --verbose=N)")
-	quietPtr = flag.Bool("quiet", os.Getenv(envPrefix+"QUIET") == "true", "hide all log output")
+	verbose = flag.String("verbose", env.GetValue("VERBOSE"), "more detailed log output (include multiple times for more verbosity, e.g. -vvvvv, or specify a numeric value, e.g. --verbose=N)")
+	quietPtr = flag.Bool("quiet", env.GetValue("QUIET") == "true", "hide all log output")
 
 	// connection options:
-	hostPtr = flag.String("host", os.Getenv(envPrefix+"HOST"), "MongoDB host to connect to (setname/host1,host2 for replica sets)")
-	portPtr = flag.String("port", os.Getenv(envPrefix+"PORT"), "MongoDB port (can also use --host hostname:port)")
+	hostPtr = flag.String("host", env.GetValue("HOST"), "MongoDB host to connect to (setname/host1,host2 for replica sets)")
+	portPtr = flag.String("port", env.GetValue("PORT"), "MongoDB port (can also use --host hostname:port)")
 
 	// ssl options:
-	sslPtr = flag.Bool("ssl", os.Getenv(envPrefix+"SSL") == "true", "connect to a mongod or mongos that has ssl enabled")
-	sslCAFilePtr = flag.String("ssl-ca-file", os.Getenv(envPrefix+"SSL_CA_FILE"), "the .pem file containing the root certificate chain from the certificate authority")
-	sslPEMKeyFilePtr = flag.String("ssl-pem-key-file", os.Getenv(envPrefix+"SSL_PEM_KEY_FILE"), "the .pem file containing the certificate and key")
-	sslPEMKeyPasswordPtr = flag.String("ssl-pem-key-password", os.Getenv(envPrefix+"SSL_PEM_KEY_PASSWORD"), "the password to decrypt the sslPEMKeyFile, if necessary")
-	sslCRLFilePtr = flag.String("ssl-crl-file", os.Getenv(envPrefix+"SSL_CRL_File"), "the .pem file containing the certificate revocation list")
-	sslAllowInvalidCertificatesPtr = flag.Bool("ssl-allow-invalid-certificates", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_CERTIFICATES") == "true", "bypass the validation for server certificates")
-	sslAllowInvalidHostnamesPtr = flag.Bool("ssl-allow-invalid-hostnames", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_HOSTNAMES") == "true", "bypass the validation for server name")
-	sslFIPSModePtr = flag.Bool("ssl-fips-mode", os.Getenv(envPrefix+"SSL_FIPS_MODE") == "true", "use FIPS mode of the installed openssl library")
+	sslPtr = flag.Bool("ssl", env.GetValue("SSL") == "true", "connect to a mongod or mongos that has ssl enabled")
+	sslCAFilePtr = flag.String("ssl-ca-file", env.GetValue("SSL_CA_FILE"), "the .pem file containing the root certificate chain from the certificate authority")
+	sslPEMKeyFilePtr = flag.String("ssl-pem-key-file", env.GetValue("SSL_PEM_KEY_FILE"), "the .pem file containing the certificate and key")
+	sslPEMKeyPasswordPtr = flag.String("ssl-pem-key-password", env.GetValue("SSL_PEM_KEY_PASSWORD"), "the password to decrypt the sslPEMKeyFile, if necessary")
+	sslCRLFilePtr = flag.String("ssl-crl-file", env.GetValue("SSL_CRL_File"), "the .pem file containing the certificate revocation list")
+	sslAllowInvalidCertificatesPtr = flag.Bool("ssl-allow-invalid-certificates", env.GetValue("SSL_ALLOW_INVALID_CERTIFICATES") == "true", "bypass the validation for server certificates")
+	sslAllowInvalidHostnamesPtr = flag.Bool("ssl-allow-invalid-hostnames", env.GetValue("SSL_ALLOW_INVALID_HOSTNAMES") == "true", "bypass the validation for server name")
+	sslFIPSModePtr = flag.Bool("ssl-fips-mode", env.GetValue("SSL_FIPS_MODE") == "true", "use FIPS mode of the installed openssl library")
 
 	// authentication options:
-	usernamePtr = flag.String("username", os.Getenv(envPrefix+"USERNAME"), "username for authentication")
-	passwordPtr = flag.String("password", os.Getenv(envPrefix+"PASSWORD"), "password for authentication")
-	authenticationDatabasePtr = flag.String("authentication-database", os.Getenv(envPrefix+"AUTHENTICATION_DATABASE"), "database that holds the user's credentials")
-	authenticationMechanismPtr = flag.String("authentication-mechanism", os.Getenv(envPrefix+"AUTHENTICATION_MECHANISM"), "authentication mechanism to use")
+	usernamePtr = flag.String("username", env.GetValue("USERNAME"), "username for authentication")
+	passwordPtr = flag.String("password", env.GetValue("PASSWORD"), "password for authentication")
+	authenticationDatabasePtr = flag.String("authentication-database", env.GetValue("AUTHENTICATION_DATABASE"), "database that holds the user's credentials")
+	authenticationMechanismPtr = flag.String("authentication-mechanism", env.GetValue("AUTHENTICATION_MECHANISM"), "authentication mechanism to use")
 
 	// kerberos options:
-	gssapiServiceNamePtr = flag.String("gssapi-service-name", os.Getenv(envPrefix+"GSSAPI_SERVICE_NAME"), "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)")
-	gssapiHostNamePtr = flag.String("gssapi-host-name", os.Getenv(envPrefix+"GSSAPI_HOST_NAME"), "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)")
+	gssapiServiceNamePtr = flag.String("gssapi-service-name", env.GetValue("GSSAPI_SERVICE_NAME"), "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)")
+	gssapiHostNamePtr = flag.String("gssapi-host-name", env.GetValue("GSSAPI_HOST_NAME"), "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)")
 
 	// namespace options:
-	dbPtr = flag.String("db", os.Getenv(envPrefix+"DB"), "database to use")
-	collectionPtr = flag.String("collection", os.Getenv(envPrefix+"COLLECTION"), "collection to use")
+	dbPtr = flag.String("db", env.GetValue("DB"), "database to use")
+	collectionPtr = flag.String("collection", env.GetValue("COLLECTION"), "collection to use")
 
 	// uri options:
-	uriPtr = flag.String("uri", os.Getenv(envPrefix+"URI"), "MongoDB uri connection string")
-	uriPrunePtr = flag.Bool("uri-prune", os.Getenv(envPrefix+"URI_PRUNE") == "true", "prune MongoDB uri connection string")
+	uriPtr = flag.String("uri", env.GetValue("URI"), "MongoDB uri connection string")
+	uriPrunePtr = flag.Bool("uri-prune", env.GetValue("URI_PRUNE") == "true", "prune MongoDB uri connection string")
 
 	// query options:
-	queryPtr = flag.String("query", os.Getenv(envPrefix+"QUERY"), "query filter, as a v2 Extended JSON string")
-	queryFilePtr = flag.String("query-file", os.Getenv(envPrefix+"QUERY_FILE"), "path to a file containing a query filter (v2 Extended JSON)")
-	readPreferencePtr = flag.String("read-preference", os.Getenv(envPrefix+"READ_PREFERENCE"), "specify either a preference mode (e.g. 'nearest') or a preference json object")
-	forceTableScanPtr = flag.Bool("force-table-scan", os.Getenv(envPrefix+"FORCE_TABLE_SCAN") == "true", "force a table scan")
+	queryPtr = flag.String("query", env.GetValue("QUERY"), "query filter, as a v2 Extended JSON string")
+	queryFilePtr = flag.String("query-file", env.GetValue("QUERY_FILE"), "path to a file containing a query filter (v2 Extended JSON)")
+	readPreferencePtr = flag.String("read-preference", env.GetValue("READ_PREFERENCE"), "specify either a preference mode (e.g. 'nearest') or a preference json object")
+	forceTableScanPtr = flag.Bool("force-table-scan", env.GetValue("FORCE_TABLE_SCAN") == "true", "force a table scan")
 
-	azAccountNamePtr = flag.String("az-account-name", os.Getenv(envPrefix+"AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
-	azAccountKeyPtr = flag.String("az-account-key", os.Getenv(envPrefix+"AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
-	azContainerNamePtr = flag.String("az-container-name", os.Getenv(envPrefix+"AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
+	azAccountNamePtr = flag.String("az-account-name", env.GetValue("AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
+	azAccountKeyPtr = flag.String("az-account-key", env.GetValue("AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
+	azContainerNamePtr = flag.String("az-container-name", env.GetValue("AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
 
-	awsAccessKeyIdPtr = flag.String("aws-access-key-id", os.Getenv(envPrefix+"AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
-	awsSecretAccessKeyPtr = flag.String("aws-secret-access-key", os.Getenv(envPrefix+"AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
-	awsRegionPtr = flag.String("aws-region", os.Getenv(envPrefix+"AWS_REGION"), "AWS Region whose servers you want to send your requests to")
-	awsBucketPtr = flag.String("aws-bucket", os.Getenv(envPrefix+"AWS_BUCKET"), "AWS S3 bucket name")
+	awsAccessKeyIdPtr = flag.String("aws-access-key-id", env.GetValue("AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
+	awsSecretAccessKeyPtr = flag.String("aws-secret-access-key", env.GetValue("AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
+	awsRegionPtr = flag.String("aws-region", env.GetValue("AWS_REGION"), "AWS Region whose servers you want to send your requests to")
+	awsBucketPtr = flag.String("aws-bucket", env.GetValue("AWS_BUCKET"), "AWS S3 bucket name")
 
-	gcpBucketPtr = flag.String("gcp-bucket", os.Getenv(envPrefix+"GCP_BUCKET"), "GCP storage bucket name")
-	gcpCredsFilePtr = flag.String("gcp-creds-file", os.Getenv(envPrefix+"GCP_CREDS_FILE"), "GCP service account's credentials file")
-	gcpProjectIDPtr = flag.String("gcp-project-id", os.Getenv(envPrefix+"GCP_PROJECT_ID"), "GCP service account's project id")
-	gcpPrivateKeyIdPtr = flag.String("gcp-private-key-id", os.Getenv(envPrefix+"GCP_PRIVATE_KEY_ID"), "GCP service account's private key id")
-	gcpPrivateKeyPtr = flag.String("gcp-private-key", os.Getenv(envPrefix+"GCP_PRIVATE_KEY"), "GCP service account's private key")
-	gcpClientEmailPtr = flag.String("gcp-client-email", os.Getenv(envPrefix+"GCP_CLIENT_EMAIL"), "GCP service account's client email")
-	gcpClientIDPtr = flag.String("gcp-client-id", os.Getenv(envPrefix+"GCP_CLIENT_ID"), "GCP service account's client id")
+	gcpBucketPtr = flag.String("gcp-bucket", env.GetValue("GCP_BUCKET"), "GCP storage bucket name")
+	gcpCredsFilePtr = flag.String("gcp-creds-file", env.GetValue("GCP_CREDS_FILE"), "GCP service account's credentials file")
+	gcpProjectIDPtr = flag.String("gcp-project-id", env.GetValue("GCP_PROJECT_ID"), "GCP service account's project id")
+	gcpPrivateKeyIdPtr = flag.String("gcp-private-key-id", env.GetValue("GCP_PRIVATE_KEY_ID"), "GCP service account's private key id")
+	gcpPrivateKeyPtr = flag.String("gcp-private-key", env.GetValue("GCP_PRIVATE_KEY"), "GCP service account's private key")
+	gcpClientEmailPtr = flag.String("gcp-client-email", env.GetValue("GCP_CLIENT_EMAIL"), "GCP service account's client email")
+	gcpClientIDPtr = flag.String("gcp-client-id", env.GetValue("GCP_CLIENT_ID"), "GCP service account's client id")
 
-	localPathPtr = flag.String("local-path", os.Getenv(envPrefix+"LOCAL_PATH"), "Local directory path to store backups")
-	expiryDaysPtr = flag.String("expiry-days", os.Getenv(envPrefix+"EXPIRY_DAYS"), "The maximum age, in days, for archives to be retained")
+	localPathPtr = flag.String("local-path", env.GetValue("LOCAL_PATH"), "Local directory path to store backups")
+	expiryDaysPtr = flag.String("expiry-days", env.GetValue("EXPIRY_DAYS"), "The maximum age, in days, for archives to be retained")
 
-	rocketChatWebhookUrlPtr = flag.String("rocketchat-webhook-url", os.Getenv(envPrefix+"ROCKETCHAT_WEBHOOK_URL"), "Rocket Chat Webhook URL")
+	rocketChatWebhookUrlPtr = flag.String("rocketchat-webhook-url", env.GetValue("ROCKETCHAT_WEBHOOK_URL"), "Rocket Chat Webhook URL")
+	rocketChatWebhookPrefixPtr = flag.String("rocketchat-webhook-prefix", env.GetValue("ROCKETCHAT_WEBHOOK_PREFIX"), "Rocket Chat Webhook Prefix")
 
 	// cron options:
-	cronPtr = flag.Bool("cron", os.Getenv(envPrefix+"CRON") == "true", "run a cron schedular and block current execution path")
-	cronExpressionPtr = flag.String("cron-expression", os.Getenv(envPrefix+"CRON_EXPRESSION"), "a string describes individual details of the cron schedule")
+	cronPtr = flag.Bool("cron", env.GetValue("CRON") == "true", "run a cron schedular and block current execution path")
+	cronExpressionPtr = flag.String("cron-expression", env.GetValue("CRON_EXPRESSION"), "a string describes individual details of the cron schedule")
 
 	// See https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
-	tzPtr = flag.String("tz", os.Getenv("TZ"), "user-specified time zone")
+	tzPtr = flag.String("tz", env.GetValue("TZ"), "user-specified time zone")
 
-	keepPtr = flag.Bool("keep", os.Getenv(envPrefix+"KEEP") == "true", "keep data dump")
+	keepPtr = flag.Bool("keep", env.GetValue("KEEP") == "true", "keep data dump")
 
 	flag.Parse()
 	parseTZ()
@@ -368,7 +372,7 @@ func GetStorage() (storage.Storage, error) {
 
 func getRocketChat() (*notification.RocketChat, error) {
 	rc := new(notification.RocketChat)
-	err := rc.Init(*rocketChatWebhookUrlPtr)
+	err := rc.Init(*rocketChatWebhookUrlPtr, *rocketChatWebhookPrefixPtr)
 	return rc, err
 }
 

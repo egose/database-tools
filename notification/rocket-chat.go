@@ -9,7 +9,7 @@ import (
 )
 
 type RocketChat struct {
-	WebhookUrl string
+	WebhookUrl    string
 	WebhookPrefix string
 }
 

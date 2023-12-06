@@ -15,7 +15,8 @@ import (
 )
 
 const (
-	envPrefix = "MONGOUNARCHIVE__"
+	envPrefix         = "MONGOUNARCHIVE__"
+	fallbackEnvPrefix = "MONGO__"
 )
 
 var (
@@ -94,86 +95,88 @@ var (
 )
 
 func ParseFlags() {
+	env := utils.NewEnv(envPrefix, fallbackEnvPrefix, "")
+
 	// verbosity options:
-	verbose = flag.String("verbose", os.Getenv(envPrefix+"VERBOSE"), "more detailed log output (include multiple times for more verbosity, e.g. -vvvvv, or specify a numeric value, e.g. --verbose=N)")
-	quietPtr = flag.Bool("quiet", os.Getenv(envPrefix+"QUIET") == "true", "hide all log output")
+	verbose = flag.String("verbose", env.GetValue("VERBOSE"), "more detailed log output (include multiple times for more verbosity, e.g. -vvvvv, or specify a numeric value, e.g. --verbose=N)")
+	quietPtr = flag.Bool("quiet", env.GetValue("QUIET") == "true", "hide all log output")
 
 	// connection options:
-	hostPtr = flag.String("host", os.Getenv(envPrefix+"HOST"), "MongoDB host to connect to (setname/host1,host2 for replica sets)")
-	portPtr = flag.String("port", os.Getenv(envPrefix+"PORT"), "MongoDB port (can also use --host hostname:port)")
+	hostPtr = flag.String("host", env.GetValue("HOST"), "MongoDB host to connect to (setname/host1,host2 for replica sets)")
+	portPtr = flag.String("port", env.GetValue("PORT"), "MongoDB port (can also use --host hostname:port)")
 
 	// ssl options:
-	sslPtr = flag.Bool("ssl", os.Getenv(envPrefix+"SSL") == "true", "connect to a mongod or mongos that has ssl enabled")
-	sslCAFilePtr = flag.String("ssl-ca-file", os.Getenv(envPrefix+"SSL_CA_FILE"), "the .pem file containing the root certificate chain from the certificate authority")
-	sslPEMKeyFilePtr = flag.String("ssl-pem-key-file", os.Getenv(envPrefix+"SSL_PEM_KEY_FILE"), "the .pem file containing the certificate and key")
-	sslPEMKeyPasswordPtr = flag.String("ssl-pem-key-password", os.Getenv(envPrefix+"SSL_PEM_KEY_PASSWORD"), "the password to decrypt the sslPEMKeyFile, if necessary")
-	sslCRLFilePtr = flag.String("ssl-crl-file", os.Getenv(envPrefix+"SSL_CRL_File"), "the .pem file containing the certificate revocation list")
-	sslAllowInvalidCertificatesPtr = flag.Bool("ssl-allow-invalid-certificates", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_CERTIFICATES") == "true", "bypass the validation for server certificates")
-	sslAllowInvalidHostnamesPtr = flag.Bool("ssl-allow-invalid-hostnames", os.Getenv(envPrefix+"SSL_ALLOW_INVALID_HOSTNAMES") == "true", "bypass the validation for server name")
-	sslFIPSModePtr = flag.Bool("ssl-fips-mode", os.Getenv(envPrefix+"SSL_FIPS_MODE") == "true", "use FIPS mode of the installed openssl library")
+	sslPtr = flag.Bool("ssl", env.GetValue("SSL") == "true", "connect to a mongod or mongos that has ssl enabled")
+	sslCAFilePtr = flag.String("ssl-ca-file", env.GetValue("SSL_CA_FILE"), "the .pem file containing the root certificate chain from the certificate authority")
+	sslPEMKeyFilePtr = flag.String("ssl-pem-key-file", env.GetValue("SSL_PEM_KEY_FILE"), "the .pem file containing the certificate and key")
+	sslPEMKeyPasswordPtr = flag.String("ssl-pem-key-password", env.GetValue("SSL_PEM_KEY_PASSWORD"), "the password to decrypt the sslPEMKeyFile, if necessary")
+	sslCRLFilePtr = flag.String("ssl-crl-file", env.GetValue("SSL_CRL_File"), "the .pem file containing the certificate revocation list")
+	sslAllowInvalidCertificatesPtr = flag.Bool("ssl-allow-invalid-certificates", env.GetValue("SSL_ALLOW_INVALID_CERTIFICATES") == "true", "bypass the validation for server certificates")
+	sslAllowInvalidHostnamesPtr = flag.Bool("ssl-allow-invalid-hostnames", env.GetValue("SSL_ALLOW_INVALID_HOSTNAMES") == "true", "bypass the validation for server name")
+	sslFIPSModePtr = flag.Bool("ssl-fips-mode", env.GetValue("SSL_FIPS_MODE") == "true", "use FIPS mode of the installed openssl library")
 
 	// authentication options:
-	usernamePtr = flag.String("username", os.Getenv(envPrefix+"USERNAME"), "username for authentication")
-	passwordPtr = flag.String("password", os.Getenv(envPrefix+"PASSWORD"), "password for authentication")
-	authenticationDatabasePtr = flag.String("authentication-database", os.Getenv(envPrefix+"AUTHENTICATION_DATABASE"), "database that holds the user's credentials")
-	authenticationMechanismPtr = flag.String("authentication-mechanism", os.Getenv(envPrefix+"AUTHENTICATION_MECHANISM"), "authentication mechanism to use")
+	usernamePtr = flag.String("username", env.GetValue("USERNAME"), "username for authentication")
+	passwordPtr = flag.String("password", env.GetValue("PASSWORD"), "password for authentication")
+	authenticationDatabasePtr = flag.String("authentication-database", env.GetValue("AUTHENTICATION_DATABASE"), "database that holds the user's credentials")
+	authenticationMechanismPtr = flag.String("authentication-mechanism", env.GetValue("AUTHENTICATION_MECHANISM"), "authentication mechanism to use")
 
 	// kerberos options:
-	gssapiServiceNamePtr = flag.String("gssapi-service-name", os.Getenv(envPrefix+"GSSAPI_SERVICE_NAME"), "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)")
-	gssapiHostNamePtr = flag.String("gssapi-host-name", os.Getenv(envPrefix+"GSSAPI_HOST_NAME"), "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)")
+	gssapiServiceNamePtr = flag.String("gssapi-service-name", env.GetValue("GSSAPI_SERVICE_NAME"), "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)")
+	gssapiHostNamePtr = flag.String("gssapi-host-name", env.GetValue("GSSAPI_HOST_NAME"), "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)")
 
 	// uri options:
-	uriPtr = flag.String("uri", os.Getenv(envPrefix+"URI"), "MongoDB uri connection string")
-	uriPrunePtr = flag.Bool("uri-prune", os.Getenv(envPrefix+"URI_PRUNE") == "true", "prune MongoDB uri connection string")
+	uriPtr = flag.String("uri", env.GetValue("URI"), "MongoDB uri connection string")
+	uriPrunePtr = flag.Bool("uri-prune", env.GetValue("URI_PRUNE") == "true", "prune MongoDB uri connection string")
 
 	// namespace options:
-	dbPtr = flag.String("db", os.Getenv(envPrefix+"DB"), "database to use")
-	collectionPtr = flag.String("collection", os.Getenv(envPrefix+"COLLECTION"), "collection to use")
-	nsExcludePtr = flag.String("ns-exclude", os.Getenv(envPrefix+"NS_EXCLUDE"), "exclude matching namespaces")
-	nsIncludePtr = flag.String("ns-include", os.Getenv(envPrefix+"NS_INCLUDE"), "include matching namespaces")
-	nsFromPtr = flag.String("ns-from", os.Getenv(envPrefix+"NS_FROM"), "rename matching namespaces, must have matching nsTo")
-	nsToPtr = flag.String("ns-to", os.Getenv(envPrefix+"NS_TO"), "rename matched namespaces, must have matching nsFrom")
+	dbPtr = flag.String("db", env.GetValue("DB"), "database to use")
+	collectionPtr = flag.String("collection", env.GetValue("COLLECTION"), "collection to use")
+	nsExcludePtr = flag.String("ns-exclude", env.GetValue("NS_EXCLUDE"), "exclude matching namespaces")
+	nsIncludePtr = flag.String("ns-include", env.GetValue("NS_INCLUDE"), "include matching namespaces")
+	nsFromPtr = flag.String("ns-from", env.GetValue("NS_FROM"), "rename matching namespaces, must have matching nsTo")
+	nsToPtr = flag.String("ns-to", env.GetValue("NS_TO"), "rename matched namespaces, must have matching nsFrom")
 
 	// restore options:
-	dropPtr = flag.Bool("drop", os.Getenv(envPrefix+"DROP") == "true", "drop each collection before import")
-	dryRunPtr = flag.Bool("dry-run", os.Getenv(envPrefix+"DRY_RUN") == "true", "view summary without importing anything. recommended with verbosity")
-	writeConcernPtr = flag.String("write-concern", os.Getenv(envPrefix+"WRITE_CONCERN"), "write concern options")
-	noIndexRestorePtr = flag.Bool("no-index-restore", os.Getenv(envPrefix+"NO_INDEX_RESTORE") == "true", "don't restore indexes")
-	noOptionsRestorePtr = flag.Bool("no-options-restore", os.Getenv(envPrefix+"NO_OPTIONS_RESTORE") == "true", "don't restore collection options")
-	keepIndexVersionPtr = flag.Bool("keep-index-version", os.Getenv(envPrefix+"KEEP_INDEX_VERSION") == "true", "don't update index version")
-	maintainInsertionOrderPtr = flag.Bool("maintain-insertion-order", os.Getenv(envPrefix+"MAINTAIN_INSERTION_ORDER") == "true", "restore the documents in the order of their appearance in the input source. By default the insertions will be performed in an arbitrary order. Setting this flag also enables the behavior of --stopOnError and restricts NumInsertionWorkersPerCollection to 1")
-	numParallelCollectionsPtr = flag.String("num-parallel-collections", os.Getenv(envPrefix+"NUM_PARALLEL_COLLECTIONS"), "number of collections to restore in parallel (default: 4)")
-	numInsertionWorkersPerCollectionPtr = flag.String("num-insertion-workers-per-collection", os.Getenv(envPrefix+"NUM_INSERTION_WORKERS_PER_COLLECTION"), "number of insert operations to run concurrently per collection (default: 1)")
-	stopOnErrorPtr = flag.Bool("stop-on-error", os.Getenv(envPrefix+"STOP_ON_ERROR") == "true", "halt after encountering any error during insertion. By default, mongorestore will attempt to continue through document validation and DuplicateKey errors, but with this option enabled, the tool will stop instead. A small number of documents may be inserted after encountering an error even with this option enabled; use --maintainInsertionOrder to halt immediately after an error")
-	bypassDocumentValidationPtr = flag.Bool("bypass-document-validation", os.Getenv(envPrefix+"BYPASS_DOCUMENT_VALIDATION") == "true", "bypass document validation")
-	preserveUUIDPtr = flag.Bool("preserve-uuid", os.Getenv(envPrefix+"PRESERVE_UUID") == "true", "preserve original collection UUIDs (off by default, requires drop)")
+	dropPtr = flag.Bool("drop", env.GetValue("DROP") == "true", "drop each collection before import")
+	dryRunPtr = flag.Bool("dry-run", env.GetValue("DRY_RUN") == "true", "view summary without importing anything. recommended with verbosity")
+	writeConcernPtr = flag.String("write-concern", env.GetValue("WRITE_CONCERN"), "write concern options")
+	noIndexRestorePtr = flag.Bool("no-index-restore", env.GetValue("NO_INDEX_RESTORE") == "true", "don't restore indexes")
+	noOptionsRestorePtr = flag.Bool("no-options-restore", env.GetValue("NO_OPTIONS_RESTORE") == "true", "don't restore collection options")
+	keepIndexVersionPtr = flag.Bool("keep-index-version", env.GetValue("KEEP_INDEX_VERSION") == "true", "don't update index version")
+	maintainInsertionOrderPtr = flag.Bool("maintain-insertion-order", env.GetValue("MAINTAIN_INSERTION_ORDER") == "true", "restore the documents in the order of their appearance in the input source. By default the insertions will be performed in an arbitrary order. Setting this flag also enables the behavior of --stopOnError and restricts NumInsertionWorkersPerCollection to 1")
+	numParallelCollectionsPtr = flag.String("num-parallel-collections", env.GetValue("NUM_PARALLEL_COLLECTIONS"), "number of collections to restore in parallel (default: 4)")
+	numInsertionWorkersPerCollectionPtr = flag.String("num-insertion-workers-per-collection", env.GetValue("NUM_INSERTION_WORKERS_PER_COLLECTION"), "number of insert operations to run concurrently per collection (default: 1)")
+	stopOnErrorPtr = flag.Bool("stop-on-error", env.GetValue("STOP_ON_ERROR") == "true", "halt after encountering any error during insertion. By default, mongorestore will attempt to continue through document validation and DuplicateKey errors, but with this option enabled, the tool will stop instead. A small number of documents may be inserted after encountering an error even with this option enabled; use --maintainInsertionOrder to halt immediately after an error")
+	bypassDocumentValidationPtr = flag.Bool("bypass-document-validation", env.GetValue("BYPASS_DOCUMENT_VALIDATION") == "true", "bypass document validation")
+	preserveUUIDPtr = flag.Bool("preserve-uuid", env.GetValue("PRESERVE_UUID") == "true", "preserve original collection UUIDs (off by default, requires drop)")
 
-	azAccountNamePtr = flag.String("az-account-name", os.Getenv(envPrefix+"AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
-	azAccountKeyPtr = flag.String("az-account-key", os.Getenv(envPrefix+"AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
-	azContainerNamePtr = flag.String("az-container-name", os.Getenv(envPrefix+"AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
+	azAccountNamePtr = flag.String("az-account-name", env.GetValue("AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
+	azAccountKeyPtr = flag.String("az-account-key", env.GetValue("AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
+	azContainerNamePtr = flag.String("az-container-name", env.GetValue("AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
 
-	awsAccessKeyIdPtr = flag.String("aws-access-key-id", os.Getenv(envPrefix+"AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
-	awsSecretAccessKeyPtr = flag.String("aws-secret-access-key", os.Getenv(envPrefix+"AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
-	awsRegionPtr = flag.String("aws-region", os.Getenv(envPrefix+"AWS_REGION"), "AWS Region whose servers you want to send your requests to")
-	awsBucketPtr = flag.String("aws-bucket", os.Getenv(envPrefix+"AWS_BUCKET"), "AWS S3 bucket name")
+	awsAccessKeyIdPtr = flag.String("aws-access-key-id", env.GetValue("AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
+	awsSecretAccessKeyPtr = flag.String("aws-secret-access-key", env.GetValue("AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
+	awsRegionPtr = flag.String("aws-region", env.GetValue("AWS_REGION"), "AWS Region whose servers you want to send your requests to")
+	awsBucketPtr = flag.String("aws-bucket", env.GetValue("AWS_BUCKET"), "AWS S3 bucket name")
 
-	gcpBucketPtr = flag.String("gcp-bucket", os.Getenv(envPrefix+"GCP_BUCKET"), "GCP storage bucket name")
-	gcpCredsFilePtr = flag.String("gcp-creds-file", os.Getenv(envPrefix+"GCP_CREDS_FILE"), "GCP service account's credentials file")
-	gcpProjectIDPtr = flag.String("gcp-project-id", os.Getenv(envPrefix+"GCP_PROJECT_ID"), "GCP service account's project id")
-	gcpPrivateKeyIdPtr = flag.String("gcp-private-key-id", os.Getenv(envPrefix+"GCP_PRIVATE_KEY_ID"), "GCP service account's private key id")
-	gcpPrivateKeyPtr = flag.String("gcp-private-key", os.Getenv(envPrefix+"GCP_PRIVATE_KEY"), "GCP service account's private key")
-	gcpClientEmailPtr = flag.String("gcp-client-email", os.Getenv(envPrefix+"GCP_CLIENT_EMAIL"), "GCP service account's client email")
-	gcpClientIDPtr = flag.String("gcp-client-id", os.Getenv(envPrefix+"GCP_CLIENT_ID"), "GCP service account's client id")
+	gcpBucketPtr = flag.String("gcp-bucket", env.GetValue("GCP_BUCKET"), "GCP storage bucket name")
+	gcpCredsFilePtr = flag.String("gcp-creds-file", env.GetValue("GCP_CREDS_FILE"), "GCP service account's credentials file")
+	gcpProjectIDPtr = flag.String("gcp-project-id", env.GetValue("GCP_PROJECT_ID"), "GCP service account's project id")
+	gcpPrivateKeyIdPtr = flag.String("gcp-private-key-id", env.GetValue("GCP_PRIVATE_KEY_ID"), "GCP service account's private key id")
+	gcpPrivateKeyPtr = flag.String("gcp-private-key", env.GetValue("GCP_PRIVATE_KEY"), "GCP service account's private key")
+	gcpClientEmailPtr = flag.String("gcp-client-email", env.GetValue("GCP_CLIENT_EMAIL"), "GCP service account's client email")
+	gcpClientIDPtr = flag.String("gcp-client-id", env.GetValue("GCP_CLIENT_ID"), "GCP service account's client id")
 
-	localPathPtr = flag.String("local-path", os.Getenv(envPrefix+"LOCAL_PATH"), "Local directory path to store backups")
+	localPathPtr = flag.String("local-path", env.GetValue("LOCAL_PATH"), "Local directory path to store backups")
 
-	objectNamePtr = flag.String("object-name", os.Getenv(envPrefix+"OBJECT_NAME"), "Object name of the archived file in the storage (optional)")
-	dirPtr = flag.String("dir", os.Getenv(envPrefix+"DIR"), "directory name that contains the dumped files")
+	objectNamePtr = flag.String("object-name", env.GetValue("OBJECT_NAME"), "Object name of the archived file in the storage (optional)")
+	dirPtr = flag.String("dir", env.GetValue("DIR"), "directory name that contains the dumped files")
 
-	updatesPtr = flag.String("updates", os.Getenv(envPrefix+"UPDATES"), "array of update specifications in JSON string")
-	updatesFilePtr = flag.String("updates-file", os.Getenv(envPrefix+"UPDATES_FILE"), "path to a file containing an array of update specifications")
+	updatesPtr = flag.String("updates", env.GetValue("UPDATES"), "array of update specifications in JSON string")
+	updatesFilePtr = flag.String("updates-file", env.GetValue("UPDATES_FILE"), "path to a file containing an array of update specifications")
 
-	keepPtr = flag.Bool("keep", os.Getenv(envPrefix+"KEEP") == "true", "keep data dump")
+	keepPtr = flag.Bool("keep", env.GetValue("KEEP") == "true", "keep data dump")
 
 	flag.Parse()
 }
