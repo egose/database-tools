@@ -8,7 +8,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.1
 	github.com/aws/aws-sdk-go v1.49.0
 	github.com/go-co-op/gocron v1.36.1
-	github.com/go-co-op/gocron/v2 v2.0.0
+	github.com/go-co-op/gocron/v2 v2.0.2
 	github.com/mholt/archiver v3.1.1+incompatible
 	github.com/mongodb/mongo-tools v0.0.0-20231214151953-db7715b83e17
 	go.mongodb.org/mongo-driver v1.13.1
