@@ -36,7 +36,12 @@ func (this *RocketChat) Send(success bool, loc *time.Location, filenameOrError s
 		status = "Success"
 		filenameOrErrorLabel = "Filename"
 	} else {
-		text = "Database archiving failed"
+		msg := "Database archiving failed"
+		if this.WebhookPrefix != "" {
+			text = fmt.Sprintf("%s %s", this.WebhookPrefix, msg)
+		} else {
+			text = msg
+		}
 		color = "#FF0000"
 		status = "Failure"
 		filenameOrErrorLabel = "Error"
