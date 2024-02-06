@@ -154,7 +154,7 @@ func ParseFlags() {
 
 	rocketChatWebhookUrlPtr = flag.String("rocketchat-webhook-url", env.GetValue("ROCKETCHAT_WEBHOOK_URL"), "Rocket Chat Webhook URL")
 	rocketChatWebhookPrefixPtr = flag.String("rocketchat-webhook-prefix", env.GetValue("ROCKETCHAT_WEBHOOK_PREFIX"), "Rocket Chat Webhook Prefix")
-	rocketChatNotifyOnFailureOnlyPtr = flag.Bool("rocketchat-notify-on-failure-only", env.GetValue("ROCKETCHAT_NOTIFY_ON_FAILURE_ONLY"), "Send Rocket Chat notifications only when something goes wrong during the execution")
+	rocketChatNotifyOnFailureOnlyPtr = flag.Bool("rocketchat-notify-on-failure-only", env.GetValue("ROCKETCHAT_NOTIFY_ON_FAILURE_ONLY") == "true", "Send Rocket Chat notifications only when something goes wrong during the execution")
 
 	// cron options:
 	cronPtr = flag.Bool("cron", env.GetValue("CRON") == "true", "run a cron schedular and block current execution path")
