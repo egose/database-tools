@@ -9,13 +9,15 @@ import (
 )
 
 type RocketChat struct {
-	WebhookUrl    string
-	WebhookPrefix string
+	WebhookUrl          string
+	WebhookPrefix       string
+	notifyOnFailureOnly bool
 }
 
-func (this *RocketChat) Init(webhookUrl, webhookPrefix string) error {
+func (this *RocketChat) Init(webhookUrl, webhookPrefix string, notifyOnFailureOnly bool) error {
 	this.WebhookUrl = webhookUrl
 	this.WebhookPrefix = webhookPrefix
+	this.notifyOnFailureOnly = notifyOnFailureOnly
 	return nil
 }
 
@@ -26,6 +28,10 @@ func (this *RocketChat) Send(success bool, loc *time.Location, filenameOrError s
 	var filenameOrErrorLabel string
 
 	if success {
+		if this.notifyOnFailureOnly {
+			return nil
+		}
+
 		msg := "Database archiving completed successfully"
 		if this.WebhookPrefix != "" {
 			text = fmt.Sprintf("%s %s", this.WebhookPrefix, msg)
