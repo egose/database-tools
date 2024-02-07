@@ -1,5 +1,5 @@
 python 3.12.1
-golang 1.21.6
+golang 1.22.0
 mongodb 6.0.6
 git-chglog 0.15.1
 semtag 0.1.1
