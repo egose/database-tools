@@ -1,4 +1,4 @@
-python 3.12.2
+python 3.12.3
 golang 1.22.3
 mongodb 6.0.6
 git-chglog 0.15.1
