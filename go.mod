@@ -6,7 +6,7 @@ require (
 	cloud.google.com/go/storage v1.41.0
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.11.1
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.2
-	github.com/aws/aws-sdk-go v1.52.4
+	github.com/aws/aws-sdk-go v1.53.2
 	github.com/go-co-op/gocron v1.37.0
 	github.com/go-co-op/gocron/v2 v2.5.0
 	github.com/mholt/archiver v3.1.1+incompatible
