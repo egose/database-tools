@@ -1,0 +1,18 @@
+services:
+  mongodb:
+    platform: linux/amd64
+    container_name: database-tools-mongodb
+    # See https://hub.docker.com/r/bitnami/mongodb/tags
+    image: bitnami/mongodb:7.0.9-debian-12-r4
+    environment:
+    - MONGODB_ADVERTISED_HOSTNAME=127.0.0.1
+    - MONGODB_REPLICA_SET_MODE=primary
+    - MONGODB_ROOT_USER=mongodb
+    - MONGODB_ROOT_PASSWORD=mongodb
+    - MONGODB_REPLICA_SET_KEY=replicasetkey123
+    ports:
+    - 27017:27017
+    volumes:
+    - type: bind
+      source: ./mnt/mongodb
+      target: /data/db

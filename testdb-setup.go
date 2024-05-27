@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"log"
 	"time"
+	"os"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"github.com/joho/godotenv"
 )
 
 type Person struct {
@@ -18,8 +20,11 @@ type Person struct {
 }
 
 func main() {
+	godotenv.Load(".env.test")
+
 	// Set up client options and connect to MongoDB
-	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	databaseUrl := os.Getenv("DATABASE_URL")
+	clientOptions := options.Client().ApplyURI(databaseUrl)
 	client, err := mongo.Connect(context.TODO(), clientOptions)
 	if err != nil {
 		log.Fatal(err)

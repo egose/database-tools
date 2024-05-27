@@ -1,5 +1,6 @@
 #!/usr/bin/env bats
 
+source .env.test
 mkdir -p ./dist/backup
 
 @test "tools build" {
@@ -18,7 +19,7 @@ mkdir -p ./dist/backup
 }
 
 @test "archive" {
-  result=$(./dist/mongo-archive --uri=mongodb://localhost:27017 --db=testdb --local-path=./dist/backup 2>&1 | tail -n1)
+  result=$(./dist/mongo-archive --uri=$DATABASE_URL --db=testdb --local-path=./dist/backup 2>&1 | tail -n1)
   [[ "$result" == *"Archive completed successfully"* ]]
 }
 
@@ -33,7 +34,7 @@ mkdir -p ./dist/backup
 }
 
 @test "unarchive" {
-  result=$(./dist/mongo-unarchive --uri=mongodb://localhost:27017 --db=testdb --local-path=./dist/backup 2>&1 | tail -n1)
+  result=$(./dist/mongo-unarchive --uri=$DATABASE_URL --db=testdb --local-path=./dist/backup 2>&1 | tail -n1)
   [[ "$result" == *"Unarchive completed successfull"* ]]
 }
 

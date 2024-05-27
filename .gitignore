@@ -20,7 +20,24 @@
 # Go workspace file
 go.work
 
+# dependencies
+/node_modules
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+.env.test
+.env.secret*
+
+# misc
+.DS_Store
 dist
 tmp
+mnt
 *.tar.gz
 note.md
