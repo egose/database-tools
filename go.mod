@@ -1,6 +1,8 @@
 module github.com/egose/database-tools
 
-go 1.20
+go 1.21
+
+toolchain go1.22.3
 
 require (
 	cloud.google.com/go/storage v1.41.0
@@ -10,7 +12,7 @@ require (
 	github.com/go-co-op/gocron v1.37.0
 	github.com/go-co-op/gocron/v2 v2.5.0
 	github.com/mholt/archiver v3.1.1+incompatible
-	github.com/mongodb/mongo-tools v0.0.0-20240430031734-b5248f0b4218
+	github.com/mongodb/mongo-tools v0.0.0-20240523025012-f09b4202b1c3
 	go.mongodb.org/mongo-driver v1.13.1
 	golang.org/x/oauth2 v0.20.0
 	google.golang.org/api v0.180.0
