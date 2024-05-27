@@ -4,14 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"os"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	godotenv.Load(".env.test")
+
 	// Set up MongoDB client
-	clientOptions := options.Client().ApplyURI("mongodb://localhost:27017")
+	databaseUrl := os.Getenv("DATABASE_URL")
+	clientOptions := options.Client().ApplyURI(databaseUrl)
 	client, err := mongo.Connect(context.Background(), clientOptions)
 	if err != nil {
 		log.Fatal(err)

@@ -1,0 +1,31 @@
+{
+  "name": "database-tools",
+  "version": "0.7.0",
+  "description": "This repository provides additional MongoDB Tools with the following functionalities",
+  "directories": {
+    "doc": "docs",
+    "example": "examples",
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/egose/database-tools.git"
+  },
+  "author": "Junmin Ahn",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/egose/database-tools/issues"
+  },
+  "homepage": "https://github.com/egose/database-tools#readme",
+  "engines": {
+    "node": ">=22.1.0"
+  },
+  "devDependencies": {
+    "conventional-changelog-cli": "^5.0.0",
+    "release-it": "^17.3.0",
+    "wait-on": "^7.2.0"
+  }
+}

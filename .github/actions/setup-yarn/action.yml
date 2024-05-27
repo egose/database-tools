@@ -1,0 +1,15 @@
+name: Setup NPM Packages
+description: Setup required NPM packages
+
+runs:
+  using: composite
+  steps:
+  - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9
+    with:
+      path: |
+        **/node_modules
+      key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+
+  - name: Install packages
+    run: yarn
+    shell: bash

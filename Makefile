@@ -14,3 +14,8 @@ format:
 db:
 	mkdir -p ../_mongodb/database-tools
 	mongod --dbpath ../_mongodb/database-tools
+
+.PHONY: sandbox
+sandbox:
+	export MACHINE_HOST_IP=$$(hostname -I | awk '{print $$1}'); \
+	docker-compose -f ./sandbox/docker-compose.yml up --build
