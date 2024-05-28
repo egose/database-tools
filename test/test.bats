@@ -9,12 +9,12 @@ mkdir -p ./dist/backup
 }
 
 @test "mongodb setup" {
-  result="$(go run testdb-setup.go | tail -n1)"
+  result="$(go run test/testdb-setup.go | tail -n1)"
   [ "$result" == "ready" ]
 }
 
 @test "data found before archive" {
-  result="$(go run testdb-check.go | tail -n1)"
+  result="$(go run test/testdb-check.go | tail -n1)"
   [ "$result" == "found" ]
 }
 
@@ -25,12 +25,12 @@ mkdir -p ./dist/backup
 }
 
 @test "[local disk] drop" {
-  result="$(go run testdb-drop.go | tail -n1)"
+  result="$(go run test/testdb-drop.go | tail -n1)"
   [ "$result" == "dropped" ]
 }
 
 @test "[local disk] data notfound" {
-  result="$(go run testdb-check.go | tail -n1)"
+  result="$(go run test/testdb-check.go | tail -n1)"
   [ "$result" == "notfound" ]
 }
 
@@ -40,7 +40,7 @@ mkdir -p ./dist/backup
 }
 
 @test "[local disk] data found after unarchive" {
-  result="$(go run testdb-check.go | tail -n1)"
+  result="$(go run test/testdb-check.go | tail -n1)"
   [ "$result" == "found" ]
 }
 
@@ -51,12 +51,12 @@ mkdir -p ./dist/backup
 }
 
 @test "[S3 bucket] drop" {
-  result="$(go run testdb-drop.go | tail -n1)"
+  result="$(go run test/testdb-drop.go | tail -n1)"
   [ "$result" == "dropped" ]
 }
 
 @test "[S3 bucket] data notfound" {
-  result="$(go run testdb-check.go | tail -n1)"
+  result="$(go run test/testdb-check.go | tail -n1)"
   [ "$result" == "notfound" ]
 }
 
@@ -66,6 +66,6 @@ mkdir -p ./dist/backup
 }
 
 @test "[S3 bucket] data found after unarchive" {
-  result="$(go run testdb-check.go | tail -n1)"
+  result="$(go run test/testdb-check.go | tail -n1)"
   [ "$result" == "found" ]
 }
