@@ -19,3 +19,7 @@ db:
 sandbox:
 	export MACHINE_HOST_IP=$$(hostname -I | awk '{print $$1}'); \
 	docker-compose -f ./sandbox/docker-compose.yml up --build
+
+.PHONY: sandbox-down
+sandbox-down:
+	docker-compose -f ./sandbox/docker-compose.yml down

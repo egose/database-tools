@@ -70,10 +70,12 @@ var (
 	azAccountKeyPtr    *string
 	azContainerNamePtr *string
 
-	awsAccessKeyIdPtr     *string
-	awsSecretAccessKeyPtr *string
-	awsRegionPtr          *string
-	awsBucketPtr          *string
+	awsEndpointPtr         *string
+	awsAccessKeyIdPtr      *string
+	awsSecretAccessKeyPtr  *string
+	awsRegionPtr           *string
+	awsBucketPtr           *string
+	awsS3ForcePathStylePtr *bool
 
 	gcpBucketPtr       *string
 	gcpCredsFilePtr    *string
@@ -155,10 +157,12 @@ func ParseFlags() {
 	azAccountKeyPtr = flag.String("az-account-key", env.GetValue("AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
 	azContainerNamePtr = flag.String("az-container-name", env.GetValue("AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
 
+	awsEndpointPtr = flag.String("aws-endpoint", env.GetValue("AWS_ENDPOINT", ""), "AWS endpoint URL (hostname only or fully qualified URI)")
 	awsAccessKeyIdPtr = flag.String("aws-access-key-id", env.GetValue("AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
 	awsSecretAccessKeyPtr = flag.String("aws-secret-access-key", env.GetValue("AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
-	awsRegionPtr = flag.String("aws-region", env.GetValue("AWS_REGION"), "AWS Region whose servers you want to send your requests to")
+	awsRegionPtr = flag.String("aws-region", env.GetValue("AWS_REGION", "us-east-1"), "AWS Region whose servers you want to send your requests to")
 	awsBucketPtr = flag.String("aws-bucket", env.GetValue("AWS_BUCKET"), "AWS S3 bucket name")
+	awsS3ForcePathStylePtr = flag.Bool("aws-s3-force-path-style", env.GetValue("AWS_S3_FORCE_PATH_STYLE") == "true", "force the request to use path-style addressing, i.e., `http://s3.amazonaws.com/BUCKET/KEY`. By default, the S3 client will use virtual hosted bucket addressing when possible (`http://BUCKET.s3.amazonaws.com/KEY`)")
 
 	gcpBucketPtr = flag.String("gcp-bucket", env.GetValue("GCP_BUCKET"), "GCP storage bucket name")
 	gcpCredsFilePtr = flag.String("gcp-creds-file", env.GetValue("GCP_CREDS_FILE"), "GCP service account's credentials file")
@@ -364,7 +368,7 @@ func getAzBlob() (*storage.AzBlob, error) {
 
 func getAwsS3() (*storage.AwsS3, error) {
 	s3 := new(storage.AwsS3)
-	err := s3.Init(*awsAccessKeyIdPtr, *awsSecretAccessKeyPtr, *awsRegionPtr, *awsBucketPtr)
+	err := s3.Init(*awsEndpointPtr, *awsAccessKeyIdPtr, *awsSecretAccessKeyPtr, *awsRegionPtr, *awsBucketPtr, *awsS3ForcePathStylePtr)
 	if err != nil {
 		return nil, err
 	}
@@ -455,7 +459,7 @@ func useAzure() bool {
 }
 
 func useAWS() bool {
-	return *awsAccessKeyIdPtr != "" && *awsSecretAccessKeyPtr != "" && *awsRegionPtr != "" && *awsBucketPtr != ""
+	return *awsAccessKeyIdPtr != "" && *awsSecretAccessKeyPtr != "" && *awsBucketPtr != ""
 }
 
 func useGCP() bool {
