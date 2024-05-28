@@ -55,7 +55,7 @@ services:
     image: mcr.microsoft.com/azure-storage/azurite
     restart: always
     environment:
-      AZURITE_ACCOUNTS: devstoreaccount1:Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==
+      AZURITE_ACCOUNTS: ${AZURITE_ACCOUNT_NAME}:${AZURITE_ACCOUNT_KEY}
     ports:
     - 10000:10000
     - 10001:10001

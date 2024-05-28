@@ -34,12 +34,13 @@ jobs:
         mkdir -p ./sandbox/mnt/minio
         mkdir -p ./sandbox/mnt/azurite
 
+        cp .env.example .env.test
+
         export MACHINE_HOST_IP=$(hostname -I | awk '{print $1}')
         ~/.docker/cli-plugins/docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml up -d
         node_modules/.bin/wait-on tcp::27017 --timeout 120000
         node_modules/.bin/wait-on http://localhost:9001 --timeout 120000
 
-        cp .env.example .env.test
         bats test
 
         ~/.docker/cli-plugins/docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml down
