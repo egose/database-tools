@@ -51,6 +51,7 @@ services:
 
   azurite:
     platform: linux/amd64
+    container_name: database-tools-azurite
     image: mcr.microsoft.com/azure-storage/azurite
     restart: always
     environment:

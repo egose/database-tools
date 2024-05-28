@@ -72,8 +72,7 @@ mkdir -p ./dist/backup
 
 # Azure Storage Archive
 @test "[Azure Storage] create container" {
-  result="$(az storage container create -n testcontainer --connection-string 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstoreaccount1;' | tail -n1)"
-  [ "$result" == "}" ]
+  az storage container create -n testcontainer --connection-string "DefaultEndpointsProtocol=http;AccountName=$AZURITE_ACCOUNT_NAME;AccountKey=$AZURITE_ACCOUNT_KEY;BlobEndpoint=$AZURITE_URL/$AZURITE_ACCOUNT_NAME;"
 }
 
 @test "[Azure Storage] archive" {
