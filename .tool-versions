@@ -1,7 +1,8 @@
 nodejs 22.2.0
-python 3.12.3
+python 3.10.11
 golang 1.22.3
 yarn 1.22.19
 semtag 0.1.1
 bats 1.11.0
 act 0.2.62
+azure-cli 2.61.0

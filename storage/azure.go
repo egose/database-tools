@@ -18,14 +18,16 @@ type AzBlob struct {
 	AccountName         string
 	AccountKey          string
 	ContainerName       string
+	Endpoint            string
 	BlobServiceClient   *azblob.Client
 	BlobContainerClient *container.Client
 }
 
-func (this *AzBlob) Init(accountName string, accountKey string, containerName string) error {
+func (this *AzBlob) Init(accountName string, accountKey string, containerName string, endpoint string) error {
 	this.AccountName = accountName
 	this.AccountKey = accountKey
 	this.ContainerName = containerName
+	this.Endpoint = endpoint
 
 	serviceClient, err := this.getBlobServiceClient()
 	if err != nil {
@@ -42,7 +44,14 @@ func (this *AzBlob) Init(accountName string, accountKey string, containerName st
 }
 
 func (this *AzBlob) getBlobServiceClient() (*azblob.Client, error) {
-	serviceURL := fmt.Sprintf("https://%s.blob.core.windows.net/", this.AccountName)
+	var serviceURL string
+
+	// See https://learn.microsoft.com/en-us/rest/api/storageservices/list-containers2?tabs=microsoft-entra-id#Request
+	if this.Endpoint == "" {
+		serviceURL = fmt.Sprintf("https://%s.blob.core.windows.net/", this.AccountName)
+	} else {
+		serviceURL = fmt.Sprintf("%s/%s", this.Endpoint, this.AccountName)
+	}
 
 	cred, err := azblob.NewSharedKeyCredential(this.AccountName, this.AccountKey)
 	if err != nil {
