@@ -16,3 +16,35 @@ services:
     - type: bind
       source: ./mnt/mongodb
       target: /data/db
+
+  minio:
+    platform: linux/amd64
+    container_name: database-tools-minio
+    image: minio/minio
+    ports:
+    - 9000:9000
+    - 9001:9001
+    volumes:
+    - type: bind
+      source: ./mnt/minio
+      target: /data
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server --console-address ":9001" /data
+
+  minio-init:
+    platform: linux/amd64
+    image: minio/mc
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10;
+      /usr/bin/mc config host add minio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc rb --force minio/testbucket || true;
+      /usr/bin/mc mb minio/testbucket;
+      /usr/bin/mc anonymous set download minio/testbucket;
+      /usr/bin/mc admin user svcacct add minio minioadmin --access-key access-key --secret-key secret-key || true;
+      exit 0;
+      "
+    depends_on:
+    - minio

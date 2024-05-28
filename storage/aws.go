@@ -15,24 +15,30 @@ import (
 )
 
 type AwsS3 struct {
-	AccessKeyId     string
-	SecretAccessKey string
-	Region          string
-	Bucket          string
-	Session         *session.Session
-	Service         *s3.S3
+	Endpoint         string
+	AccessKeyId      string
+	SecretAccessKey  string
+	Region           string
+	Bucket           string
+	S3ForcePathStyle bool
+	Session          *session.Session
+	Service          *s3.S3
 }
 
-func (this *AwsS3) Init(accessKeyId string, secretAccessKey string, region string, bucket string) error {
+func (this *AwsS3) Init(endpoint string, accessKeyId string, secretAccessKey string, region string, bucket string, s3ForcePathStyle bool) error {
+	this.Endpoint = endpoint
 	this.AccessKeyId = accessKeyId
 	this.SecretAccessKey = secretAccessKey
 	this.Region = region
 	this.Bucket = bucket
+	this.S3ForcePathStyle = s3ForcePathStyle
 
 	creds := credentials.NewStaticCredentials(accessKeyId, secretAccessKey, "")
 	config := &aws.Config{
-		Region:      aws.String(region),
-		Credentials: creds,
+		Endpoint:         aws.String(endpoint),
+		S3ForcePathStyle: aws.Bool(s3ForcePathStyle),
+		Region:           aws.String(region),
+		Credentials:      creds,
 	}
 
 	sess := session.Must(session.NewSession(config))

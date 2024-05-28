@@ -3,5 +3,5 @@ python 3.12.3
 golang 1.22.3
 yarn 1.22.19
 semtag 0.1.1
-bats 1.10.0
+bats 1.11.0
 act 0.2.62
