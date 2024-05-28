@@ -53,6 +53,7 @@ var (
 	readPreferencePtr *string
 	forceTableScanPtr *bool
 
+	azEndpointPtr      *string
 	azAccountNamePtr   *string
 	azAccountKeyPtr    *string
 	azContainerNamePtr *string
@@ -134,6 +135,7 @@ func ParseFlags() {
 	readPreferencePtr = flag.String("read-preference", env.GetValue("READ_PREFERENCE"), "specify either a preference mode (e.g. 'nearest') or a preference json object")
 	forceTableScanPtr = flag.Bool("force-table-scan", env.GetValue("FORCE_TABLE_SCAN") == "true", "force a table scan")
 
+	azEndpointPtr = flag.String("az-endpoint", env.GetValue("AZ_ENDPOINT", ""), "specify the emulator hostname and Azure Blob Storage port")
 	azAccountNamePtr = flag.String("az-account-name", env.GetValue("AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
 	azAccountKeyPtr = flag.String("az-account-key", env.GetValue("AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
 	azContainerNamePtr = flag.String("az-container-name", env.GetValue("AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
@@ -314,7 +316,7 @@ func GetMongodumpOptions() []string {
 
 func getAzBlob() (*storage.AzBlob, error) {
 	az := new(storage.AzBlob)
-	err := az.Init(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr)
+	err := az.Init(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr, *azEndpointPtr)
 	if err != nil {
 		return nil, err
 	}

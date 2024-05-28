@@ -20,7 +20,7 @@ mkdir -p ./dist/backup
 
 # Local Archive
 @test "[local disk] archive" {
-  result=$(./dist/mongo-archive --uri=$DATABASE_URL --db=testdb --local-path=./dist/backup 2>&1 | tail -n1)
+  result=$(./dist/mongo-archive --uri=$DATABASE_URL --db=$DATABASE_NAME --local-path=./dist/backup 2>&1 | tail -n1)
   [[ "$result" == *"Archive completed successfully"* ]]
 }
 
@@ -35,7 +35,7 @@ mkdir -p ./dist/backup
 }
 
 @test "[local disk] unarchive" {
-  result=$(./dist/mongo-unarchive --uri=$DATABASE_URL --db=testdb --local-path=./dist/backup 2>&1 | tail -n1)
+  result=$(./dist/mongo-unarchive --uri=$DATABASE_URL --db=$DATABASE_NAME --local-path=./dist/backup 2>&1 | tail -n1)
   [[ "$result" == *"Unarchive completed successfull"* ]]
 }
 
@@ -46,7 +46,7 @@ mkdir -p ./dist/backup
 
 # S3 Archive
 @test "[S3 bucket] archive" {
-  result=$(./dist/mongo-archive --uri=$DATABASE_URL --db=testdb --aws-endpoint=$MINIO_URL --aws-access-key-id=$MINIO_ACCESS_KEY --aws-secret-access-key=$MINIO_SECRET_KEY --aws-bucket=$MINIO_BUCKET --aws-s3-force-path-style=true 2>&1 | tail -n1)
+  result=$(./dist/mongo-archive --uri=$DATABASE_URL --db=$DATABASE_NAME --aws-endpoint=$MINIO_URL --aws-access-key-id=$MINIO_ACCESS_KEY --aws-secret-access-key=$MINIO_SECRET_KEY --aws-bucket=$MINIO_BUCKET --aws-s3-force-path-style=true 2>&1 | tail -n1)
   [[ "$result" == *"Archive completed successfully"* ]]
 }
 
@@ -61,11 +61,41 @@ mkdir -p ./dist/backup
 }
 
 @test "[S3 bucket] unarchive" {
-  result=$(./dist/mongo-unarchive --uri=$DATABASE_URL --db=testdb --aws-endpoint=$MINIO_URL --aws-access-key-id=$MINIO_ACCESS_KEY --aws-secret-access-key=$MINIO_SECRET_KEY --aws-bucket=$MINIO_BUCKET --aws-s3-force-path-style=true 2>&1 | tail -n1)
+  result=$(./dist/mongo-unarchive --uri=$DATABASE_URL --db=$DATABASE_NAME --aws-endpoint=$MINIO_URL --aws-access-key-id=$MINIO_ACCESS_KEY --aws-secret-access-key=$MINIO_SECRET_KEY --aws-bucket=$MINIO_BUCKET --aws-s3-force-path-style=true 2>&1 | tail -n1)
   [[ "$result" == *"Unarchive completed successfull"* ]]
 }
 
 @test "[S3 bucket] data found after unarchive" {
+  result="$(go run test/testdb-check.go | tail -n1)"
+  [ "$result" == "found" ]
+}
+
+# Azure Storage Archive
+@test "[Azure Storage] create container" {
+  az storage container create -n testcontainer --connection-string "DefaultEndpointsProtocol=http;AccountName=$AZURITE_ACCOUNT_NAME;AccountKey=$AZURITE_ACCOUNT_KEY;BlobEndpoint=$AZURITE_URL/$AZURITE_ACCOUNT_NAME;"
+}
+
+@test "[Azure Storage] archive" {
+  result=$(./dist/mongo-archive --uri=$DATABASE_URL --db=$DATABASE_NAME --az-endpoint=$AZURITE_URL --az-account-name=$AZURITE_ACCOUNT_NAME --az-account-key=$AZURITE_ACCOUNT_KEY --az-container-name=$AZURITE_CONTAINER 2>&1 | tail -n1)
+  [[ "$result" == *"Archive completed successfully"* ]]
+}
+
+@test "[Azure Storage] drop" {
+  result="$(go run test/testdb-drop.go | tail -n1)"
+  [ "$result" == "dropped" ]
+}
+
+@test "[Azure Storage] data notfound" {
+  result="$(go run test/testdb-check.go | tail -n1)"
+  [ "$result" == "notfound" ]
+}
+
+@test "[Azure Storage] unarchive" {
+  result=$(./dist/mongo-unarchive --uri=$DATABASE_URL --db=$DATABASE_NAME --az-endpoint=$AZURITE_URL --az-account-name=$AZURITE_ACCOUNT_NAME --az-account-key=$AZURITE_ACCOUNT_KEY --az-container-name=$AZURITE_CONTAINER 2>&1 | tail -n1)
+  [[ "$result" == *"Unarchive completed successfull"* ]]
+}
+
+@test "[Azure Storage] data found after unarchive" {
   result="$(go run test/testdb-check.go | tail -n1)"
   [ "$result" == "found" ]
 }

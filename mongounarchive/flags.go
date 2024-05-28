@@ -66,6 +66,7 @@ var (
 	bypassDocumentValidationPtr         *bool
 	preserveUUIDPtr                     *bool
 
+	azEndpointPtr      *string
 	azAccountNamePtr   *string
 	azAccountKeyPtr    *string
 	azContainerNamePtr *string
@@ -153,6 +154,7 @@ func ParseFlags() {
 	bypassDocumentValidationPtr = flag.Bool("bypass-document-validation", env.GetValue("BYPASS_DOCUMENT_VALIDATION") == "true", "bypass document validation")
 	preserveUUIDPtr = flag.Bool("preserve-uuid", env.GetValue("PRESERVE_UUID") == "true", "preserve original collection UUIDs (off by default, requires drop)")
 
+	azEndpointPtr = flag.String("az-endpoint", env.GetValue("AZ_ENDPOINT", ""), "specify the emulator hostname and Azure Blob Storage port")
 	azAccountNamePtr = flag.String("az-account-name", env.GetValue("AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
 	azAccountKeyPtr = flag.String("az-account-key", env.GetValue("AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
 	azContainerNamePtr = flag.String("az-container-name", env.GetValue("AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
@@ -358,7 +360,7 @@ func GetMongounarchiveOptions(destPath string) []string {
 
 func getAzBlob() (*storage.AzBlob, error) {
 	az := new(storage.AzBlob)
-	err := az.Init(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr)
+	err := az.Init(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr, *azEndpointPtr)
 	if err != nil {
 		return nil, err
 	}
