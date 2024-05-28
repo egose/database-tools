@@ -40,10 +40,10 @@ services:
       /bin/sh -c "
       sleep 10;
       /usr/bin/mc config host add minio http://minio:9000 minioadmin minioadmin;
-      /usr/bin/mc rb --force minio/testbucket || true;
-      /usr/bin/mc mb minio/testbucket;
-      /usr/bin/mc anonymous set download minio/testbucket;
-      /usr/bin/mc admin user svcacct add minio minioadmin --access-key access-key --secret-key secret-key || true;
+      /usr/bin/mc rb --force minio/${MINIO_BUCKET} || true;
+      /usr/bin/mc mb minio/${MINIO_BUCKET};
+      /usr/bin/mc anonymous set download minio/${MINIO_BUCKET};
+      /usr/bin/mc admin user svcacct add minio minioadmin --access-key ${MINIO_ACCESS_KEY} --secret-key ${MINIO_SECRET_KEY} || true;
       exit 0;
       "
     depends_on:
