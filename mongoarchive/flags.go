@@ -65,7 +65,7 @@ var (
 	awsBucketPtr           *string
 	awsS3ForcePathStylePtr *bool
 
-	gcpEndpointPtr         *string
+	gcpEndpointPtr     *string
 	gcpBucketPtr       *string
 	gcpCredsFilePtr    *string
 	gcpProjectIDPtr    *string
