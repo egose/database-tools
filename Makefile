@@ -20,6 +20,8 @@ sandbox:
 	mkdir -p ./sandbox/mnt/mongodb
 	mkdir -p ./sandbox/mnt/minio
 	mkdir -p ./sandbox/mnt/azurite
+	mkdir -p ./sandbox/mnt/fake-gcs-server
+
 	export MACHINE_HOST_IP=$$(hostname -I | awk '{print $$1}'); \
 	docker-compose --env-file .env.test -f ./sandbox/docker-compose.yml up --build
 

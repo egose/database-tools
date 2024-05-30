@@ -37,10 +37,22 @@ type GcpServiceAccountCreds struct {
 	UniverseDomain          string `json:"universe_domain"`
 }
 
-func (this *GcpStorage) Init(bucket, credsPath, projectID, privateKeyId, privateKey, clientEmail, clientID string) error {
+func (this *GcpStorage) Init(endpoint, bucket, credsPath, projectID, privateKeyId, privateKey, clientEmail, clientID string) error {
 	this.Bucket = bucket
 
 	ctx := context.Background()
+
+	if endpoint != "" {
+		// See https://pkg.go.dev/google.golang.org/api/option#WithEndpoint
+		client, err := storage.NewClient(ctx, option.WithEndpoint(endpoint))
+		if err != nil {
+			return err
+		}
+
+		this.StorageClient = client
+
+		return nil
+	}
 
 	var creds *google.Credentials
 	var jsonData []byte
