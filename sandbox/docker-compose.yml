@@ -64,3 +64,21 @@ services:
       source: ./mnt/azurite
       target: /home/host
     command: azurite --blobHost 0.0.0.0 --blobPort 10000 --location /home/host --debug /home/host/azure.log
+
+  # See https://github.com/fsouza/fake-gcs-server
+  fake-gcs-server:
+    platform: linux/amd64
+    container_name: database-tools-fake-gcs-server
+    image: fsouza/fake-gcs-server
+    restart: always
+    ports:
+    - ${FAKE_GCP_PORT}:${FAKE_GCP_PORT}
+    volumes:
+    - type: bind
+      source: ./mnt/fake-gcs-server
+      target: /data
+    entrypoint: >
+      /bin/sh -c "
+       mkdir -p /data/${FAKE_GCP_BUCKET};
+      /bin/fake-gcs-server -data /data -scheme http -port ${FAKE_GCP_PORT} -public-host localhost:${FAKE_GCP_PORT} -backend memory;
+      "

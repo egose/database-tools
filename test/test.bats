@@ -3,6 +3,8 @@
 source .env.test
 mkdir -p ./dist/backup
 
+FAKE_GCP_URL="http://localhost:$FAKE_GCP_PORT"
+
 @test "tools build" {
   result="$(make build | tail -n1)"
   [ "$result" == "complete" ]
@@ -96,6 +98,31 @@ mkdir -p ./dist/backup
 }
 
 @test "[Azure Storage] data found after unarchive" {
+  result="$(go run test/testdb-check.go | tail -n1)"
+  [ "$result" == "found" ]
+}
+
+@test "[GCP Storage] archive" {
+  result=$(STORAGE_EMULATOR_HOST="$FAKE_GCP_URL" ./dist/mongo-archive --uri=$DATABASE_URL --db=$DATABASE_NAME --gcp-endpoint=$FAKE_GCP_URL/storage/v1/ --gcp-bucket=$FAKE_GCP_BUCKET 2>&1 | tail -n1)
+  [[ "$result" == *"Archive completed successfully"* ]]
+}
+
+@test "[GCP Storage] drop" {
+  result="$(go run test/testdb-drop.go | tail -n1)"
+  [ "$result" == "dropped" ]
+}
+
+@test "[GCP Storage] data notfound" {
+  result="$(go run test/testdb-check.go | tail -n1)"
+  [ "$result" == "notfound" ]
+}
+
+@test "[GCP Storage] unarchive" {
+  result=$(STORAGE_EMULATOR_HOST="$FAKE_GCP_URL" ./dist/mongo-unarchive --uri=$DATABASE_URL --db=$DATABASE_NAME --gcp-endpoint=$FAKE_GCP_URL/storage/v1/ --gcp-bucket=$FAKE_GCP_BUCKET 2>&1 | tail -n1)
+  [[ "$result" == *"Unarchive completed successfull"* ]]
+}
+
+@test "[GCP Storage] data found after unarchive" {
   result="$(go run test/testdb-check.go | tail -n1)"
   [ "$result" == "found" ]
 }

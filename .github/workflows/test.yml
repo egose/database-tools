@@ -33,6 +33,7 @@ jobs:
         mkdir -p ./sandbox/mnt/mongodb
         mkdir -p ./sandbox/mnt/minio
         mkdir -p ./sandbox/mnt/azurite
+        mkdir -p ./sandbox/mnt/fake-gcs-server
 
         cp .env.example .env.test
 

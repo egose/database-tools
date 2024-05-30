@@ -65,6 +65,7 @@ var (
 	awsBucketPtr           *string
 	awsS3ForcePathStylePtr *bool
 
+	gcpEndpointPtr     *string
 	gcpBucketPtr       *string
 	gcpCredsFilePtr    *string
 	gcpProjectIDPtr    *string
@@ -147,6 +148,7 @@ func ParseFlags() {
 	awsBucketPtr = flag.String("aws-bucket", env.GetValue("AWS_BUCKET"), "AWS S3 bucket name")
 	awsS3ForcePathStylePtr = flag.Bool("aws-s3-force-path-style", env.GetValue("AWS_S3_FORCE_PATH_STYLE") == "true", "force the request to use path-style addressing, i.e., `http://s3.amazonaws.com/BUCKET/KEY`. By default, the S3 client will use virtual hosted bucket addressing when possible (`http://BUCKET.s3.amazonaws.com/KEY`)")
 
+	gcpEndpointPtr = flag.String("gcp-endpoint", env.GetValue("GCP_ENDPOINT", ""), "GCP endpoint URL")
 	gcpBucketPtr = flag.String("gcp-bucket", env.GetValue("GCP_BUCKET"), "GCP storage bucket name")
 	gcpCredsFilePtr = flag.String("gcp-creds-file", env.GetValue("GCP_CREDS_FILE"), "GCP service account's credentials file")
 	gcpProjectIDPtr = flag.String("gcp-project-id", env.GetValue("GCP_PROJECT_ID"), "GCP service account's project id")
@@ -336,7 +338,7 @@ func getAwsS3() (*storage.AwsS3, error) {
 
 func getGCP() (*storage.GcpStorage, error) {
 	storage := new(storage.GcpStorage)
-	err := storage.Init(*gcpBucketPtr, *gcpCredsFilePtr, *gcpProjectIDPtr, *gcpPrivateKeyIdPtr, *gcpPrivateKeyPtr, *gcpClientEmailPtr, *gcpClientIDPtr)
+	err := storage.Init(*gcpEndpointPtr, *gcpBucketPtr, *gcpCredsFilePtr, *gcpProjectIDPtr, *gcpPrivateKeyIdPtr, *gcpPrivateKeyPtr, *gcpClientEmailPtr, *gcpClientIDPtr)
 	if err != nil {
 		return nil, err
 	}
