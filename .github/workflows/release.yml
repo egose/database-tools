@@ -1,0 +1,26 @@
+name: Release
+
+on:
+  push:
+    tags:
+    - v*.*.*
+
+jobs:
+  release:
+    runs-on: ubuntu-22.04
+    steps:
+    - uses: hmarr/debug-action@f7318c783045ac39ed9bb497e22ce835fdafbfe6
+    - uses: actions/checkout@b80ff79f1755d06ba70441c368a6fe801f5f3a62
+
+    - name: Setup Tools
+      uses: ./.github/actions/setup-tools
+
+    - name: Build
+      run: |
+        make build
+        tar -czvf dist.tar.gz -C dist .
+
+    - name: Release
+      uses: softprops/action-gh-release@69320dbe05506a9a39fc8ae11030b214ec2d1f87
+      with:
+        files: dist.tar.gz
