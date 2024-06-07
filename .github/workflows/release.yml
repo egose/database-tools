@@ -8,6 +8,9 @@ on:
 jobs:
   release:
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
     steps:
     - uses: hmarr/debug-action@f7318c783045ac39ed9bb497e22ce835fdafbfe6
     - uses: actions/checkout@b80ff79f1755d06ba70441c368a6fe801f5f3a62
