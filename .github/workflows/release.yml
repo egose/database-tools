@@ -24,6 +24,6 @@ jobs:
         tar -czvf dist.tar.gz -C dist .
 
     - name: Release
-      uses: softprops/action-gh-release@69320dbe05506a9a39fc8ae11030b214ec2d1f87
+      uses: softprops/action-gh-release@810bfa2cd5f7c2bd4138fa75005d437ba562db81
       with:
         files: dist.tar.gz
