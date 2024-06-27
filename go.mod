@@ -14,7 +14,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/mholt/archiver v3.1.1+incompatible
 	github.com/mongodb/mongo-tools v0.0.0-20240626192129-a9eeb2c20a05
-	go.mongodb.org/mongo-driver v1.13.1
+	go.mongodb.org/mongo-driver v1.16.0
 	golang.org/x/oauth2 v0.21.0
 	google.golang.org/api v0.186.0
 )
