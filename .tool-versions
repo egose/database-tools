@@ -1,6 +1,6 @@
 nodejs 22.4.0
 python 3.10.11
-golang 1.22.4
+golang 1.23.1
 yarn 1.22.19
 semtag 0.1.1
 bats 1.11.0
