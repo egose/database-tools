@@ -2,7 +2,7 @@ module github.com/egose/database-tools
 
 go 1.21
 
-toolchain go1.22.4
+toolchain go1.23.1
 
 require (
 	cloud.google.com/go/storage v1.43.0
