@@ -1,5 +1,5 @@
 # See https://hub.docker.com/_/golang/tags
-FROM golang:1.23.1-bullseye AS builder
+FROM golang:1.23.1-bullseye AS build
 
 WORKDIR /app
 
@@ -13,10 +13,10 @@ RUN adduser -D -u 1000 nonroot
 
 RUN apk --no-cache add tzdata
 
-COPY --from=builder /app/dist /usr/local/bin
+COPY --from=build /app/dist /usr/local/bin
 
 USER nonroot
 
 WORKDIR /home/nonroot
 
-ENV TZ America/Vancouver
+ENV TZ=America/Vancouver
