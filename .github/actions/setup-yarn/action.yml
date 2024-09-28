@@ -4,7 +4,7 @@ description: Setup required NPM packages
 runs:
   using: composite
   steps:
-  - uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9
+  - uses: actions/cache@81382a721fc89d96eca335d0c3ba33144b2baa9d
     with:
       path: |
         **/node_modules
