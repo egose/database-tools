@@ -25,13 +25,16 @@ build-all:
 	@$(foreach pair, $(OS_ARCH_PAIRS), $(MAKE) build-single OS_ARCH=$(pair);)
 
 build-single:
-	@OS_ARCH=$(OS_ARCH); \
+	@set -e; \
+	OS_ARCH=$(OS_ARCH); \
 	OS=$$(echo $$OS_ARCH | cut -d: -f1); \
 	ARCH=$$(echo $$OS_ARCH | cut -d: -f2); \
 	echo "Building for OS=$$OS and ARCH=$$ARCH" &&\
-	DIR="dist/$$OS-$$ARCH" &&\
-	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -o $$DIR/mongo-archive ./mongoarchive/main/mongoarchive.go &&\
-	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -o $$DIR/mongo-unarchive ./mongounarchive/main/mongounarchive.go
+	DIR="dist/$$OS-$$ARCH"; \
+	mkdir -p $$DIR; \
+	EXT=$$(if [ "$$OS" = "windows" ]; then echo ".exe"; else echo ""; fi); \
+	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -o $$DIR/mongo-archive$$EXT ./mongoarchive/main/mongoarchive.go &&\
+	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -o $$DIR/mongo-unarchive$$EXT ./mongounarchive/main/mongounarchive.go
 	echo complete
 
 .PHONY: build
