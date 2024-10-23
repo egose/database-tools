@@ -2,6 +2,7 @@ SHELL := /usr/bin/env bash
 
 DIRS := $(wildcard dist/*/)
 ARCHIVES := $(patsubst dist/%/,dist/%.tar.gz,$(DIRS))
+PREFIX := database-tools
 
 OS_ARCH_PAIRS := \
     linux:amd64 \
@@ -46,6 +47,8 @@ build:
 build-archive: $(ARCHIVES)
 dist/%.tar.gz: dist/%
 	tar -czvf $@ -C dist/$* .
+	mv $@ dist/$(PREFIX)-$*.tar.gz
+
 
 .PHONY: format
 format:
