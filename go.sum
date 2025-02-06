@@ -398,6 +398,8 @@ github.com/mongodb/mongo-tools v0.0.0-20250123155143-742d21bdc2f9 h1:fX1zydUcOZW
 github.com/mongodb/mongo-tools v0.0.0-20250123155143-742d21bdc2f9/go.mod h1:YU7ppONj7YpoxHeYwrwH1JlVMsXdRlCNXCXP3W9hqYw=
 github.com/mongodb/mongo-tools v0.0.0-20250130141521-4b64a120ec20 h1:c48olhiuthKfub1a1YwbADp66Y1SYANblxql9+YUpdc=
 github.com/mongodb/mongo-tools v0.0.0-20250130141521-4b64a120ec20/go.mod h1:YU7ppONj7YpoxHeYwrwH1JlVMsXdRlCNXCXP3W9hqYw=
+github.com/mongodb/mongo-tools v0.0.0-20250205192155-788633f2ec48 h1:SH2hqrWk7p9mbtvC/Il//X0Pcs88KRh2ZidqalmoBYo=
+github.com/mongodb/mongo-tools v0.0.0-20250205192155-788633f2ec48/go.mod h1:81HsVlANFIaw35H3gO0jhvhmtAUPpr+QQhouDN0+WfI=
 github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe/go.mod h1:wL8QJuTMNUDYhXwkmfOly8iTdp5TEcJFWZD2D7SIkUc=
 github.com/montanaflynn/stats v0.6.6 h1:Duep6KMIDpY4Yo11iFsvyqJDyfzLF9+sndUKT+v64GQ=
 github.com/montanaflynn/stats v0.6.6/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
@@ -424,6 +426,8 @@ github.com/rogpeppe/go-internal v1.6.1/go.mod h1:xXDCJY+GAPziupqXw64V24skbSoqbTE
 github.com/rogpeppe/go-internal v1.8.1/go.mod h1:JeRgkft04UBgHMgCIwADu4Pn6Mtm5d4nPKWu0nJ5d+o=
 github.com/rogpeppe/go-internal v1.9.0 h1:73kH8U+JUqXU8lRuOHeVHaa/SZPifC7BkcraZVejAe8=
 github.com/rogpeppe/go-internal v1.9.0/go.mod h1:WtVeX8xhTBvf0smdhujwtBcq4Qrzq/fJaraNFVN+nFs=
+github.com/samber/lo v1.49.1 h1:4BIFyVfuQSEpluc7Fua+j1NolZHiEHEpaSEKdsH0tew=
+github.com/samber/lo v1.49.1/go.mod h1:dO6KHFzUKXgP8LDhU0oI8d2hekjXnGOu0DB8Jecxd6o=
 github.com/smartystreets/assertions v0.0.0-20180927180507-b2de0cb4f26d h1:zE9ykElWQ6/NYmHa3jpm/yHnI4xSofP+UP6SpjHcSeM=
 github.com/smartystreets/goconvey v1.6.4 h1:fv0U8FUIMPNf1L9lnHLvLhgicrIVChEkdzIKYqbNC9s=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
