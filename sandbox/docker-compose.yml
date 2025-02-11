@@ -20,7 +20,7 @@ services:
   minio:
     platform: linux/amd64
     container_name: database-tools-minio
-    image: minio/minio
+    image: minio/minio:RELEASE.2025-02-07T23-21-09Z
     ports:
     - 9000:9000
     - 9001:9001
@@ -35,7 +35,8 @@ services:
 
   minio-init:
     platform: linux/amd64
-    image: minio/mc
+    # See https://hub.docker.com/r/minio/mc/tags
+    image: minio/mc:RELEASE.2025-02-08T19-14-21Z
     entrypoint: >
       /bin/sh -c "
       sleep 10;
@@ -52,7 +53,8 @@ services:
   azurite:
     platform: linux/amd64
     container_name: database-tools-azurite
-    image: mcr.microsoft.com/azure-storage/azurite
+    # See https://github.com/Azure/Azurite/tags
+    image: mcr.microsoft.com/azure-storage/azurite:3.33.0
     restart: always
     environment:
       AZURITE_ACCOUNTS: ${AZURITE_ACCOUNT_NAME}:${AZURITE_ACCOUNT_KEY}
@@ -66,10 +68,11 @@ services:
     command: azurite --blobHost 0.0.0.0 --blobPort 10000 --location /home/host --debug /home/host/azure.log
 
   # See https://github.com/fsouza/fake-gcs-server
+  # See https://hub.docker.com/r/fsouza/fake-gcs-server/tags
   fake-gcs-server:
     platform: linux/amd64
     container_name: database-tools-fake-gcs-server
-    image: fsouza/fake-gcs-server
+    image: fsouza/fake-gcs-server:1.52.1
     restart: always
     ports:
     - ${FAKE_GCP_PORT}:${FAKE_GCP_PORT}
