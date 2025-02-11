@@ -19,11 +19,7 @@ jobs:
     - name: Setup NPM Packages
       uses: ./.github/actions/setup-yarn
 
-    - name: Debug
-      run: |
-        which asdf
-        node --version
-        yarn --version
+
 
     - name: Install Docker Compose v2
       # See https://docs.docker.com/compose/install/linux/

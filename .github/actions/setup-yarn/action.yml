@@ -11,5 +11,9 @@ runs:
       key: ${{ runner.os }}-yarn-${{ hashFiles('**/.tool-versions') }}-${{ hashFiles('**/yarn.lock') }}
 
   - name: Install packages
-    run: yarn
+    run: |
+      which asdf
+      node --version
+      yarn --version
+      yarn
     shell: bash
