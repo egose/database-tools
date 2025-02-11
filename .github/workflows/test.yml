@@ -19,8 +19,6 @@ jobs:
     - name: Setup NPM Packages
       uses: ./.github/actions/setup-yarn
 
-
-
     - name: Install Docker Compose v2
       # See https://docs.docker.com/compose/install/linux/
       run: |
