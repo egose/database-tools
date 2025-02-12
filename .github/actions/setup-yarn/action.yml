@@ -11,5 +11,6 @@ runs:
       key: ${{ runner.os }}-yarn-${{ hashFiles('**/.tool-versions') }}-${{ hashFiles('**/yarn.lock') }}
 
   - name: Install packages
-    run: yarn
+    run: |
+      yarn install --ignore-engines
     shell: bash
