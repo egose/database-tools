@@ -14,12 +14,4 @@ runs:
     run: |
       pip install -r requirements.txt
       asdf reshim
-      which asdf
-      which node
-      which yarn
-      node --version
-      yarn --version
-      ls -al ~/.asdf/shims
-      ~/.asdf/shims/node --version
-      ~/.asdf/shims/yarn --version
     shell: bash

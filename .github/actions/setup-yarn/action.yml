@@ -12,8 +12,5 @@ runs:
 
   - name: Install packages
     run: |
-      which asdf
-      node --version
-      yarn --version
       yarn
     shell: bash

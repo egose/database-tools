@@ -21,7 +21,7 @@
   },
   "homepage": "https://github.com/egose/database-tools#readme",
   "engines": {
-    "node": ">=22.1.0"
+    "node": ">=18.20.6"
   },
   "devDependencies": {
     "conventional-changelog-cli": "^5.0.0",
