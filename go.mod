@@ -1,8 +1,8 @@
 module github.com/egose/database-tools
 
-go 1.22
+go 1.22.0
 
-toolchain go1.23.6
+toolchain go1.24.0
 
 require (
 	cloud.google.com/go/storage v1.48.0
@@ -13,7 +13,7 @@ require (
 	github.com/go-co-op/gocron/v2 v2.15.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mholt/archiver v3.1.1+incompatible
-	github.com/mongodb/mongo-tools v0.0.0-20250205192155-788633f2ec48
+	github.com/mongodb/mongo-tools v0.0.0-20250212192001-72470da6e364
 	go.mongodb.org/mongo-driver v1.17.2
 	go.mongodb.org/mongo-driver/v2 v2.0.0
 	golang.org/x/oauth2 v0.26.0
@@ -82,7 +82,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.29.0 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
 	golang.org/x/crypto v0.32.0 // indirect
-	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8 // indirect
+	golang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c // indirect
 	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/sys v0.29.0 // indirect
