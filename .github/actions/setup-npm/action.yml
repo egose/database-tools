@@ -7,10 +7,10 @@ runs:
   - uses: actions/cache@9fa7e61ec7e1f44ac75218e7aaea81da8856fd11
     with:
       path: |
-        **/node_modules
-      key: ${{ runner.os }}-yarn-${{ hashFiles('**/.tool-versions') }}-${{ hashFiles('**/yarn.lock') }}
+        ~/.local/share/pnpm/store/v3
+      key: ${{ runner.os }}-pnpm-${{ hashFiles('**/.tool-versions') }}-${{ hashFiles('**/pnpm-lock.yaml') }}
 
   - name: Install packages
     run: |
-      yarn install --ignore-engines
+      pnpm install
     shell: bash
