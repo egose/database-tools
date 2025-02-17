@@ -7,8 +7,8 @@ import (
 	"os"
 
 	"github.com/joho/godotenv"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 func main() {
@@ -17,7 +17,7 @@ func main() {
 	// Set up MongoDB client
 	databaseUrl := os.Getenv("DATABASE_URL")
 	clientOptions := options.Client().ApplyURI(databaseUrl)
-	client, err := mongo.Connect(context.Background(), clientOptions)
+	client, err := mongo.Connect(clientOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
