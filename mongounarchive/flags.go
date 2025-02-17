@@ -1,7 +1,6 @@
 package mongounarchive
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"os"
@@ -10,8 +9,8 @@ import (
 	"github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
 	mlog "github.com/mongodb/mongo-tools/common/log"
-	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
+	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 const (
@@ -430,7 +429,7 @@ func GetObjectName() string {
 }
 
 func GetMongoClient() (*mongo.Client, *mongo.Database, error) {
-	client, err := mongo.Connect(context.Background(), options.Client().ApplyURI(*uriPtr))
+	client, err := mongo.Connect(options.Client().ApplyURI(*uriPtr))
 	if err != nil {
 		return nil, nil, err
 	}
