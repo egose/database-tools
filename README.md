@@ -165,7 +165,7 @@ mongo-archive \
 --az-account-key=<az_account_key> \
 --az-container-name=<az_container_name> \
 --cron \
---cronExpression="* * * * *"
+--cron-expression="* * * * *"
 ```
 
 This example demonstrates how to run a persistent server that regularly archives a database. The server will execute the archival process based on the specified cron expression. Replace <username>, <password>, <dbname>, <az_account_name>, <az_account_key>, <az_container_name>, and <cron_expression> with your own values.

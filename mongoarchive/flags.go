@@ -9,7 +9,6 @@ import (
 	"github.com/egose/database-tools/notification"
 	"github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
-	"github.com/go-co-op/gocron"
 	mlog "github.com/mongodb/mongo-tools/common/log"
 )
 
@@ -87,8 +86,9 @@ var (
 
 	keepPtr *bool
 
-	loc        *time.Location
-	expiryDays int
+	loc            *time.Location
+	expiryDays     int
+	cronExpression string
 )
 
 func ParseFlags() {
@@ -176,6 +176,7 @@ func ParseFlags() {
 	flag.Parse()
 	parseTZ()
 	parseExpiry()
+	parseCronExpression()
 }
 
 func parseTZ() {
@@ -196,6 +197,14 @@ func parseExpiry() {
 		}
 	} else {
 		expiryDays = 0
+	}
+}
+
+func parseCronExpression() {
+	if cronExpressionPtr != nil || *cronExpressionPtr != "" {
+		cronExpression = *cronExpressionPtr
+	} else {
+		cronExpression = "0 2 * * *"
 	}
 }
 
@@ -400,16 +409,12 @@ func GetNotifications() []notification.Notification {
 	return notifications
 }
 
-func GetCronScheduler() *gocron.Scheduler {
-	var cronExpression string
-	if cronExpressionPtr != nil {
-		cronExpression = *cronExpressionPtr
-	} else {
-		cronExpression = "0 2 * * *"
-	}
+func GetLocation() *time.Location {
+	return loc
+}
 
-	mlog.Logvf(mlog.Always, "Use Cron Expression: %v", cronExpression)
-	return gocron.NewScheduler(loc).Cron(cronExpression)
+func GetCronExpression() string {
+	return cronExpression
 }
 
 func HasCron() bool {
