@@ -91,7 +91,7 @@ var (
 	cronExpression string
 )
 
-func ParseFlags() {
+func ParseFlags() *bool {
 	env := utils.NewEnv(envPrefix, fallbackEnvPrefix, "")
 
 	// verbosity options:
@@ -172,11 +172,15 @@ func ParseFlags() {
 	tzPtr = flag.String("tz", env.GetValue("TZ"), "user-specified time zone")
 
 	keepPtr = flag.Bool("keep", env.GetValue("KEEP") == "true", "keep data dump")
+	showVersion := flag.Bool("version", false, "Show the version")
 
 	flag.Parse()
+
 	parseTZ()
 	parseExpiry()
 	parseCronExpression()
+
+	return showVersion
 }
 
 func parseTZ() {
@@ -186,7 +190,7 @@ func parseTZ() {
 		loc = time.Local
 	}
 
-	mlog.Logvf(mlog.Always, "Use Time Zone: %v", loc)
+	// mlog.Logvf(mlog.Always, "Use Time Zone: %v", loc)
 }
 
 func parseExpiry() {

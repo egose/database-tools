@@ -3,6 +3,7 @@ SHELL := /usr/bin/env bash
 DIRS := $(wildcard dist/*/)
 ARCHIVES := $(patsubst dist/%/,dist/%.tar.gz,$(DIRS))
 PREFIX := database-tools
+VERSION := localdev
 
 OS_ARCH_PAIRS := \
     linux:amd64 \
@@ -34,14 +35,14 @@ build-single:
 	DIR="dist/$$OS-$$ARCH"; \
 	mkdir -p $$DIR; \
 	EXT=$$(if [ "$$OS" = "windows" ]; then echo ".exe"; else echo ""; fi); \
-	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -o $$DIR/mongo-archive$$EXT ./mongoarchive/main/mongoarchive.go &&\
-	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -o $$DIR/mongo-unarchive$$EXT ./mongounarchive/main/mongounarchive.go
+	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -ldflags "-X \"main.version=$(VERSION) $${OS}-$${ARCH}\"" -o $$DIR/mongo-archive$$EXT ./mongoarchive/main/mongoarchive.go &&\
+	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -ldflags "-X \"main.version=$(VERSION) $${OS}-$${ARCH}\"" -o $$DIR/mongo-unarchive$$EXT ./mongounarchive/main/mongounarchive.go
 	echo complete
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 go build -o dist/mongo-archive ./mongoarchive/main/mongoarchive.go
-	CGO_ENABLED=0 go build -o dist/mongo-unarchive ./mongounarchive/main/mongounarchive.go
+	CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o dist/mongo-archive ./mongoarchive/main/mongoarchive.go
+	CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o dist/mongo-unarchive ./mongounarchive/main/mongounarchive.go
 	echo complete
 
 build-archive: $(ARCHIVES)

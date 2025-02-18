@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path"
 	"time"
@@ -15,6 +16,8 @@ import (
 	"github.com/mongodb/mongo-tools/common/signals"
 	"github.com/mongodb/mongo-tools/mongorestore"
 )
+
+var version string
 
 const (
 	progressBarLength   = 24
@@ -29,7 +32,11 @@ type update struct {
 }
 
 func main() {
-	mongounarchive.ParseFlags()
+	showVersion := mongounarchive.ParseFlags()
+	if *showVersion {
+		fmt.Println("Version:", version)
+		return
+	}
 
 	runTask()
 }
