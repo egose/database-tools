@@ -97,7 +97,7 @@ var (
 	keepPtr *bool
 )
 
-func ParseFlags() {
+func ParseFlags() *bool {
 	env := utils.NewEnv(envPrefix, fallbackEnvPrefix, "")
 
 	// verbosity options:
@@ -184,8 +184,11 @@ func ParseFlags() {
 	updatesFilePtr = flag.String("updates-file", env.GetValue("UPDATES_FILE"), "path to a file containing an array of update specifications")
 
 	keepPtr = flag.Bool("keep", env.GetValue("KEEP") == "true", "keep data dump")
+	showVersion := flag.Bool("version", false, "Show the version")
 
 	flag.Parse()
+
+	return showVersion
 }
 
 func GetMongounarchiveOptions(destPath string) []string {

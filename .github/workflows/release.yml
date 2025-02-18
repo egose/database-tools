@@ -20,7 +20,7 @@ jobs:
 
     - name: Build
       run: |
-        make build-all
+        make build-all VERSION=${{ github.ref_name}}
         make build-archive
 
     - name: Release

@@ -18,6 +18,8 @@ import (
 	"github.com/mongodb/mongo-tools/mongodump"
 )
 
+var version string
+
 const (
 	progressBarLength   = 24
 	progressBarWaitTime = time.Second * 3
@@ -25,7 +27,11 @@ const (
 )
 
 func main() {
-	mongoarchive.ParseFlags()
+	showVersion := mongoarchive.ParseFlags()
+	if *showVersion {
+		fmt.Println("Version:", version)
+		return
+	}
 
 	if mongoarchive.HasCron() {
 		runCronJob()
