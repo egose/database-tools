@@ -1,8 +1,7 @@
 nodejs 22.14.0
-python 3.10.11
+python 3.13.1
 golang 1.24.0
 pnpm 10.4.1
 semtag 0.1.1
-bats 1.11.0
+bats 1.11.1
 act 0.2.74
-azure-cli 2.61.0
