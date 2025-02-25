@@ -12,7 +12,7 @@ require (
 	github.com/go-co-op/gocron/v2 v2.15.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mholt/archiver v3.1.1+incompatible
-	github.com/mongodb/mongo-tools v0.0.0-20250212192001-72470da6e364
+	github.com/mongodb/mongo-tools v0.0.0-20250224191948-e1ce1ca53c44
 	go.mongodb.org/mongo-driver/v2 v2.0.1
 	golang.org/x/oauth2 v0.27.0
 	google.golang.org/api v0.222.0
