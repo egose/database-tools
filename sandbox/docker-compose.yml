@@ -54,7 +54,7 @@ services:
     platform: linux/amd64
     container_name: database-tools-azurite
     # See https://github.com/Azure/Azurite/tags
-    image: mcr.microsoft.com/azure-storage/azurite:3.33.0
+    image: mcr.microsoft.com/azure-storage/azurite:3.34.0
     restart: always
     environment:
       AZURITE_ACCOUNTS: ${AZURITE_ACCOUNT_NAME}:${AZURITE_ACCOUNT_KEY}
