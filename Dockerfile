@@ -1,5 +1,5 @@
 # See https://hub.docker.com/_/golang/tags
-FROM golang:1.24.0-bullseye AS build
+FROM golang:1.24.1-bullseye AS build
 
 WORKDIR /app
 
