@@ -12,7 +12,7 @@ require (
 	github.com/go-co-op/gocron/v2 v2.16.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mholt/archiver v3.1.1+incompatible
-	github.com/mongodb/mongo-tools v0.0.0-20250312190205-8ece9ae5e596
+	github.com/mongodb/mongo-tools v0.0.0-20250313202145-7812868ada2a
 	go.mongodb.org/mongo-driver/v2 v2.1.0
 	golang.org/x/oauth2 v0.28.0
 	google.golang.org/api v0.225.0
@@ -34,6 +34,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.48.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20241223141626-cff3c89139a3 // indirect
+	github.com/deckarep/golang-set/v2 v2.6.0 // indirect
 	github.com/dsnet/compress v0.0.1 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.32.4 // indirect
 	github.com/envoyproxy/protoc-gen-validate v1.2.1 // indirect
