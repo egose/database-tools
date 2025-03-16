@@ -194,13 +194,12 @@ func parseTZ() {
 }
 
 func parseExpiry() {
-	if *expiryDaysPtr != "" {
-		num, err := strconv.Atoi(*expiryDaysPtr)
-		if err != nil {
-			expiryDays = num
-		}
-	} else {
+	if *expiryDaysPtr == "" {
 		expiryDays = 0
+		mlog.Logvf(mlog.Always, "Backup does not expire")
+	} else if num, err := strconv.Atoi(*expiryDaysPtr); err == nil {
+		expiryDays = num
+		mlog.Logvf(mlog.Always, "Backup expiration: %v days", expiryDays)
 	}
 }
 
