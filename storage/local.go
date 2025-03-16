@@ -69,15 +69,17 @@ func (this *LocalStorage) DeleteOldObjects() error {
 			return err
 		}
 
-		if !info.IsDir() {
-			daysSinceModification := time.Since(info.ModTime()).Hours() / 24
-			if daysSinceModification > float64(this.ExpiryDays) {
-				if err := os.Remove(path); err != nil {
-					return err
-				} else {
-					fmt.Printf("Deleted file: %s\n", filepath.Base(path))
-				}
+		fmt.Printf("Checking old objects: %s\n", path)
+
+		if info.IsDir() {
+			return nil
+		}
+
+		if time.Since(info.ModTime()).Hours()/24 > float64(this.ExpiryDays) {
+			if err := os.Remove(path); err != nil {
+				return err
 			}
+			fmt.Printf("Deleted file: %s\n", filepath.Base(path))
 		}
 
 		return nil
