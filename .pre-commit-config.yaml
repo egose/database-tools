@@ -16,3 +16,5 @@ repos:
   hooks:
   - id: pretty-format-yaml
     args: [--autofix, --indent, '2']
+
+exclude: ^(CHANGELOG\.md|pnpm-lock\.yaml|.*/pnpm-lock\.yaml)$
