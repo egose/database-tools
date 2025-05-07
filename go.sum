@@ -255,6 +255,8 @@ github.com/mongodb/mongo-tools v0.0.0-20250418192455-7214f6ac044b h1:D4aMaqNRPgR
 github.com/mongodb/mongo-tools v0.0.0-20250418192455-7214f6ac044b/go.mod h1:wcix/SMRhpwRwIFNm6vW1Mc+RVj9VMpHgaRlR7r3HXI=
 github.com/mongodb/mongo-tools v0.0.0-20250423134946-403f5096923a h1:v+DA2/CIYcHediU7LCoYaVHN3yEj6rdbvx3o+uMOfEg=
 github.com/mongodb/mongo-tools v0.0.0-20250423134946-403f5096923a/go.mod h1:wcix/SMRhpwRwIFNm6vW1Mc+RVj9VMpHgaRlR7r3HXI=
+github.com/mongodb/mongo-tools v0.0.0-20250507190507-1763cde07406 h1:D4pBIjjbDt5twRfcUp+1dm3FmA7U3RQDhqE/uekUDuw=
+github.com/mongodb/mongo-tools v0.0.0-20250507190507-1763cde07406/go.mod h1:mcmR3+eUv0Oy3twZekyyJ44MABLNcJAhkPbODcZaf34=
 github.com/montanaflynn/stats v0.7.1 h1:etflOAAHORrCC44V+aR6Ftzort912ZU+YLiSTuV8eaE=
 github.com/montanaflynn/stats v0.7.1/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
 github.com/nwaples/rardecode v1.1.3 h1:cWCaZwfM5H7nAD6PyEdcVnczzV8i/JtotnyW/dD9lEc=
