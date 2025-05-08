@@ -42,12 +42,8 @@ func main() {
 			mlog.Logvf(mlog.Always, "Failed: %v", err.Error())
 		}
 
-		common.HandleError(err)
+		common.HandleErrorToPanic(err)
 	}
-}
-
-func task() {
-	fmt.Println("Task is running at:", time.Now())
 }
 
 // See https://github.com/go-co-op/gocron
@@ -140,28 +136,20 @@ func runTask() error {
 	finishedChan := signals.HandleWithInterrupt(dump.HandleInterrupt)
 	defer close(finishedChan)
 
-	storage, err := mongoarchive.GetStorage()
-	if err != nil {
+	storages := mongoarchive.GetStorages()
+	if len(storages) == 0 {
+		return fmt.Errorf("no storage backends configured")
+	}
+
+	if err := dump.Init(); err != nil {
 		return err
 	}
 
-	err = storage.DeleteOldObjects()
-	if err != nil {
+	if err := dump.Dump(); err != nil {
 		return err
 	}
 
-	err = dump.Init()
-	if err != nil {
-		return err
-	}
-
-	err = dump.Dump()
-	if err != nil {
-		return err
-	}
-
-	err = utils.Tar(destPath, tarfilePath)
-	if err != nil {
+	if err := utils.Tar(destPath, tarfilePath); err != nil {
 		return err
 	}
 
@@ -170,24 +158,28 @@ func runTask() error {
 		return err
 	}
 
-	result, err := storage.Upload(filename, buffer)
-	if err != nil {
-		return err
+	for _, s := range storages {
+		err := s.DeleteOldObjects()
+		if err != nil {
+			return fmt.Errorf("failed to delete old objects in %T: %w", s, err)
+		}
+
+		result, err := s.Upload(filename, buffer)
+		if err != nil {
+			return fmt.Errorf("failed to upload to %T: %w", s, err)
+		}
+		mlog.Logvf(mlog.Always, "Successfully uploaded backup to %T: %v", s, result)
 	}
 
-	if mongoarchive.HasKeep() != true {
-		err = utils.DeleteDirectory(destPath)
-		if err != nil {
+	if !mongoarchive.HasKeep() {
+		if err := utils.DeleteDirectory(destPath); err != nil {
 			return err
 		}
 
-		err = utils.DeleteFile(tarfilePath)
-		if err != nil {
+		if err := utils.DeleteFile(tarfilePath); err != nil {
 			return err
 		}
 	}
-
-	mlog.Logvf(mlog.Always, "Archive completed successfully; ETag: %v", result)
 
 	sendNotification(true, filename)
 
