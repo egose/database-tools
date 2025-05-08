@@ -375,10 +375,10 @@ func GetStorages() []storage.Storage {
 	}
 
 	options := []option{
+		{"Local", useLocal, getLocalStorage},
 		{"Azure", useAzure, getAzBlobStorage},
 		{"AWS", useAWS, getAwsS3Storage},
 		{"GCP", useGCP, getGcpStorage},
-		{"Local", useLocal, getLocalStorage},
 	}
 
 	storages := make([]storage.Storage, 0)
