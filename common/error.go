@@ -17,23 +17,24 @@ func Throw(up Exception) {
 }
 
 func (tcf Block) Do() {
-	if tcf.Finally != nil {
-
-		defer tcf.Finally()
-	}
-	if tcf.Catch != nil {
+	if tcf.Finally != nil || tcf.Catch != nil {
 		defer func() {
 			if r := recover(); r != nil {
-				tcf.Catch(r)
+				if tcf.Catch != nil {
+					tcf.Catch(r)
+				}
+			}
+			if tcf.Finally != nil {
+				tcf.Finally()
 			}
 		}()
 	}
 	tcf.Try()
 }
 
-func HandleError(err error) {
+func HandleErrorToPanic(err error) {
 	if err != nil {
-		log.Logvf(log.Always, "Failed: %v", err.Error())
-		panic("Stops execution...")
+		log.Logvf(log.Always, "Failed in Panic: %v", err.Error())
+		panic("Execution stopped due to error")
 	}
 }

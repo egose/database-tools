@@ -1,7 +1,6 @@
 package mongounarchive
 
 import (
-	"errors"
 	"flag"
 	"os"
 	"path"
@@ -362,7 +361,7 @@ func GetMongounarchiveOptions(destPath string) []string {
 	return options
 }
 
-func getAzBlob() (*storage.AzBlob, error) {
+func getAzBlobStorage() (storage.Storage, error) {
 	az := new(storage.AzBlob)
 	err := az.Init(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr, *azEndpointPtr)
 	if err != nil {
@@ -372,7 +371,7 @@ func getAzBlob() (*storage.AzBlob, error) {
 	return az, nil
 }
 
-func getAwsS3() (*storage.AwsS3, error) {
+func getAwsS3Storage() (storage.Storage, error) {
 	s3 := new(storage.AwsS3)
 	err := s3.Init(*awsEndpointPtr, *awsAccessKeyIdPtr, *awsSecretAccessKeyPtr, *awsRegionPtr, *awsBucketPtr, *awsS3ForcePathStylePtr)
 	if err != nil {
@@ -382,9 +381,8 @@ func getAwsS3() (*storage.AwsS3, error) {
 	return s3, nil
 }
 
-func getGCP() (*storage.GcpStorage, error) {
+func getGcpStorage() (storage.Storage, error) {
 	storage := new(storage.GcpStorage)
-
 	err := storage.Init(*gcpEndpointPtr, *gcpBucketPtr, *gcpCredsFilePtr, *gcpProjectIDPtr, *gcpPrivateKeyIdPtr, *gcpPrivateKeyPtr, *gcpClientEmailPtr, *gcpClientIDPtr)
 	if err != nil {
 		return nil, err
@@ -393,7 +391,7 @@ func getGCP() (*storage.GcpStorage, error) {
 	return storage, nil
 }
 
-func getLocal() (*storage.LocalStorage, error) {
+func getLocalStorage() (storage.Storage, error) {
 	storage := new(storage.LocalStorage)
 	err := storage.Init(*localPathPtr, 0)
 	if err != nil {
@@ -403,28 +401,32 @@ func getLocal() (*storage.LocalStorage, error) {
 	return storage, nil
 }
 
-func GetStorage() (storage.Storage, error) {
-	if useAzure() {
-		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "Azure")
-		return getAzBlob()
+func GetStorages() []storage.Storage {
+	type option struct {
+		name    string
+		enabled func() bool
+		getter  func() (storage.Storage, error)
 	}
 
-	if useAWS() {
-		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "AWS")
-		return getAwsS3()
+	options := []option{
+		{"Azure", useAzure, getAzBlobStorage},
+		{"AWS", useAWS, getAwsS3Storage},
+		{"GCP", useGCP, getGcpStorage},
+		{"Local", useLocal, getLocalStorage},
 	}
 
-	if useGCP() {
-		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "GCP")
-		return getGCP()
+	storages := make([]storage.Storage, 0)
+
+	for _, opt := range options {
+		if opt.enabled() {
+			if s, _ := opt.getter(); s != nil {
+				mlog.Logvf(mlog.Always, "Found Storage Option: %v", opt.name)
+				storages = append(storages, s)
+			}
+		}
 	}
 
-	if useLocal() {
-		mlog.Logvf(mlog.Always, "Found Storage Option: %v", "Local")
-		return getLocal()
-	}
-
-	return nil, errors.New("no storage provider detected")
+	return storages
 }
 
 func GetObjectName() string {

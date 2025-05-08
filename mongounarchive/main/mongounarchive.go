@@ -42,40 +42,44 @@ func main() {
 }
 
 func runTask() {
-	var restorePath string
-	if restorePath = os.Getenv(envPrefix + "RESTORE_PATH"); restorePath == "" {
-		restorePath = "/tmp/datarestore"
+	restorePath := getRestorePath()
+
+	storages := mongounarchive.GetStorages()
+	if len(storages) == 0 {
+		common.HandleErrorToPanic(fmt.Errorf("no storage backends configured"))
 	}
 
-	storage, err := mongounarchive.GetStorage()
-	common.HandleError(err)
+	storage := storages[0]
 
 	objectName, err := storage.GetTargetObjectName(mongounarchive.GetObjectName())
-	common.HandleError(err)
+	common.HandleErrorToPanic(err)
 
 	tarfilePath := path.Join(restorePath, objectName)
 	destPath := path.Join(restorePath, utils.GetFileNameWithoutExtension(objectName))
 
+	mlog.Logvf(mlog.Always, "Downloading archive...")
 	err = storage.Download(objectName, tarfilePath)
-	common.HandleError(err)
+	common.HandleErrorToPanic(err)
 
+	mlog.Logvf(mlog.Always, "Extracting files...")
 	err = utils.UnTar(tarfilePath, destPath)
-	common.HandleError(err)
+	common.HandleErrorToPanic(err)
 
 	options := mongounarchive.GetMongounarchiveOptions(destPath)
 	opts, err := mongorestore.ParseOptions(options, "", "")
-	common.HandleError(err)
+	common.HandleErrorToPanic(err)
 
 	restore, err := mongorestore.New(opts)
-	common.HandleError(err)
+	common.HandleErrorToPanic(err)
 
 	defer restore.Close()
 
 	finishedChan := signals.HandleWithInterrupt(restore.HandleInterrupt)
 	defer close(finishedChan)
 
+	mlog.Logvf(mlog.Always, "Restoring database...")
 	result := restore.Restore()
-	common.HandleError(result.Err)
+	common.HandleErrorToPanic(result.Err)
 
 	if restore.ToolOptions.WriteConcern.Acknowledged() {
 		mlog.Logvf(mlog.Always, "%v document(s) restored successfully. %v document(s) failed to restore.", result.Successes, result.Failures)
@@ -83,41 +87,54 @@ func runTask() {
 		mlog.Logvf(mlog.Always, "done")
 	}
 
-	if mongounarchive.HasKeep() != true {
+	if !mongounarchive.HasKeep() {
 		err = utils.DeleteDirectory(destPath)
-		common.HandleError(result.Err)
+		common.HandleErrorToPanic(err)
 
 		err = utils.DeleteFile(tarfilePath)
-		common.HandleError(result.Err)
+		common.HandleErrorToPanic(err)
 	}
 
-	// updates
-	if mongounarchive.HasUpdates() == true {
-		client, dbClient, err := mongounarchive.GetMongoClient()
-		common.HandleError(err)
-
-		defer func() {
-			err = client.Disconnect(context.Background())
-			common.HandleError(err)
-		}()
-
-		updates := []update{}
-		bytes, err := mongounarchive.GetUpdates()
-		common.HandleError(err)
-
-		err = json.Unmarshal(bytes, &updates)
-		common.HandleError(err)
-
-		for i, u := range updates {
-			coll := dbClient.Collection(u.Collection)
-			result, err := coll.UpdateMany(context.Background(), u.Filter, u.Update)
-			common.HandleError(err)
-
-			mlog.Logvf(mlog.Always, "Update[%d]: matched count: %d", i, result.MatchedCount)
-			mlog.Logvf(mlog.Always, "Update[%d]: modified count: %d", i, result.ModifiedCount)
-		}
-
+	if mongounarchive.HasUpdates() {
+		mlog.Logvf(mlog.Always, "Applying updates...")
+		applyUpdates()
 	}
 
 	mlog.Logvf(mlog.Always, "Unarchive completed successfully")
+}
+
+func getRestorePath() string {
+	restorePath := os.Getenv(envPrefix + "RESTORE_PATH")
+	if restorePath == "" {
+		restorePath = "/tmp/datarestore"
+	}
+	return restorePath
+}
+
+func applyUpdates() error {
+	client, dbClient, err := mongounarchive.GetMongoClient()
+	common.HandleErrorToPanic(err)
+
+	defer func() {
+		err = client.Disconnect(context.Background())
+		common.HandleErrorToPanic(err)
+	}()
+
+	updates := []update{}
+	bytes, err := mongounarchive.GetUpdates()
+	common.HandleErrorToPanic(err)
+
+	err = json.Unmarshal(bytes, &updates)
+	common.HandleErrorToPanic(err)
+
+	for i, u := range updates {
+		coll := dbClient.Collection(u.Collection)
+		result, err := coll.UpdateMany(context.Background(), u.Filter, u.Update)
+		common.HandleErrorToPanic(err)
+
+		mlog.Logvf(mlog.Always, "Update[%d]: matched count: %d", i, result.MatchedCount)
+		mlog.Logvf(mlog.Always, "Update[%d]: modified count: %d", i, result.ModifiedCount)
+	}
+
+	return nil
 }
