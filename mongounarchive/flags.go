@@ -373,7 +373,7 @@ func getAzBlobStorage() (storage.Storage, error) {
 
 func getAwsS3Storage() (storage.Storage, error) {
 	s3 := new(storage.AwsS3)
-	err := s3.Init(*awsEndpointPtr, *awsAccessKeyIdPtr, *awsSecretAccessKeyPtr, *awsRegionPtr, *awsBucketPtr, *awsS3ForcePathStylePtr)
+	err := s3.Init(*awsEndpointPtr, *awsAccessKeyIdPtr, *awsSecretAccessKeyPtr, *awsRegionPtr, *awsBucketPtr, *awsS3ForcePathStylePtr, 0)
 	if err != nil {
 		return nil, err
 	}

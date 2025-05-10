@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -23,15 +24,17 @@ type AwsS3 struct {
 	S3ForcePathStyle bool
 	Session          *session.Session
 	Service          *s3.S3
+	ExpiryDays       int
 }
 
-func (this *AwsS3) Init(endpoint string, accessKeyId string, secretAccessKey string, region string, bucket string, s3ForcePathStyle bool) error {
+func (this *AwsS3) Init(endpoint string, accessKeyId string, secretAccessKey string, region string, bucket string, s3ForcePathStyle bool, expiryDays int) error {
 	this.Endpoint = endpoint
 	this.AccessKeyId = accessKeyId
 	this.SecretAccessKey = secretAccessKey
 	this.Region = region
 	this.Bucket = bucket
 	this.S3ForcePathStyle = s3ForcePathStyle
+	this.ExpiryDays = expiryDays
 
 	creds := credentials.NewStaticCredentials(accessKeyId, secretAccessKey, "")
 	config := &aws.Config{
@@ -124,5 +127,50 @@ func (this *AwsS3) Download(objectName string, filePath string) error {
 }
 
 func (this *AwsS3) DeleteOldObjects() error {
+	// If expiry days is not set, do not delete backups
+	if this.ExpiryDays == 0 {
+		return nil
+	}
+
+	svc := this.Service
+	bucket := aws.String(this.Bucket)
+	expiryDays := float64(this.ExpiryDays)
+
+	var err error
+
+	err = svc.ListObjectsV2Pages(&s3.ListObjectsV2Input{
+		Bucket: bucket,
+		Prefix: aws.String(""),
+	}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+		for _, obj := range page.Contents {
+			// Safety check (should never be nil)
+			if obj.LastModified == nil || obj.Key == nil {
+				continue
+			}
+
+			daysOld := time.Since(*obj.LastModified).Hours() / 24
+			fmt.Printf("Checking object: %s (%.1f days old)\n", *obj.Key, daysOld)
+
+			if daysOld > expiryDays {
+				_, delErr := svc.DeleteObject(&s3.DeleteObjectInput{
+					Bucket: bucket,
+					Key:    obj.Key,
+				})
+
+				if delErr != nil {
+					fmt.Printf("Failed to delete object %s: %v\n", *obj.Key, delErr)
+					continue
+				}
+				fmt.Printf("Deleted object: %s\n", *obj.Key)
+			}
+		}
+
+		return true // continue paging
+	})
+
+	if err != nil {
+		return fmt.Errorf("error listing S3 objects: %w", err)
+	}
+
 	return nil
 }

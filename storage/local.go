@@ -59,7 +59,7 @@ func (this *LocalStorage) Download(objectName string, filePath string) error {
 }
 
 func (this *LocalStorage) DeleteOldObjects() error {
-	// If expiry days is not set, than do not delete backups
+	// If expiry days is not set, do not delete backups
 	if this.ExpiryDays == 0 {
 		return nil
 	}
