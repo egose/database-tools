@@ -15,7 +15,7 @@ require (
 	github.com/mongodb/mongo-tools v0.0.0-20250516183951-2678bc88f487
 	go.mongodb.org/mongo-driver/v2 v2.2.1
 	golang.org/x/oauth2 v0.30.0
-	google.golang.org/api v0.232.0
+	google.golang.org/api v0.233.0
 )
 
 require (
