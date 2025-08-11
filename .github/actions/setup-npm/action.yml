@@ -4,7 +4,7 @@ description: Setup required NPM packages
 runs:
   using: composite
   steps:
-  - uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+  - uses: actions/cache@638ed79f9dc94c1de1baef91bcab5edaa19451f4
     with:
       path: |
         ~/.local/share/pnpm/store/v3
