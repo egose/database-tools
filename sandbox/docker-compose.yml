@@ -72,7 +72,7 @@ services:
   fake-gcs-server:
     platform: linux/amd64
     container_name: database-tools-fake-gcs-server
-    image: fsouza/fake-gcs-server:1.52.2
+    image: fsouza/fake-gcs-server:1.52.3
     restart: always
     ports:
     - ${FAKE_GCP_PORT}:${FAKE_GCP_PORT}
