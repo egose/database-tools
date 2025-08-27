@@ -13,7 +13,7 @@ jobs:
 
     steps:
     - uses: hmarr/debug-action@f7318c783045ac39ed9bb497e22ce835fdafbfe6
-    - uses: actions/checkout@09d2acae674a48949e3602304ab46fd20ae0c42f
+    - uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493
 
     - name: Setup Tools
       uses: ./.github/actions/setup-tools
@@ -24,6 +24,6 @@ jobs:
         make build-archive
 
     - name: Release
-      uses: softprops/action-gh-release@f37a2f9143791b88da06f2c143d376e00fce81dc
+      uses: softprops/action-gh-release@fbadcc90e88ecface60a0a0d123795b784ceb239
       with:
         files: dist/*.tar.gz

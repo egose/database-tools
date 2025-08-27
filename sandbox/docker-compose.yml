@@ -3,7 +3,7 @@ services:
     platform: linux/amd64
     container_name: database-tools-mongodb
     # See https://hub.docker.com/r/bitnami/mongodb/tags
-    image: bitnami/mongodb:8.0.11-debian-12-r0
+    image: bitnami/mongodb:8.0.13-debian-12-r0
     environment:
     - MONGODB_ADVERTISED_HOSTNAME=127.0.0.1
     - MONGODB_REPLICA_SET_MODE=primary
@@ -54,7 +54,7 @@ services:
     platform: linux/amd64
     container_name: database-tools-azurite
     # See https://github.com/Azure/Azurite/tags
-    image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
     restart: always
     environment:
       AZURITE_ACCOUNTS: ${AZURITE_ACCOUNT_NAME}:${AZURITE_ACCOUNT_KEY}
@@ -72,7 +72,7 @@ services:
   fake-gcs-server:
     platform: linux/amd64
     container_name: database-tools-fake-gcs-server
-    image: fsouza/fake-gcs-server:1.52.2
+    image: fsouza/fake-gcs-server:1.52.3
     restart: always
     ports:
     - ${FAKE_GCP_PORT}:${FAKE_GCP_PORT}

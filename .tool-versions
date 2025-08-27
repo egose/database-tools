@@ -1,7 +1,7 @@
-nodejs 22.17.0
+nodejs 22.18.0
 python 3.13.7
-golang 1.24.5
-pnpm 10.13.1
+golang 1.25.0
+pnpm 10.15.0
 semtag 0.1.1
 bats 1.11.1
-act 0.2.79
+act 0.2.80

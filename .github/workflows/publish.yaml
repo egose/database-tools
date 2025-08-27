@@ -20,13 +20,13 @@ jobs:
 
     steps:
     - uses: hmarr/debug-action@f7318c783045ac39ed9bb497e22ce835fdafbfe6
-    - uses: actions/checkout@09d2acae674a48949e3602304ab46fd20ae0c42f
+    - uses: actions/checkout@ff7abcd0c3c05ccf6adc123a8cd1fd4fb30fb493
 
     - name: Setup Tools
       uses: ./.github/actions/setup-tools
 
     - name: Build and Push
-      uses: egose/actions/docker-build-push@65b2d0654c125b9304aaa5e5ca639c4a98922f0c
+      uses: egose/actions/docker-build-push@97fa9812f9221e21d14f7b5e11cd149c4c2b93da
       with:
         registry-url: ${{ env.DOCKER_REGISTRY }}
         registry-username: ${{ github.actor }}

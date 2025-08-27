@@ -1,5 +1,5 @@
 # See https://hub.docker.com/_/golang/tags
-FROM golang:1.24.5-bullseye AS build
+FROM golang:1.24.6-bullseye AS build
 
 WORKDIR /app
 
@@ -7,7 +7,7 @@ COPY . .
 RUN make build
 
 # See https://hub.docker.com/_/alpine/tags
-FROM alpine:3.22.0
+FROM alpine:3.22.1
 
 RUN adduser -D -u 1000 nonroot
 
