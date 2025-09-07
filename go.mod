@@ -1,6 +1,6 @@
 module github.com/egose/database-tools
 
-go 1.23.0
+go 1.24.0
 
 toolchain go1.25.1
 
@@ -14,7 +14,7 @@ require (
 	github.com/mholt/archiver v3.1.1+incompatible
 	github.com/mongodb/mongo-tools v0.0.0-20250826211858-fedbd7f82f5d
 	go.mongodb.org/mongo-driver/v2 v2.3.0
-	golang.org/x/oauth2 v0.30.0
+	golang.org/x/oauth2 v0.31.0
 	google.golang.org/api v0.248.0
 )
 
