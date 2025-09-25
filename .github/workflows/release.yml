@@ -24,6 +24,6 @@ jobs:
         make build-archive
 
     - name: Release
-      uses: softprops/action-gh-release@5d1b0b11643723aa24b0a5f8cef9618f9c2ed69b
+      uses: softprops/action-gh-release@97d42c1b50f585f357413698aa1b779307aa0d52
       with:
         files: dist/*.tar.gz
