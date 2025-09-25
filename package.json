@@ -26,6 +26,6 @@
   "devDependencies": {
     "conventional-changelog-cli": "^5.0.0",
     "release-it": "^19.0.0",
-    "wait-on": "^8.0.0"
+    "wait-on": "^9.0.0"
   }
 }
