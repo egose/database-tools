@@ -33,7 +33,7 @@ type update struct {
 
 func main() {
 	showVersion := mongounarchive.ParseFlags()
-	if *showVersion {
+	if showVersion {
 		fmt.Println("mongo-unarchive version:", version)
 		return
 	}
