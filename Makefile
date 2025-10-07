@@ -70,3 +70,12 @@ sandbox:
 .PHONY: sandbox-down
 sandbox-down:
 	docker-compose --env-file .env.test -f ./sandbox/docker-compose.yml down
+
+.PHONY: asdf-install
+asdf-install:
+	cat .tool-versions | cut -f 1 -d ' ' | xargs -n 1 asdf plugin add || true
+	asdf plugin update --all
+	asdf install || true
+	asdf reshim
+	pip install -r requirements.txt
+	asdf reshim

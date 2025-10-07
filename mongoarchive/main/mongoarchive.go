@@ -28,7 +28,7 @@ const (
 
 func main() {
 	showVersion := mongoarchive.ParseFlags()
-	if *showVersion {
+	if showVersion {
 		fmt.Println("mongo-archive version:", version)
 		return
 	}
