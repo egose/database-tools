@@ -1,6 +1,6 @@
 module github.com/egose/database-tools
 
-go 1.24.0
+go 1.25
 
 toolchain go1.25.4
 
@@ -12,7 +12,7 @@ require (
 	github.com/go-co-op/gocron/v2 v2.18.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mholt/archiver v3.1.1+incompatible
-	github.com/mongodb/mongo-tools v0.0.0-20250923000400-61405b8ff290
+	github.com/mongodb/mongo-tools v0.0.0-20251121214935-5f0416f005ab
 	go.mongodb.org/mongo-driver/v2 v2.4.0
 	golang.org/x/oauth2 v0.33.0
 	google.golang.org/api v0.256.0
@@ -32,6 +32,7 @@ require (
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.29.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.53.0 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.53.0 // indirect
+	github.com/ccoveille/go-safecast/v2 v2.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cncf/xds/go v0.0.0-20250501225837-2ac532fd4443 // indirect
 	github.com/deckarep/golang-set/v2 v2.6.0 // indirect
