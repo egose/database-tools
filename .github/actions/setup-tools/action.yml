@@ -5,7 +5,7 @@ runs:
   using: composite
   steps:
   - name: Setup Tools
-    uses: egose/actions/asdf-tools@abb273c73acd33cbd4f236be35d23f88a667007c
+    uses: egose/actions/asdf-tools@c3000c229fec8ddd3d6f2d326900de8898168f3e
     with:
       plugins: |
         mongodb=https://github.com/junminahn/asdf-mongodb.git
