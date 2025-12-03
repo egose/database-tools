@@ -1,6 +1,6 @@
 nodejs 24.11.1
 python 3.14.1
-golang 1.25.4
+golang 1.25.5
 pnpm 10.24.0
 semtag 0.1.1
 bats 1.11.1
