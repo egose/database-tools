@@ -3,7 +3,7 @@ services:
     platform: linux/amd64
     container_name: database-tools-mongodb
     # See https://hub.docker.com/r/bitnami/mongodb/tags
-    image: ghcr.io/egose/bitnami-mongodb:8.2.2
+    image: ghcr.io/egose/bitnami-mongodb:8.2.3
     environment:
     - MONGODB_ADVERTISED_HOSTNAME=127.0.0.1
     - MONGODB_REPLICA_SET_MODE=primary
