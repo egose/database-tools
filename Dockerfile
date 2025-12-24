@@ -1,5 +1,5 @@
 # See https://hub.docker.com/_/golang/tags
-FROM golang:1.25.5-alpine3.23 AS build
+FROM golang:1.25.5 AS build
 
 WORKDIR /app
 
