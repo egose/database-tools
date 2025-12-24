@@ -5,12 +5,11 @@
   "directories": {
     "doc": "docs",
     "example": "examples",
-    "test": "test",
-    "release": "release-it",
-    "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -n .conventional-changelog.mjs -s -r 0 --skip-unstable"
+    "test": "test"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "release": "release-it",
+    "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -n .conventional-changelog.mjs -s -r 0 --skip-unstable"
   },
   "repository": {
     "type": "git",
