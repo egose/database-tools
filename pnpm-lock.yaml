@@ -22,13 +22,13 @@ importers:
         version: 20.2.0
       '@release-it/bumper':
         specifier: ^7.0.5
-        version: 7.0.5(release-it@19.2.1(@types/node@25.0.3))
+        version: 7.0.5(release-it@19.2.2(@types/node@25.0.3))
       conventional-changelog-cli:
         specifier: ^5.0.0
         version: 5.0.0(conventional-commits-filter@5.0.0)
       release-it:
         specifier: ^19.0.0
-        version: 19.2.1(@types/node@25.0.3)
+        version: 19.2.2(@types/node@25.0.3)
       wait-on:
         specifier: ^9.0.3
         version: 9.0.3
@@ -1330,8 +1330,8 @@ packages:
     resolution: {integrity: sha512-9u/XQ1pvrQtYyMpZe7DXKv2p5CNvyVwzUB6uhLAnQwHMSgKMBR62lc7AHljaeteeHXn11XTAaLLUVZYVZyuRBQ==}
     engines: {node: '>= 20.19.0'}
 
-  release-it@19.2.1:
-    resolution: {integrity: sha512-Tu9kZKtCJkrLG6nD0OLbVdVP8wHgpQBpRvtZQmdEgGHDwg0FiiHmdnnPskTQllPWJFMtpHo3O7MHtr8/AWEFbA==}
+  release-it@19.2.2:
+    resolution: {integrity: sha512-57TBUTBbBXLJsPufYS+Hsb1dSZKZ0ktiYgPkNc3Pmlq/QQtH9X0oD0SG2ib5CsXHTI11m19pyK60NXmvtE6cLg==}
     engines: {node: ^20.12.0 || >=22.0.0}
     hasBin: true
 
@@ -1943,7 +1943,7 @@ snapshots:
 
   '@phun-ky/typeof@2.0.3': {}
 
-  '@release-it/bumper@7.0.5(release-it@19.2.1(@types/node@25.0.3))':
+  '@release-it/bumper@7.0.5(release-it@19.2.2(@types/node@25.0.3))':
     dependencies:
       '@iarna/toml': 3.0.0
       cheerio: 1.1.2
@@ -1952,7 +1952,7 @@ snapshots:
       ini: 5.0.0
       js-yaml: 4.1.1
       lodash-es: 4.17.22
-      release-it: 19.2.1(@types/node@25.0.3)
+      release-it: 19.2.2(@types/node@25.0.3)
       semver: 7.7.3
 
   '@standard-schema/spec@1.1.0': {}
@@ -2932,7 +2932,7 @@ snapshots:
 
   readdirp@5.0.0: {}
 
-  release-it@19.2.1(@types/node@25.0.3):
+  release-it@19.2.2(@types/node@25.0.3):
     dependencies:
       '@nodeutils/defaults-deep': 1.1.0
       '@octokit/rest': 22.0.1
