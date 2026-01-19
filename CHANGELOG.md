@@ -1,3 +1,4 @@
+## [0.12.3](https://github.com/egose/database-tools/compare/v0.12.2...v0.12.3) (2026-01-19)
 ## [0.12.2](https://github.com/egose/database-tools/compare/v0.12.1...v0.12.2) (2025-12-24)
 ## [0.12.1](https://github.com/egose/database-tools/compare/v0.12.0...v0.12.1) (2025-12-24)
 
