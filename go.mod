@@ -12,7 +12,7 @@ require (
 	github.com/mholt/archiver v3.1.1+incompatible
 	github.com/mongodb/mongo-tools v0.0.0-20260304162713-0eab42a916b1
 	go.mongodb.org/mongo-driver/v2 v2.5.0
-	golang.org/x/oauth2 v0.35.0
+	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.269.0
 )
 
