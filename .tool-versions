@@ -3,4 +3,4 @@ python 3.14.3
 golang 1.26.0
 pnpm 10.33.0
 bats 1.11.1
-act 0.2.84
+act 0.2.87
