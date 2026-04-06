@@ -204,6 +204,7 @@ github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.54
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.54.0/go.mod h1:l9rva3ApbBpEJxSNYnwT9N4CDLrWgtq3u8736C5hyJw=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0 h1:UnDZ/zFfG1JhH/DqxIZYU/1CUAlTUScoXD/LcM2Ykk8=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.55.0/go.mod h1:IA1C1U7jO/ENqm/vhi7V9YYpBsp+IMyqNrEN94N7tVc=
+github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/metric v0.56.0/go.mod h1:hEpiGU18xf70qb3jbTcIggWAiEfX/cOIVc2OTe4OegA=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0.48.1 h1:oTX4vsorBZo/Zdum6OKPA4o7544hm6smoRv1QjpTwGo=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/cloudmock v0.48.1/go.mod h1:0wEl7vrAD8mehJyohS9HZy+WyEOaQO2mJx86Cvh93kM=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/internal/resourcemapping v0.48.1 h1:8nn+rsCvTq9axyEh382S0PFLBeaFwNsT43IrPWzctRU=
@@ -485,6 +486,8 @@ github.com/mongodb/mongo-tools v0.0.0-20260219133030-f8bf46c898d8 h1:nV0PqAXwlMY
 github.com/mongodb/mongo-tools v0.0.0-20260219133030-f8bf46c898d8/go.mod h1:mN0vcjRqjnG+LfX8Q7BRqP4bv5uxl5LEpE69SeXDoD8=
 github.com/mongodb/mongo-tools v0.0.0-20260304162713-0eab42a916b1 h1:d/NZ/9F+fMoD2DfAFJLRcCZ3Fv4hf/vOlgRTag3vcPo=
 github.com/mongodb/mongo-tools v0.0.0-20260304162713-0eab42a916b1/go.mod h1:mN0vcjRqjnG+LfX8Q7BRqP4bv5uxl5LEpE69SeXDoD8=
+github.com/mongodb/mongo-tools v0.0.0-20260406190924-abbd2f70cec2 h1:vFdlyqWw9jcEsFWJ8DRIkI+UlH1XuNe0J88fHSPyWAw=
+github.com/mongodb/mongo-tools v0.0.0-20260406190924-abbd2f70cec2/go.mod h1:zcF35ZxicOjk+Cznh07y7MnauouiPtqwnMLlCpkhHWc=
 github.com/montanaflynn/stats v0.7.1 h1:etflOAAHORrCC44V+aR6Ftzort912ZU+YLiSTuV8eaE=
 github.com/montanaflynn/stats v0.7.1/go.mod h1:etXPPgVO6n31NxCd9KQUMvCM+ve0ruNzt6R8Bnaayow=
 github.com/nwaples/rardecode v1.1.3 h1:cWCaZwfM5H7nAD6PyEdcVnczzV8i/JtotnyW/dD9lEc=
