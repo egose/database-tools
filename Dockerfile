@@ -1,5 +1,5 @@
 # See https://hub.docker.com/_/golang/tags
-FROM golang:1.26.0 AS build
+FROM golang:1.26.1 AS build
 
 WORKDIR /app
 
