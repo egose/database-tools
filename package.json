@@ -16,7 +16,7 @@
     "url": "git+https://github.com/egose/database-tools.git"
   },
   "author": "Junmin Ahn",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/egose/database-tools/issues"
   },
