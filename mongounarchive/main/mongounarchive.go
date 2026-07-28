@@ -5,10 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path"
+	"path/filepath"
 	"time"
 
-	"github.com/egose/database-tools/common"
 	"github.com/egose/database-tools/mongounarchive"
 	"github.com/egose/database-tools/utils"
 
@@ -22,7 +21,7 @@ var version string
 const (
 	progressBarLength   = 24
 	progressBarWaitTime = time.Second * 3
-	envPrefix           = "MONGOARCHIVE__"
+	envPrefix           = "MONGOUNARCHIVE__"
 )
 
 type update struct {
@@ -32,45 +31,62 @@ type update struct {
 }
 
 func main() {
-	showVersion := mongounarchive.ParseFlags()
+	cfg, showVersion := mongounarchive.ParseFlags()
 	if showVersion {
 		fmt.Println("mongo-unarchive version:", version)
 		return
 	}
 
-	runTask()
+	if err := runTask(cfg); err != nil {
+		mlog.Logvf(mlog.Always, "Failed: %v", err)
+		os.Exit(1)
+	}
 }
 
-func runTask() {
+func runTask(cfg *mongounarchive.Config) error {
 	restorePath := getRestorePath()
 
-	storages := mongounarchive.GetStorages()
+	storages := cfg.GetStorages()
 	if len(storages) == 0 {
-		common.HandleErrorToPanic(fmt.Errorf("no storage backends configured"))
+		return fmt.Errorf("no storage backends configured")
 	}
 
 	storage := storages[0]
 
-	objectName, err := storage.GetTargetObjectName(mongounarchive.GetObjectName())
-	common.HandleErrorToPanic(err)
+	objectName, err := storage.GetTargetObjectName(cfg.GetObjectName())
+	if err != nil {
+		return err
+	}
 
-	tarfilePath := path.Join(restorePath, objectName)
-	destPath := path.Join(restorePath, utils.GetFileNameWithoutExtension(objectName))
+	tarfilePath, err := utils.ResolvePathWithinRoot(restorePath, objectName)
+	if err != nil {
+		return err
+	}
+
+	destPath := filepath.Join(restorePath, utils.GetFileNameWithoutExtension(objectName))
 
 	mlog.Logvf(mlog.Always, "Downloading archive...")
 	err = storage.Download(objectName, tarfilePath)
-	common.HandleErrorToPanic(err)
+	if err != nil {
+		return err
+	}
 
 	mlog.Logvf(mlog.Always, "Extracting files...")
 	err = utils.UnTar(tarfilePath, destPath)
-	common.HandleErrorToPanic(err)
+	if err != nil {
+		return err
+	}
 
-	options := mongounarchive.GetMongounarchiveOptions(destPath)
+	options := cfg.GetMongounarchiveOptions(destPath)
 	opts, err := mongorestore.ParseOptions(options, "", "")
-	common.HandleErrorToPanic(err)
+	if err != nil {
+		return err
+	}
 
 	restore, err := mongorestore.New(opts)
-	common.HandleErrorToPanic(err)
+	if err != nil {
+		return err
+	}
 
 	defer restore.Close()
 
@@ -79,7 +95,9 @@ func runTask() {
 
 	mlog.Logvf(mlog.Always, "Restoring database...")
 	result := restore.Restore()
-	common.HandleErrorToPanic(result.Err)
+	if result.Err != nil {
+		return result.Err
+	}
 
 	if restore.ToolOptions.WriteConcern.Acknowledged() {
 		mlog.Logvf(mlog.Always, "%v document(s) restored successfully. %v document(s) failed to restore.", result.Successes, result.Failures)
@@ -87,20 +105,27 @@ func runTask() {
 		mlog.Logvf(mlog.Always, "done")
 	}
 
-	if !mongounarchive.HasKeep() {
+	if !cfg.HasKeep() {
 		err = utils.DeleteDirectory(destPath)
-		common.HandleErrorToPanic(err)
+		if err != nil {
+			return err
+		}
 
 		err = utils.DeleteFile(tarfilePath)
-		common.HandleErrorToPanic(err)
+		if err != nil {
+			return err
+		}
 	}
 
-	if mongounarchive.HasUpdates() {
+	if cfg.HasUpdates() {
 		mlog.Logvf(mlog.Always, "Applying updates...")
-		applyUpdates()
+		if err := applyUpdates(cfg); err != nil {
+			return err
+		}
 	}
 
 	mlog.Logvf(mlog.Always, "Unarchive completed successfully")
+	return nil
 }
 
 func getRestorePath() string {
@@ -111,26 +136,33 @@ func getRestorePath() string {
 	return restorePath
 }
 
-func applyUpdates() error {
-	client, dbClient, err := mongounarchive.GetMongoClient()
-	common.HandleErrorToPanic(err)
+func applyUpdates(cfg *mongounarchive.Config) error {
+	client, dbClient, err := cfg.GetMongoClient()
+	if err != nil {
+		return err
+	}
 
 	defer func() {
-		err = client.Disconnect(context.Background())
-		common.HandleErrorToPanic(err)
+		_ = client.Disconnect(context.Background())
 	}()
 
 	updates := []update{}
-	bytes, err := mongounarchive.GetUpdates()
-	common.HandleErrorToPanic(err)
+	bytes, err := cfg.GetUpdates()
+	if err != nil {
+		return err
+	}
 
 	err = json.Unmarshal(bytes, &updates)
-	common.HandleErrorToPanic(err)
+	if err != nil {
+		return err
+	}
 
 	for i, u := range updates {
 		coll := dbClient.Collection(u.Collection)
 		result, err := coll.UpdateMany(context.Background(), u.Filter, u.Update)
-		common.HandleErrorToPanic(err)
+		if err != nil {
+			return err
+		}
 
 		mlog.Logvf(mlog.Always, "Update[%d]: matched count: %d", i, result.MatchedCount)
 		mlog.Logvf(mlog.Always, "Update[%d]: modified count: %d", i, result.ModifiedCount)

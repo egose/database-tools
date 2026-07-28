@@ -1,9 +1,9 @@
 package storage
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/egose/database-tools/utils"
+	mlog "github.com/mongodb/mongo-tools/common/log"
 )
 
 type AwsS3 struct {
@@ -44,7 +45,10 @@ func (this *AwsS3) Init(endpoint string, accessKeyId string, secretAccessKey str
 		Credentials:      creds,
 	}
 
-	sess := session.Must(session.NewSession(config))
+	sess, err := session.NewSession(config)
+	if err != nil {
+		return fmt.Errorf("failed to create AWS session: %w", err)
+	}
 	this.Session = sess
 	this.Service = s3.New(sess)
 
@@ -64,7 +68,7 @@ func (this *AwsS3) GetTargetObjectName(objectKey string) (string, error) {
 	_, err := this.Service.HeadObject(input)
 	if err != nil {
 		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == "NotFound" {
-			return this.getLastUpdatedObjectName()
+			return "", fmt.Errorf("object %q not found in bucket %q", objectKey, this.Bucket)
 		}
 		return "", fmt.Errorf("failed to retrieve metadata: %w", err)
 	}
@@ -73,29 +77,45 @@ func (this *AwsS3) GetTargetObjectName(objectKey string) (string, error) {
 }
 
 func (this *AwsS3) getLastUpdatedObjectName() (string, error) {
-	input := &s3.ListObjectsV2Input{
-		Bucket: aws.String(this.Bucket),
-	}
+	var latest objectTimestamp
+	hasLatest := false
 
-	result, err := this.Service.ListObjectsV2(input)
+	err := this.Service.ListObjectsV2Pages(&s3.ListObjectsV2Input{
+		Bucket: aws.String(this.Bucket),
+	}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+		pageLatest, ok := latestS3Object(page.Contents)
+		if ok {
+			if !hasLatest || pageLatest.ModifiedAt.After(latest.ModifiedAt) {
+				latest = pageLatest
+				hasLatest = true
+			}
+		}
+
+		return true
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to list objects: %v", err)
 	}
 
-	if len(result.Contents) == 0 {
+	if !hasLatest {
 		return "", errors.New("no objects found in the bucket")
 	}
 
-	lastUpdatedObject := result.Contents[0]
-	return *lastUpdatedObject.Key, nil
+	return latest.Name, nil
 }
 
-func (this *AwsS3) Upload(blobName string, buffer []byte) (string, error) {
+func (this *AwsS3) Upload(blobName string, filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer file.Close()
+
 	uploader := s3manager.NewUploader(this.Session)
 	input := &s3manager.UploadInput{
 		Bucket: aws.String(this.Bucket),
 		Key:    aws.String(blobName),
-		Body:   bytes.NewReader(buffer),
+		Body:   file,
 	}
 
 	output, err := uploader.Upload(input)
@@ -134,7 +154,6 @@ func (this *AwsS3) DeleteOldObjects() error {
 
 	svc := this.Service
 	bucket := aws.String(this.Bucket)
-	expiryDays := float64(this.ExpiryDays)
 
 	var err error
 
@@ -149,19 +168,19 @@ func (this *AwsS3) DeleteOldObjects() error {
 			}
 
 			daysOld := time.Since(*obj.LastModified).Hours() / 24
-			fmt.Printf("Checking object: %s (%.1f days old)\n", *obj.Key, daysOld)
+			mlog.Logvf(mlog.Info, "Checking object: %s (%.1f days old)", *obj.Key, daysOld)
 
-			if daysOld > expiryDays {
+			if isExpired(*obj.LastModified, this.ExpiryDays, time.Now()) {
 				_, delErr := svc.DeleteObject(&s3.DeleteObjectInput{
 					Bucket: bucket,
 					Key:    obj.Key,
 				})
 
 				if delErr != nil {
-					fmt.Printf("Failed to delete object %s: %v\n", *obj.Key, delErr)
+					mlog.Logvf(mlog.Info, "Failed to delete object %s: %v", *obj.Key, delErr)
 					continue
 				}
-				fmt.Printf("Deleted object: %s\n", *obj.Key)
+				mlog.Logvf(mlog.Info, "Deleted object: %s", *obj.Key)
 			}
 		}
 

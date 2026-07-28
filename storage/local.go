@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 
 	"github.com/egose/database-tools/utils"
+	mlog "github.com/mongodb/mongo-tools/common/log"
 )
 
 type LocalStorage struct {
@@ -31,9 +31,12 @@ func (this *LocalStorage) GetTargetObjectName(objectName string) (string, error)
 	return objectName, nil
 }
 
-func (this *LocalStorage) Upload(objectName string, buffer []byte) (string, error) {
-	targetPath := path.Join(this.LocalPath, objectName)
-	err := storeBytesToFile(buffer, targetPath)
+func (this *LocalStorage) Upload(objectName string, filePath string) (string, error) {
+	targetPath, err := utils.ResolvePathWithinRoot(this.LocalPath, objectName)
+	if err != nil {
+		return "", err
+	}
+	err = copyFile(filePath, targetPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload object: %v", err)
 	}
@@ -42,13 +45,10 @@ func (this *LocalStorage) Upload(objectName string, buffer []byte) (string, erro
 }
 
 func (this *LocalStorage) Download(objectName string, filePath string) error {
-	sourceFile := path.Join(this.LocalPath, objectName)
-
-	dest, err := utils.CreateFile(filePath)
+	sourceFile, err := utils.ResolvePathWithinRoot(this.LocalPath, objectName)
 	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
+		return err
 	}
-	defer dest.Close()
 
 	err = copyFile(sourceFile, filePath)
 	if err != nil {
@@ -69,17 +69,17 @@ func (this *LocalStorage) DeleteOldObjects() error {
 			return err
 		}
 
-		fmt.Printf("Checking old objects: %s\n", path)
+		mlog.Logvf(mlog.Info, "Checking old objects: %s", path)
 
 		if info.IsDir() {
 			return nil
 		}
 
-		if time.Since(info.ModTime()).Hours()/24 > float64(this.ExpiryDays) {
+		if isExpired(info.ModTime(), this.ExpiryDays, time.Now()) {
 			if err := os.Remove(path); err != nil {
 				return err
 			}
-			fmt.Printf("Deleted file: %s\n", filepath.Base(path))
+			mlog.Logvf(mlog.Info, "Deleted file: %s", filepath.Base(path))
 		}
 
 		return nil
@@ -129,19 +129,4 @@ func copyFile(sourceFile string, destFile string) error {
 
 	_, err = io.Copy(destination, source)
 	return err
-}
-
-func storeBytesToFile(data []byte, filePath string) error {
-	file, err := os.Create(filePath)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	_, err = file.Write(data)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

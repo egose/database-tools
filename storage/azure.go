@@ -1,17 +1,20 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/streaming"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob"
+	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/blockblob"
 	"github.com/Azure/azure-sdk-for-go/sdk/storage/azblob/container"
 	"github.com/egose/database-tools/utils"
+	mlog "github.com/mongodb/mongo-tools/common/log"
 )
 
 type AzBlob struct {
@@ -21,13 +24,15 @@ type AzBlob struct {
 	Endpoint            string
 	BlobServiceClient   *azblob.Client
 	BlobContainerClient *container.Client
+	ExpiryDays          int
 }
 
-func (this *AzBlob) Init(accountName string, accountKey string, containerName string, endpoint string) error {
+func (this *AzBlob) Init(accountName string, accountKey string, containerName string, endpoint string, expiryDays int) error {
 	this.AccountName = accountName
 	this.AccountKey = accountKey
 	this.ContainerName = containerName
 	this.Endpoint = endpoint
+	this.ExpiryDays = expiryDays
 
 	serviceClient, err := this.getBlobServiceClient()
 	if err != nil {
@@ -72,11 +77,17 @@ func (this *AzBlob) getBlockBlobClient(blobName string) *blockblob.Client {
 }
 
 func (this *AzBlob) GetTargetObjectName(blobName string) (string, error) {
-	bname := ""
+	if blobName != "" {
+		_, err := this.getBlockBlobClient(blobName).GetProperties(context.Background(), &blob.GetPropertiesOptions{})
+		if err != nil {
+			return "", fmt.Errorf("failed to retrieve metadata: %w", err)
+		}
 
-	pager := this.BlobContainerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{
-		Include: container.ListBlobsInclude{Snapshots: false, Versions: true},
-	})
+		return blobName, nil
+	}
+
+	pager := this.BlobContainerClient.NewListBlobsFlatPager(nil)
+	var latest *objectTimestamp
 
 	for pager.More() {
 		resp, err := pager.NextPage(context.Background())
@@ -84,32 +95,44 @@ func (this *AzBlob) GetTargetObjectName(blobName string) (string, error) {
 			return "", fmt.Errorf("failed to list objects: %v", err)
 		}
 
-		for _, blob := range resp.Segment.BlobItems {
-			if blobName == "" || blobName == *blob.Name {
-				bname = *blob.Name
-				break
+		candidates := make([]objectTimestamp, 0, len(resp.Segment.BlobItems))
+		for _, item := range resp.Segment.BlobItems {
+			if item == nil || item.Name == nil || item.Properties == nil || item.Properties.LastModified == nil {
+				continue
 			}
+
+			candidates = append(candidates, objectTimestamp{
+				Name:       *item.Name,
+				ModifiedAt: *item.Properties.LastModified,
+			})
 		}
 
-		if bname != "" {
-			break
+		pageLatest, ok := latestObject(candidates)
+		if ok {
+			latest = chooseLaterObject(latest, pageLatest)
 		}
 	}
 
-	if bname == "" {
+	if latest == nil {
 		return "", errors.New("no target object name found")
 	}
 
-	return bname, nil
+	return latest.Name, nil
 }
 
-func (this *AzBlob) Upload(blobName string, buffer []byte) (string, error) {
+func (this *AzBlob) Upload(blobName string, filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer file.Close()
+
 	blockBlobClient := this.getBlockBlobClient(blobName)
 	blockBlobUploadOptions := blockblob.UploadOptions{
 		// Metadata: map[string]string{"meta": "value"},
 		// Tags:     map[string]string{"tag": "value"},
 	}
-	uploadResp, err := blockBlobClient.Upload(context.Background(), streaming.NopCloser(bytes.NewReader(buffer)), &blockBlobUploadOptions)
+	uploadResp, err := blockBlobClient.Upload(context.Background(), streaming.NopCloser(file), &blockBlobUploadOptions)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload object: %v", err)
 	}
@@ -137,7 +160,7 @@ func (this *AzBlob) Download(blobName string, filePath string) error {
 	blockBlobClient := this.getBlockBlobClient(blobName)
 	downloadOptions := &azblob.DownloadFileOptions{
 		Progress: func(bytesTransferred int64) {
-			fmt.Printf("Downloaded %d.\n", bytesTransferred)
+			mlog.Logvf(mlog.Info, "Downloaded %d bytes", bytesTransferred)
 		},
 	}
 
@@ -150,5 +173,38 @@ func (this *AzBlob) Download(blobName string, filePath string) error {
 }
 
 func (this *AzBlob) DeleteOldObjects() error {
+	if this.ExpiryDays == 0 {
+		return nil
+	}
+
+	pager := this.BlobContainerClient.NewListBlobsFlatPager(nil)
+	now := time.Now()
+
+	for pager.More() {
+		resp, err := pager.NextPage(context.Background())
+		if err != nil {
+			return fmt.Errorf("failed to list objects: %w", err)
+		}
+
+		for _, item := range resp.Segment.BlobItems {
+			if item == nil || item.Name == nil || item.Properties == nil || item.Properties.LastModified == nil {
+				continue
+			}
+
+			daysOld := now.Sub(*item.Properties.LastModified).Hours() / 24
+			mlog.Logvf(mlog.Info, "Checking object: %s (%.1f days old)", *item.Name, daysOld)
+
+			if !isExpired(*item.Properties.LastModified, this.ExpiryDays, now) {
+				continue
+			}
+
+			if _, err := this.getBlockBlobClient(*item.Name).Delete(context.Background(), nil); err != nil {
+				return fmt.Errorf("failed to delete object %q: %w", *item.Name, err)
+			}
+
+			mlog.Logvf(mlog.Info, "Deleted object: %s", *item.Name)
+		}
+	}
+
 	return nil
 }
