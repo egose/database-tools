@@ -25,17 +25,16 @@
     "node": ">=22.1.0"
   },
   "devDependencies": {
-    "@commitlint/cli": "^20.1.0",
-    "@commitlint/config-conventional": "^20.0.0",
-    "@commitlint/format": "^20.0.0",
-    "@release-it/bumper": "^7.0.5",
-    "conventional-changelog-cli": "^5.0.0",
-    "release-it": "^19.0.0",
+    "@commitlint/cli": "^20.5.3",
+    "@commitlint/config-conventional": "^20.5.3",
+    "@commitlint/format": "^20.5.0",
+    "@release-it/bumper": "^7.0.6",
+    "@repo-toolkit/changelog": "^0.7.2",
+    "@types/node": "^25.9.5",
+    "globals": "^17.8.0",
+    "prettier": "4.0.0-alpha.13",
+    "release-it": "^20.2.1",
+    "typescript": "^6.0.3",
     "wait-on": "^9.0.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "conventional-changelog-conventionalcommits": "^9.0.0"
-    }
   }
 }
