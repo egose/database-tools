@@ -1,3 +1,10 @@
+## [0.14.0](https://github.com/egose/database-tools/compare/v0.13.0...v0.14.0) (2026-07-29)
+
+### Features
+
+* automate release tagging and signing ([929e40f](https://github.com/egose/database-tools/commit/929e40fe0f8115d8809d916faa0ce51c4f00b740))
+* upload build artifacts and generate release notes ([fe2cefe](https://github.com/egose/database-tools/commit/fe2cefe41ba97076861d6a29ea975dd0032f61de))
+
 ## [0.13.0](https://github.com/egose/database-tools/compare/v0.12.3...v0.13.0) (2026-07-29)
 
 ### Features
