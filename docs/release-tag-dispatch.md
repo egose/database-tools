@@ -12,22 +12,18 @@ To work around this, you can set up an **SSH key** to fetch the repository in th
    ```
 
    This creates:
-
    - A private key file: `id_ed25519`
    - A public key file: `id_ed25519.pub`
      in the current working directory.
 
 2. **Add the private key** to the repository’s **Secrets** in GitHub.
-
    - Name it: `SSH_KEY`
 
 3. **Add the public key** to the repository’s **Deploy Keys** in GitHub.
-
    - Name it: `SSH_KEY`
    - Enable `Allow write access` if you plan to push changes.
 
 4. Update Repository Settings
-
    1. Go to your GitHub repository.
    2. Click **Settings** (top tab) -> **Actions** -> **General**.
    3. Scroll down to **Workflow permissions**.

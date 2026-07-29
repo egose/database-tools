@@ -5,10 +5,11 @@ runs:
   using: composite
   steps:
   - name: Setup Tools
-    uses: egose/actions/asdf-tools@887f6cc2fec94fe1c745737c32b24a5ef85c4257
+    uses: egose/actions/asdf-tools@799b388fb3497236093c6eb7e3eac0b4c8f956ce
     with:
       plugins: |
         mongodb=https://github.com/junminahn/asdf-mongodb.git
+        docker-compose=https://github.com/egose/asdf-docker-compose.git
 
   - name: Install python tools
     run: |

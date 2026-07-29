@@ -57,6 +57,23 @@ func generateMongoDBURI(scheme, host, port, username, password string) string {
 }
 
 func PruneMongoDBURI(uri string) string {
-	scheme, host, port, username, password, _, _ := parseMongoDBURI(uri)
-	return generateMongoDBURI(scheme, host, port, username, password)
+	schemeIndex := strings.Index(uri, "://")
+	if schemeIndex == -1 {
+		return uri
+	}
+
+	authorityStart := schemeIndex + len("://")
+	remainder := uri[authorityStart:]
+	authorityEnd := strings.IndexAny(remainder, "/?")
+	if authorityEnd == -1 {
+		authorityEnd = len(remainder)
+	}
+
+	authority := remainder[:authorityEnd]
+	atIndex := strings.LastIndex(authority, "@")
+	if atIndex == -1 {
+		return uri
+	}
+
+	return uri[:authorityStart] + authority[atIndex+1:] + remainder[authorityEnd:]
 }

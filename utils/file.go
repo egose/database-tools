@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -11,6 +12,11 @@ import (
 
 func Tar(root string, destPath string) error {
 	err := DeleteFile(destPath)
+	if err != nil {
+		return err
+	}
+
+	err = os.MkdirAll(filepath.Dir(destPath), os.ModePerm)
 	if err != nil {
 		return err
 	}
@@ -30,6 +36,11 @@ func Tar(root string, destPath string) error {
 
 func UnTar(filePath string, destPath string) error {
 	err := DeleteDirectory(destPath)
+	if err != nil {
+		return err
+	}
+
+	err = os.MkdirAll(destPath, os.ModePerm)
 	if err != nil {
 		return err
 	}
@@ -62,15 +73,6 @@ func DeleteDirectory(dirPath string) error {
 	return nil
 }
 
-func ReadFileToBuffer(filePath string) ([]byte, error) {
-	buffer, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, err
-	}
-
-	return buffer, nil
-}
-
 func CreateFile(filePath string) (*os.File, error) {
 	err := os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
 	if err != nil {
@@ -94,6 +96,34 @@ func GetFileNameWithoutExtension(filePath string) string {
 		fileNameWithoutExt = strings.TrimSuffix(fileNameWithoutExt, filepath.Ext(fileNameWithoutExt))
 	}
 	return fileNameWithoutExt
+}
+
+func ResolvePathWithinRoot(root string, name string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("path name cannot be empty")
+	}
+
+	if filepath.IsAbs(name) {
+		return "", fmt.Errorf("absolute paths are not allowed: %q", name)
+	}
+
+	cleanRoot := filepath.Clean(root)
+	cleanName := filepath.Clean(name)
+	if cleanName == "." || cleanName == ".." {
+		return "", fmt.Errorf("invalid relative path: %q", name)
+	}
+
+	targetPath := filepath.Join(cleanRoot, cleanName)
+	rel, err := filepath.Rel(cleanRoot, targetPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to validate path %q: %w", name, err)
+	}
+
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("path escapes root directory: %q", name)
+	}
+
+	return targetPath, nil
 }
 
 func getChildren(targetDir string) ([]string, error) {

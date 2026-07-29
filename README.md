@@ -144,6 +144,17 @@ Both `mongo-archive` and `mongo-unarchive` follow the conventions of MongoDB’s
 | `rocketchat-webhook-url`            | `MONGOARCHIVE__ROCKETCHAT_WEBHOOK_URL`            | string | Rocket.Chat webhook URL                                              |
 | `rocketchat-webhook-prefix`         | `MONGOARCHIVE__ROCKETCHAT_WEBHOOK_PREFIX`         | string | Prefix for Rocket.Chat webhook messages                              |
 | `rocketchat-notify-on-failure-only` | `MONGOARCHIVE__ROCKETCHAT_NOTIFY_ON_FAILURE_ONLY` | bool   | Send Rocket.Chat notifications only on failure                       |
+| `slack-webhook-url`                 | `MONGOARCHIVE__SLACK_WEBHOOK_URL`                 | string | Slack webhook URL                                                    |
+| `slack-webhook-prefix`              | `MONGOARCHIVE__SLACK_WEBHOOK_PREFIX`              | string | Prefix for Slack messages                                            |
+| `slack-notify-on-failure-only`      | `MONGOARCHIVE__SLACK_NOTIFY_ON_FAILURE_ONLY`      | bool   | Send Slack notifications only on failure                             |
+| `smtp-host`                         | `MONGOARCHIVE__SMTP_HOST`                         | string | SMTP server host                                                     |
+| `smtp-port`                         | `MONGOARCHIVE__SMTP_PORT`                         | string | SMTP server port                                                     |
+| `smtp-username`                     | `MONGOARCHIVE__SMTP_USERNAME`                     | string | SMTP username                                                        |
+| `smtp-password`                     | `MONGOARCHIVE__SMTP_PASSWORD`                     | string | SMTP password                                                        |
+| `smtp-from`                         | `MONGOARCHIVE__SMTP_FROM`                         | string | SMTP sender address                                                  |
+| `smtp-to`                           | `MONGOARCHIVE__SMTP_TO`                           | string | Comma-separated SMTP recipient addresses                             |
+| `smtp-subject-prefix`               | `MONGOARCHIVE__SMTP_SUBJECT_PREFIX`               | string | Prefix for SMTP email subjects                                       |
+| `smtp-notify-on-failure-only`       | `MONGOARCHIVE__SMTP_NOTIFY_ON_FAILURE_ONLY`       | bool   | Send SMTP notifications only on failure                              |
 | `cron`                              | `MONGOARCHIVE__CRON`                              | bool   | Run a cron scheduler and block current execution path                |
 | `cron-expression`                   | `MONGOARCHIVE__CRON_EXPRESSION`                   | string | Cron schedule expression                                             |
 | `tz`                                | `MONGOARCHIVE__TZ`                                | string | User-specified time zone (see GNU `TZ` variable format)              |
@@ -226,6 +237,29 @@ Both `mongo-archive` and `mongo-unarchive` follow the conventions of MongoDB’s
 | `keep`                                 | `MONGOUNARCHIVE__KEEP`                                 | bool   | Keep data dump after completion                                                                                                   |
 | `version`                              | _(no env var)_                                         | bool   | Show the version and exit                                                                                                         |
 
+## 🔔 Notifications
+
+`mongo-archive` can notify one or more destinations after each run. The current notification backends are:
+
+- Rocket.Chat webhook
+- Slack webhook
+- SMTP email
+- AWS SES email
+
+Each backend can be enabled independently, and multiple backends can be enabled at the same time.
+
+### Failure-Only Notifications
+
+Each backend supports its own `*-notify-on-failure-only` flag/env var. When enabled, success notifications are skipped for that backend while failure notifications are still sent.
+
+### Suggested Setup
+
+For most production setups, a good pattern is:
+
+- Slack or Rocket.Chat for fast operational visibility
+- SMTP email for broader failure distribution
+- AWS SES when you want provider-backed email delivery instead of raw SMTP
+
 ## 🧪 Usage Examples
 
 ### Dump a Database to Azure Storage
@@ -250,6 +284,57 @@ mongo-archive \
   --az-container-name=<az_container_name> \
   --cron \
   --cron-expression="0 * * * *"
+```
+
+### Send Failure Alerts to Slack
+
+```sh
+mongo-archive \
+  --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+  --db=<dbname> \
+  --az-account-name=<az_account_name> \
+  --az-account-key=<az_account_key> \
+  --az-container-name=<az_container_name> \
+  --slack-webhook-url="https://hooks.slack.com/services/<path>" \
+  --slack-webhook-prefix="[prod-backups]" \
+  --slack-notify-on-failure-only
+```
+
+### Send Failure Alerts by Email
+
+```sh
+mongo-archive \
+  --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+  --db=<dbname> \
+  --az-account-name=<az_account_name> \
+  --az-account-key=<az_account_key> \
+  --az-container-name=<az_container_name> \
+  --smtp-host="smtp.example.com" \
+  --smtp-port="587" \
+  --smtp-username="alerts@example.com" \
+  --smtp-password="<smtp_password>" \
+  --smtp-from="alerts@example.com" \
+  --smtp-to="dba@example.com,ops@example.com" \
+  --smtp-subject-prefix="[prod-backups]" \
+  --smtp-notify-on-failure-only
+```
+
+### Send Failure Alerts with AWS SES
+
+```sh
+mongo-archive \
+  --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+  --db=<dbname> \
+  --az-account-name=<az_account_name> \
+  --az-account-key=<az_account_key> \
+  --az-container-name=<az_container_name> \
+  --ses-region="us-east-1" \
+  --ses-access-key-id="<aws_access_key_id>" \
+  --ses-secret-access-key="<aws_secret_access_key>" \
+  --ses-from="alerts@example.com" \
+  --ses-to="dba@example.com,ops@example.com" \
+  --ses-subject-prefix="[prod-backups]" \
+  --ses-notify-on-failure-only
 ```
 
 ### Restore from Azure Storage
@@ -325,7 +410,7 @@ kind: CronJob
 metadata:
   name: mongo-archive
 spec:
-  schedule: "0 12 * * *"
+  schedule: '0 12 * * *'
   concurrencyPolicy: Forbid
   jobTemplate:
     spec:
@@ -336,7 +421,7 @@ spec:
           initContainers:
             - name: backup-permission
               image: alpine:3.18
-              command: ["/bin/sh", "-c"]
+              command: ['/bin/sh', '-c']
               args:
                 - |
                   rm -rf /tmp/*;
@@ -348,12 +433,12 @@ spec:
           containers:
             - name: backup-job
               image: ghcr.io/egose/database-tools:<latest-version>
-              command: ["/bin/sh", "-c"]
+              command: ['/bin/sh', '-c']
               args:
                 - mongo-archive --db=mydb --read-preference=primary --force-table-scan
               env:
                 - name: MONGOARCHIVE__URI
-                  value: "mongodb+srv://user:password@cluster0.my.mongodb.net"
+                  value: 'mongodb+srv://user:password@cluster0.my.mongodb.net'
                 - name: MONGOARCHIVE__AZ_ACCOUNT_NAME
                   value: mystorage
                 - name: MONGOARCHIVE__AZ_ACCOUNT_KEY

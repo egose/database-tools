@@ -1,18 +1,20 @@
 package storage
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/egose/database-tools/utils"
+	mlog "github.com/mongodb/mongo-tools/common/log"
 	"golang.org/x/oauth2/google"
 	iam "google.golang.org/api/iam/v1"
 	"google.golang.org/api/iterator"
@@ -22,6 +24,7 @@ import (
 type GcpStorage struct {
 	Bucket        string
 	StorageClient *storage.Client
+	ExpiryDays    int
 }
 
 type GcpServiceAccountCreds struct {
@@ -37,14 +40,14 @@ type GcpServiceAccountCreds struct {
 	UniverseDomain          string `json:"universe_domain"`
 }
 
-func (this *GcpStorage) Init(endpoint, bucket, credsPath, projectID, privateKeyId, privateKey, clientEmail, clientID string) error {
+func (this *GcpStorage) Init(endpoint, bucket, credsPath, projectID, privateKeyId, privateKey, clientEmail, clientID string, expiryDays int) error {
 	this.Bucket = bucket
+	this.ExpiryDays = expiryDays
 
 	ctx := context.Background()
 
 	if endpoint != "" {
-		// See https://pkg.go.dev/google.golang.org/api/option#WithEndpoint
-		client, err := storage.NewClient(ctx, option.WithEndpoint(endpoint))
+		client, err := newEmulatorStorageClient(ctx, endpoint)
 		if err != nil {
 			return err
 		}
@@ -110,6 +113,35 @@ func (this *GcpStorage) Init(endpoint, bucket, credsPath, projectID, privateKeyI
 	return nil
 }
 
+func newEmulatorStorageClient(ctx context.Context, endpoint string) (*storage.Client, error) {
+	endpoint = normalizeEndpoint(endpoint)
+	previous, hadPrevious := os.LookupEnv("STORAGE_EMULATOR_HOST")
+	if err := os.Setenv("STORAGE_EMULATOR_HOST", endpoint); err != nil {
+		return nil, err
+	}
+
+	client, err := storage.NewClient(ctx, option.WithoutAuthentication())
+
+	if hadPrevious {
+		_ = os.Setenv("STORAGE_EMULATOR_HOST", previous)
+	} else {
+		_ = os.Unsetenv("STORAGE_EMULATOR_HOST")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func normalizeEndpoint(endpoint string) string {
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	endpoint = strings.TrimSuffix(endpoint, "/upload/storage/v1")
+	endpoint = strings.TrimSuffix(endpoint, "/storage/v1")
+	return endpoint
+}
+
 func (this *GcpStorage) Close() {
 	this.StorageClient.Close()
 }
@@ -135,7 +167,7 @@ func (this *GcpStorage) getLastUpdatedObjectName() (string, error) {
 	ctx := context.Background()
 	it := bucket.Objects(ctx, nil)
 
-	var latestObject *storage.ObjectAttrs
+	var latest *objectTimestamp
 	for {
 		objAttrs, err := it.Next()
 		if err == iterator.Done {
@@ -144,16 +176,15 @@ func (this *GcpStorage) getLastUpdatedObjectName() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if latestObject == nil || objAttrs.Updated.After(latestObject.Updated) {
-			latestObject = objAttrs
-		}
+
+		latest = chooseLaterObject(latest, objectTimestamp{Name: objAttrs.Name, ModifiedAt: objAttrs.Updated})
 	}
 
-	if latestObject == nil {
+	if latest == nil {
 		return "", errors.New("no objects found in the bucket")
 	}
 
-	return latestObject.Name, nil
+	return latest.Name, nil
 }
 
 func generateServiceAccountKey(projectID, serviceAccountEmail string) ([]byte, error) {
@@ -184,17 +215,21 @@ func generateServiceAccountKey(projectID, serviceAccountEmail string) ([]byte, e
 }
 
 // See https://cloud.google.com/storage/docs/uploading-objects-from-memory#storage-upload-object-from-memory-go
-func (this *GcpStorage) Upload(objectName string, buffer []byte) (string, error) {
+func (this *GcpStorage) Upload(objectName string, filePath string) (string, error) {
 	bctx := context.Background()
-	reader := bytes.NewReader(buffer)
+	reader, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer reader.Close()
 
 	ctx, cancel := context.WithTimeout(bctx, time.Second*50)
 	defer cancel()
 
 	wc := this.StorageClient.Bucket(this.Bucket).Object(objectName).NewWriter(ctx)
-	defer wc.Close()
 
 	if _, err := io.Copy(wc, reader); err != nil {
+		_ = wc.Close()
 		return "", fmt.Errorf("failed to upload object: %v", err)
 	}
 
@@ -253,5 +288,37 @@ func (this *GcpStorage) Download(objectName string, filePath string) error {
 }
 
 func (this *GcpStorage) DeleteOldObjects() error {
+	if this.ExpiryDays == 0 {
+		return nil
+	}
+
+	bucket := this.StorageClient.Bucket(this.Bucket)
+	ctx := context.Background()
+	it := bucket.Objects(ctx, nil)
+	now := time.Now()
+
+	for {
+		objAttrs, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to list objects: %w", err)
+		}
+
+		daysOld := now.Sub(objAttrs.Updated).Hours() / 24
+		mlog.Logvf(mlog.Info, "Checking object: %s (%.1f days old)", objAttrs.Name, daysOld)
+
+		if !isExpired(objAttrs.Updated, this.ExpiryDays, now) {
+			continue
+		}
+
+		if err := bucket.Object(objAttrs.Name).Delete(ctx); err != nil {
+			return fmt.Errorf("failed to delete object %q: %w", objAttrs.Name, err)
+		}
+
+		mlog.Logvf(mlog.Info, "Deleted object: %s", objAttrs.Name)
+	}
+
 	return nil
 }

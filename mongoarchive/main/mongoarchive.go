@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/egose/database-tools/common"
 	"github.com/egose/database-tools/mongoarchive"
 	"github.com/egose/database-tools/utils"
 	"github.com/go-co-op/gocron/v2"
@@ -27,34 +26,33 @@ const (
 )
 
 func main() {
-	showVersion := mongoarchive.ParseFlags()
+	cfg, showVersion := mongoarchive.ParseFlags()
 	if showVersion {
 		fmt.Println("mongo-archive version:", version)
 		return
 	}
 
-	if mongoarchive.HasCron() {
-		runCronJob()
+	if cfg.HasCron() {
+		runCronJob(cfg)
 	} else {
-		err := runTask()
+		err := runTask(cfg)
 		if err != nil {
-			sendNotification(false, err.Error())
+			sendNotification(cfg, false, err.Error())
 			mlog.Logvf(mlog.Always, "Failed: %v", err.Error())
+			os.Exit(1)
 		}
-
-		common.HandleErrorToPanic(err)
 	}
 }
 
 // See https://github.com/go-co-op/gocron
-func runCronJob() {
-	loc := mongoarchive.GetLocation()
+func runCronJob(cfg *mongoarchive.Config) {
+	loc := cfg.GetLocation()
 	if loc == nil {
 		mlog.Logvf(mlog.Always, "Failed: invalid timezone location")
 		return
 	}
 
-	exp := mongoarchive.GetCronExpression()
+	exp := cfg.GetCronExpression()
 	if exp == "" {
 		mlog.Logvf(mlog.Always, "Failed: empty cron expression")
 		return
@@ -76,9 +74,9 @@ func runCronJob() {
 			mlog.Logvf(mlog.Always, "Task started at: %v", startTime)
 
 			// Run the actual task
-			if err := runTask(); err != nil {
+			if err := runTask(cfg); err != nil {
 				mlog.Logvf(mlog.Always, "Task failed: %v", err)
-				sendNotification(false, err.Error())
+				sendNotification(cfg, false, err.Error())
 			} else {
 				mlog.Logvf(mlog.Always, "Task completed successfully at: %v (Duration: %v)", time.Now(), time.Since(startTime))
 			}
@@ -101,7 +99,7 @@ func runCronJob() {
 	mlog.Logvf(mlog.Always, "Shutting down scheduler...")
 }
 
-func runTask() error {
+func runTask(cfg *mongoarchive.Config) error {
 	var dumpPath string
 	if dumpPath = os.Getenv(envPrefix + "DUMP_PATH"); dumpPath == "" {
 		dumpPath = "/tmp/datadump"
@@ -111,7 +109,7 @@ func runTask() error {
 	destPath := path.Join(dumpPath, uname)
 	tarfilePath := path.Join(dumpPath, filename)
 
-	options := mongoarchive.GetMongodumpOptions()
+	options := cfg.GetMongodumpOptions()
 	options = append(options, "--out="+destPath)
 
 	opts, err := mongodump.ParseOptions(options, "", "")
@@ -136,7 +134,7 @@ func runTask() error {
 	finishedChan := signals.HandleWithInterrupt(dump.HandleInterrupt)
 	defer close(finishedChan)
 
-	storages := mongoarchive.GetStorages()
+	storages := cfg.GetStorages()
 	if len(storages) == 0 {
 		return fmt.Errorf("no storage backends configured")
 	}
@@ -153,25 +151,20 @@ func runTask() error {
 		return err
 	}
 
-	buffer, err := utils.ReadFileToBuffer(tarfilePath)
-	if err != nil {
-		return err
-	}
-
 	for _, s := range storages {
 		err := s.DeleteOldObjects()
 		if err != nil {
 			return fmt.Errorf("failed to delete old objects in %T: %w", s, err)
 		}
 
-		result, err := s.Upload(filename, buffer)
+		result, err := s.Upload(filename, tarfilePath)
 		if err != nil {
 			return fmt.Errorf("failed to upload to %T: %w", s, err)
 		}
 		mlog.Logvf(mlog.Always, "Successfully uploaded backup to %T: %v", s, result)
 	}
 
-	if !mongoarchive.HasKeep() {
+	if !cfg.HasKeep() {
 		if err := utils.DeleteDirectory(destPath); err != nil {
 			return err
 		}
@@ -181,14 +174,16 @@ func runTask() error {
 		}
 	}
 
-	sendNotification(true, filename)
+	sendNotification(cfg, true, filename)
 
 	return nil
 }
 
-func sendNotification(success bool, filenameOrError string) {
-	notifications := mongoarchive.GetNotifications()
+func sendNotification(cfg *mongoarchive.Config, success bool, filenameOrError string) {
+	notifications := cfg.GetNotifications()
 	for _, notification := range notifications {
-		notification.Send(success, mongoarchive.GetTZ(), filenameOrError)
+		if err := notification.Send(success, cfg.GetTZ(), filenameOrError); err != nil {
+			mlog.Logvf(mlog.Always, "Failed to send notification via %T: %v", notification, err)
+		}
 	}
 }

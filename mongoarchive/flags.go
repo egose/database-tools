@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/egose/database-tools/internal/toolconfig"
 	"github.com/egose/database-tools/notification"
 	"github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
@@ -14,444 +15,286 @@ import (
 const (
 	envPrefix         = "MONGOARCHIVE__"
 	fallbackEnvPrefix = "MONGO__"
+	defaultCronExpr   = "0 2 * * *"
 )
 
-var (
-	verbose  *string
-	quietPtr *bool
+type Config struct {
+	toolconfig.MongoOptions
+	toolconfig.StorageOptions
+	Query                         string
+	QueryFile                     string
+	ReadPreference                string
+	ForceTableScan                bool
+	ExpiryDays                    int
+	RocketChatWebhookURL          string
+	RocketChatWebhookPrefix       string
+	RocketChatNotifyOnFailureOnly bool
+	SlackWebhookURL               string
+	SlackWebhookPrefix            string
+	SlackNotifyOnFailureOnly      bool
+	SMTPHost                      string
+	SMTPPort                      string
+	SMTPUsername                  string
+	SMTPPassword                  string
+	SMTPFrom                      string
+	SMTPTo                        string
+	SMTPSubjectPrefix             string
+	SMTPNotifyOnFailureOnly       bool
+	SESEndpoint                   string
+	SESRegion                     string
+	SESAccessKeyID                string
+	SESSecretAccessKey            string
+	SESFrom                       string
+	SESTo                         string
+	SESSubjectPrefix              string
+	SESNotifyOnFailureOnly        bool
+	Cron                          bool
+	CronExpression                string
+	Location                      *time.Location
+	Keep                          bool
+}
 
-	hostPtr *string
-	portPtr *string
-
-	sslPtr                         *bool
-	sslCAFilePtr                   *string
-	sslPEMKeyFilePtr               *string
-	sslPEMKeyPasswordPtr           *string
-	sslCRLFilePtr                  *string
-	sslAllowInvalidCertificatesPtr *bool
-	sslAllowInvalidHostnamesPtr    *bool
-	sslFIPSModePtr                 *bool
-
-	usernamePtr                *string
-	passwordPtr                *string
-	authenticationDatabasePtr  *string
-	authenticationMechanismPtr *string
-
-	gssapiServiceNamePtr *string
-	gssapiHostNamePtr    *string
-
-	dbPtr         *string
-	collectionPtr *string
-
-	uriPtr      *string
-	uriPrunePtr *bool
-
-	queryPtr          *string
-	queryFilePtr      *string
-	readPreferencePtr *string
-	forceTableScanPtr *bool
-
-	azEndpointPtr      *string
-	azAccountNamePtr   *string
-	azAccountKeyPtr    *string
-	azContainerNamePtr *string
-
-	awsEndpointPtr         *string
-	awsAccessKeyIdPtr      *string
-	awsSecretAccessKeyPtr  *string
-	awsRegionPtr           *string
-	awsBucketPtr           *string
-	awsS3ForcePathStylePtr *bool
-
-	gcpEndpointPtr     *string
-	gcpBucketPtr       *string
-	gcpCredsFilePtr    *string
-	gcpProjectIDPtr    *string
-	gcpPrivateKeyIdPtr *string
-	gcpPrivateKeyPtr   *string
-	gcpClientEmailPtr  *string
-	gcpClientIDPtr     *string
-
-	localPathPtr  *string
-	expiryDaysPtr *string
-
-	rocketChatWebhookUrlPtr          *string
-	rocketChatWebhookPrefixPtr       *string
-	rocketChatNotifyOnFailureOnlyPtr *bool
-
-	cronPtr           *bool
-	cronExpressionPtr *string
-	tzPtr             *string
-
-	keepPtr *bool
-
-	loc            *time.Location
-	expiryDays     int
-	cronExpression string
-)
-
-func ParseFlags() bool {
+func ParseFlags() (*Config, bool) {
 	env := utils.NewEnv(envPrefix, fallbackEnvPrefix, "")
+	cfg := &Config{}
 
-	// verbosity options:
-	verbose = flag.String("verbose", env.GetValue("VERBOSE"), "more detailed log output (include multiple times for more verbosity, e.g. -vvvvv, or specify a numeric value, e.g. --verbose=N)")
-	quietPtr = flag.Bool("quiet", env.GetValue("QUIET") == "true", "hide all log output")
-
-	// connection options:
-	hostPtr = flag.String("host", env.GetValue("HOST"), "MongoDB host to connect to (setname/host1,host2 for replica sets)")
-	portPtr = flag.String("port", env.GetValue("PORT"), "MongoDB port (can also use --host hostname:port)")
-
-	// ssl options:
-	sslPtr = flag.Bool("ssl", env.GetValue("SSL") == "true", "connect to a mongod or mongos that has ssl enabled")
-	sslCAFilePtr = flag.String("ssl-ca-file", env.GetValue("SSL_CA_FILE"), "the .pem file containing the root certificate chain from the certificate authority")
-	sslPEMKeyFilePtr = flag.String("ssl-pem-key-file", env.GetValue("SSL_PEM_KEY_FILE"), "the .pem file containing the certificate and key")
-	sslPEMKeyPasswordPtr = flag.String("ssl-pem-key-password", env.GetValue("SSL_PEM_KEY_PASSWORD"), "the password to decrypt the sslPEMKeyFile, if necessary")
-	sslCRLFilePtr = flag.String("ssl-crl-file", env.GetValue("SSL_CRL_File"), "the .pem file containing the certificate revocation list")
-	sslAllowInvalidCertificatesPtr = flag.Bool("ssl-allow-invalid-certificates", env.GetValue("SSL_ALLOW_INVALID_CERTIFICATES") == "true", "bypass the validation for server certificates")
-	sslAllowInvalidHostnamesPtr = flag.Bool("ssl-allow-invalid-hostnames", env.GetValue("SSL_ALLOW_INVALID_HOSTNAMES") == "true", "bypass the validation for server name")
-	sslFIPSModePtr = flag.Bool("ssl-fips-mode", env.GetValue("SSL_FIPS_MODE") == "true", "use FIPS mode of the installed openssl library")
-
-	// authentication options:
-	usernamePtr = flag.String("username", env.GetValue("USERNAME"), "username for authentication")
-	passwordPtr = flag.String("password", env.GetValue("PASSWORD"), "password for authentication")
-	authenticationDatabasePtr = flag.String("authentication-database", env.GetValue("AUTHENTICATION_DATABASE"), "database that holds the user's credentials")
-	authenticationMechanismPtr = flag.String("authentication-mechanism", env.GetValue("AUTHENTICATION_MECHANISM"), "authentication mechanism to use")
-
-	// kerberos options:
-	gssapiServiceNamePtr = flag.String("gssapi-service-name", env.GetValue("GSSAPI_SERVICE_NAME"), "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)")
-	gssapiHostNamePtr = flag.String("gssapi-host-name", env.GetValue("GSSAPI_HOST_NAME"), "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)")
-
-	// namespace options:
-	dbPtr = flag.String("db", env.GetValue("DB"), "database to use")
-	collectionPtr = flag.String("collection", env.GetValue("COLLECTION"), "collection to use")
-
-	// uri options:
-	uriPtr = flag.String("uri", env.GetValue("URI"), "MongoDB uri connection string")
-	uriPrunePtr = flag.Bool("uri-prune", env.GetValue("URI_PRUNE") == "true", "prune MongoDB uri connection string")
-
-	// query options:
-	queryPtr = flag.String("query", env.GetValue("QUERY"), "query filter, as a v2 Extended JSON string")
-	queryFilePtr = flag.String("query-file", env.GetValue("QUERY_FILE"), "path to a file containing a query filter (v2 Extended JSON)")
-	readPreferencePtr = flag.String("read-preference", env.GetValue("READ_PREFERENCE"), "specify either a preference mode (e.g. 'nearest') or a preference json object")
-	forceTableScanPtr = flag.Bool("force-table-scan", env.GetValue("FORCE_TABLE_SCAN") == "true", "force a table scan")
-
-	azEndpointPtr = flag.String("az-endpoint", env.GetValue("AZ_ENDPOINT", ""), "specify the emulator hostname and Azure Blob Storage port")
-	azAccountNamePtr = flag.String("az-account-name", env.GetValue("AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name")
-	azAccountKeyPtr = flag.String("az-account-key", env.GetValue("AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key")
-	azContainerNamePtr = flag.String("az-container-name", env.GetValue("AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name")
-
-	awsEndpointPtr = flag.String("aws-endpoint", env.GetValue("AWS_ENDPOINT", ""), "AWS endpoint URL (hostname only or fully qualified URI)")
-	awsAccessKeyIdPtr = flag.String("aws-access-key-id", env.GetValue("AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account")
-	awsSecretAccessKeyPtr = flag.String("aws-secret-access-key", env.GetValue("AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key")
-	awsRegionPtr = flag.String("aws-region", env.GetValue("AWS_REGION", "us-east-1"), "AWS Region whose servers you want to send your requests to")
-	awsBucketPtr = flag.String("aws-bucket", env.GetValue("AWS_BUCKET"), "AWS S3 bucket name")
-	awsS3ForcePathStylePtr = flag.Bool("aws-s3-force-path-style", env.GetValue("AWS_S3_FORCE_PATH_STYLE") == "true", "force the request to use path-style addressing, i.e., `http://s3.amazonaws.com/BUCKET/KEY`. By default, the S3 client will use virtual hosted bucket addressing when possible (`http://BUCKET.s3.amazonaws.com/KEY`)")
-
-	gcpEndpointPtr = flag.String("gcp-endpoint", env.GetValue("GCP_ENDPOINT", ""), "GCP endpoint URL")
-	gcpBucketPtr = flag.String("gcp-bucket", env.GetValue("GCP_BUCKET"), "GCP storage bucket name")
-	gcpCredsFilePtr = flag.String("gcp-creds-file", env.GetValue("GCP_CREDS_FILE"), "GCP service account's credentials file")
-	gcpProjectIDPtr = flag.String("gcp-project-id", env.GetValue("GCP_PROJECT_ID"), "GCP service account's project id")
-	gcpPrivateKeyIdPtr = flag.String("gcp-private-key-id", env.GetValue("GCP_PRIVATE_KEY_ID"), "GCP service account's private key id")
-	gcpPrivateKeyPtr = flag.String("gcp-private-key", env.GetValue("GCP_PRIVATE_KEY"), "GCP service account's private key")
-	gcpClientEmailPtr = flag.String("gcp-client-email", env.GetValue("GCP_CLIENT_EMAIL"), "GCP service account's client email")
-	gcpClientIDPtr = flag.String("gcp-client-id", env.GetValue("GCP_CLIENT_ID"), "GCP service account's client id")
-
-	localPathPtr = flag.String("local-path", env.GetValue("LOCAL_PATH"), "Local directory path to store backups")
-	expiryDaysPtr = flag.String("expiry-days", env.GetValue("EXPIRY_DAYS"), "The maximum age, in days, for archives to be retained")
-
-	rocketChatWebhookUrlPtr = flag.String("rocketchat-webhook-url", env.GetValue("ROCKETCHAT_WEBHOOK_URL"), "Rocket Chat Webhook URL")
-	rocketChatWebhookPrefixPtr = flag.String("rocketchat-webhook-prefix", env.GetValue("ROCKETCHAT_WEBHOOK_PREFIX"), "Rocket Chat Webhook Prefix")
-	rocketChatNotifyOnFailureOnlyPtr = flag.Bool("rocketchat-notify-on-failure-only", env.GetValue("ROCKETCHAT_NOTIFY_ON_FAILURE_ONLY") == "true", "Send Rocket Chat notifications only when something goes wrong during the execution")
-
-	// cron options:
-	cronPtr = flag.Bool("cron", env.GetValue("CRON") == "true", "run a cron schedular and block current execution path")
-	cronExpressionPtr = flag.String("cron-expression", env.GetValue("CRON_EXPRESSION"), "a string describes individual details of the cron schedule")
-
-	// See https://www.gnu.org/software/libc/manual/html_node/TZ-Variable.html
-	tzPtr = flag.String("tz", env.GetValue("TZ"), "user-specified time zone")
-
-	keepPtr = flag.Bool("keep", env.GetValue("KEEP") == "true", "keep data dump")
-
+	mongoBindings := toolconfig.BindMongoFlags(env)
+	query := flag.String("query", env.GetValue("QUERY"), "query filter, as a v2 Extended JSON string")
+	queryFile := flag.String("query-file", env.GetValue("QUERY_FILE"), "path to a file containing a query filter (v2 Extended JSON)")
+	readPreference := flag.String("read-preference", env.GetValue("READ_PREFERENCE"), "specify either a preference mode (e.g. 'nearest') or a preference json object")
+	forceTableScan := flag.Bool("force-table-scan", env.GetValue("FORCE_TABLE_SCAN") == "true", "force a table scan")
+	storageBindings := toolconfig.BindStorageFlags(env)
+	expiryDays := flag.String("expiry-days", env.GetValue("EXPIRY_DAYS"), "The maximum age, in days, for archives to be retained")
+	rocketChatWebhookURL := flag.String("rocketchat-webhook-url", env.GetValue("ROCKETCHAT_WEBHOOK_URL"), "Rocket Chat Webhook URL")
+	rocketChatWebhookPrefix := flag.String("rocketchat-webhook-prefix", env.GetValue("ROCKETCHAT_WEBHOOK_PREFIX"), "Rocket Chat Webhook Prefix")
+	rocketChatNotifyOnFailureOnly := flag.Bool("rocketchat-notify-on-failure-only", env.GetValue("ROCKETCHAT_NOTIFY_ON_FAILURE_ONLY") == "true", "Send Rocket Chat notifications only when something goes wrong during the execution")
+	slackWebhookURL := flag.String("slack-webhook-url", env.GetValue("SLACK_WEBHOOK_URL"), "Slack webhook URL")
+	slackWebhookPrefix := flag.String("slack-webhook-prefix", env.GetValue("SLACK_WEBHOOK_PREFIX"), "Slack message prefix")
+	slackNotifyOnFailureOnly := flag.Bool("slack-notify-on-failure-only", env.GetValue("SLACK_NOTIFY_ON_FAILURE_ONLY") == "true", "Send Slack notifications only when something goes wrong during the execution")
+	smtpHost := flag.String("smtp-host", env.GetValue("SMTP_HOST"), "SMTP server host")
+	smtpPort := flag.String("smtp-port", env.GetValue("SMTP_PORT", "587"), "SMTP server port")
+	smtpUsername := flag.String("smtp-username", env.GetValue("SMTP_USERNAME"), "SMTP username")
+	smtpPassword := flag.String("smtp-password", env.GetValue("SMTP_PASSWORD"), "SMTP password")
+	smtpFrom := flag.String("smtp-from", env.GetValue("SMTP_FROM"), "SMTP from address")
+	smtpTo := flag.String("smtp-to", env.GetValue("SMTP_TO"), "Comma-separated SMTP recipient addresses")
+	smtpSubjectPrefix := flag.String("smtp-subject-prefix", env.GetValue("SMTP_SUBJECT_PREFIX"), "SMTP email subject prefix")
+	smtpNotifyOnFailureOnly := flag.Bool("smtp-notify-on-failure-only", env.GetValue("SMTP_NOTIFY_ON_FAILURE_ONLY") == "true", "Send SMTP notifications only when something goes wrong during the execution")
+	sesEndpoint := flag.String("ses-endpoint", env.GetValue("SES_ENDPOINT"), "AWS SES endpoint override")
+	sesRegion := flag.String("ses-region", env.GetValue("SES_REGION", env.GetValue("AWS_REGION")), "AWS SES region")
+	sesAccessKeyID := flag.String("ses-access-key-id", env.GetValue("SES_ACCESS_KEY_ID", env.GetValue("AWS_ACCESS_KEY_ID")), "AWS SES access key ID")
+	sesSecretAccessKey := flag.String("ses-secret-access-key", env.GetValue("SES_SECRET_ACCESS_KEY", env.GetValue("AWS_SECRET_ACCESS_KEY")), "AWS SES secret access key")
+	sesFrom := flag.String("ses-from", env.GetValue("SES_FROM"), "AWS SES sender address")
+	sesTo := flag.String("ses-to", env.GetValue("SES_TO"), "Comma-separated AWS SES recipient addresses")
+	sesSubjectPrefix := flag.String("ses-subject-prefix", env.GetValue("SES_SUBJECT_PREFIX"), "AWS SES email subject prefix")
+	sesNotifyOnFailureOnly := flag.Bool("ses-notify-on-failure-only", env.GetValue("SES_NOTIFY_ON_FAILURE_ONLY") == "true", "Send AWS SES notifications only when something goes wrong during the execution")
+	cron := flag.Bool("cron", env.GetValue("CRON") == "true", "run a cron schedular and block current execution path")
+	cronExpression := flag.String("cron-expression", env.GetValue("CRON_EXPRESSION"), "a string describes individual details of the cron schedule")
+	tz := flag.String("tz", env.GetValue("TZ"), "user-specified time zone")
+	keep := flag.Bool("keep", env.GetValue("KEEP") == "true", "keep data dump")
 	showVersion := flag.Bool("version", false, "Show the version")
 
 	flag.Parse()
 
+	mongoBindings.Apply(&cfg.MongoOptions)
+	cfg.Query = *query
+	cfg.QueryFile = *queryFile
+	cfg.ReadPreference = *readPreference
+	cfg.ForceTableScan = *forceTableScan
+	storageBindings.Apply(&cfg.StorageOptions)
+	cfg.ExpiryDays = parseExpiryDays(*expiryDays)
+	cfg.RocketChatWebhookURL = *rocketChatWebhookURL
+	cfg.RocketChatWebhookPrefix = *rocketChatWebhookPrefix
+	cfg.RocketChatNotifyOnFailureOnly = *rocketChatNotifyOnFailureOnly
+	cfg.SlackWebhookURL = *slackWebhookURL
+	cfg.SlackWebhookPrefix = *slackWebhookPrefix
+	cfg.SlackNotifyOnFailureOnly = *slackNotifyOnFailureOnly
+	cfg.SMTPHost = *smtpHost
+	cfg.SMTPPort = *smtpPort
+	cfg.SMTPUsername = *smtpUsername
+	cfg.SMTPPassword = *smtpPassword
+	cfg.SMTPFrom = *smtpFrom
+	cfg.SMTPTo = *smtpTo
+	cfg.SMTPSubjectPrefix = *smtpSubjectPrefix
+	cfg.SMTPNotifyOnFailureOnly = *smtpNotifyOnFailureOnly
+	cfg.SESEndpoint = *sesEndpoint
+	cfg.SESRegion = *sesRegion
+	cfg.SESAccessKeyID = *sesAccessKeyID
+	cfg.SESSecretAccessKey = *sesSecretAccessKey
+	cfg.SESFrom = *sesFrom
+	cfg.SESTo = *sesTo
+	cfg.SESSubjectPrefix = *sesSubjectPrefix
+	cfg.SESNotifyOnFailureOnly = *sesNotifyOnFailureOnly
+	cfg.Cron = *cron
+	cfg.CronExpression = parseCronExpression(*cronExpression)
+	cfg.Location = parseLocation(*tz)
+	cfg.Keep = *keep
+
 	if showVersion != nil && *showVersion {
-		return true
+		return cfg, true
 	}
 
-	parseTZ()
-	parseExpiry()
-	parseCronExpression()
-
-	return false
+	return cfg, false
 }
 
-func parseTZ() {
-	if *tzPtr != "" {
-		loc, _ = time.LoadLocation(*tzPtr)
-	} else {
-		loc = time.Local
+func parseLocation(tz string) *time.Location {
+	if tz == "" {
+		return time.Local
 	}
 
-	// mlog.Logvf(mlog.Always, "Use Time Zone: %v", loc)
-}
-
-func parseExpiry() {
-	if *expiryDaysPtr == "" {
-		expiryDays = 0
-		mlog.Logvf(mlog.Always, "Backup does not expire")
-	} else if num, err := strconv.Atoi(*expiryDaysPtr); err == nil {
-		expiryDays = num
-		mlog.Logvf(mlog.Always, "Backup expiration: %v days", expiryDays)
-	}
-}
-
-func parseCronExpression() {
-	if cronExpressionPtr != nil || *cronExpressionPtr != "" {
-		cronExpression = *cronExpressionPtr
-	} else {
-		cronExpression = "0 2 * * *"
-	}
-}
-
-func GetTZ() *time.Location {
+	loc, _ := time.LoadLocation(tz)
 	return loc
 }
 
-func GetMongodumpOptions() []string {
-	options := []string{
-		"--gzip",
+func parseExpiryDays(raw string) int {
+	if raw == "" {
+		mlog.Logvf(mlog.Always, "Backup does not expire")
+		return 0
 	}
 
-	if *verbose != "" {
-		options = append(options, "--verbose="+*verbose)
+	if expiryDays, err := strconv.Atoi(raw); err == nil {
+		mlog.Logvf(mlog.Always, "Backup expiration: %v days", expiryDays)
+		return expiryDays
 	}
 
-	if *quietPtr {
-		options = append(options, "--quiet")
+	return 0
+}
+
+func parseCronExpression(raw string) string {
+	if raw != "" {
+		return raw
 	}
 
-	if *hostPtr != "" {
-		options = append(options, "--host="+*hostPtr)
+	return defaultCronExpr
+}
+
+func (c *Config) GetTZ() *time.Location {
+	return c.Location
+}
+
+func (c *Config) GetMongodumpOptions() []string {
+	options := c.MongoOptions.AppendToolOptions([]string{"--gzip"})
+	if c.Query != "" {
+		options = append(options, "--query="+c.Query)
 	}
-
-	if *portPtr != "" {
-		options = append(options, "--port="+*portPtr)
+	if c.QueryFile != "" {
+		options = append(options, "--queryFile="+c.QueryFile)
 	}
-
-	if *sslPtr {
-		options = append(options, "--ssl")
+	if c.ReadPreference != "" {
+		options = append(options, "--readPreference="+c.ReadPreference)
 	}
-
-	if *sslCAFilePtr != "" {
-		options = append(options, "--sslCAFile="+*sslCAFilePtr)
-	}
-
-	if *sslPEMKeyFilePtr != "" {
-		options = append(options, "--sslPEMKeyFile="+*sslPEMKeyFilePtr)
-	}
-
-	if *sslPEMKeyPasswordPtr != "" {
-		options = append(options, "--sslPEMKeyPassword="+*sslPEMKeyPasswordPtr)
-	}
-
-	if *sslCRLFilePtr != "" {
-		options = append(options, "--sslCRLFile="+*sslCRLFilePtr)
-	}
-
-	if *sslAllowInvalidCertificatesPtr {
-		options = append(options, "--sslAllowInvalidCertificates")
-	}
-
-	if *sslAllowInvalidHostnamesPtr {
-		options = append(options, "--sslAllowInvalidHostnames")
-	}
-
-	if *sslFIPSModePtr {
-		options = append(options, "--sslFIPSMode")
-	}
-
-	if *usernamePtr != "" {
-		options = append(options, "--username="+*usernamePtr)
-	}
-
-	if *passwordPtr != "" {
-		options = append(options, "--password="+*passwordPtr)
-	}
-
-	if *authenticationDatabasePtr != "" {
-		options = append(options, "--authenticationDatabase="+*authenticationDatabasePtr)
-	}
-
-	if *authenticationMechanismPtr != "" {
-		options = append(options, "--authenticationMechanism="+*authenticationMechanismPtr)
-	}
-
-	if *gssapiServiceNamePtr != "" {
-		options = append(options, "--gssapiServiceName="+*gssapiServiceNamePtr)
-	}
-
-	if *gssapiHostNamePtr != "" {
-		options = append(options, "--gssapiHostName="+*gssapiHostNamePtr)
-	}
-
-	if *dbPtr != "" {
-		options = append(options, "--db="+*dbPtr)
-	}
-
-	if *collectionPtr != "" {
-		options = append(options, "--collection="+*collectionPtr)
-	}
-
-	if *uriPtr != "" {
-		uri := *uriPtr
-		if *uriPrunePtr {
-			uri = utils.PruneMongoDBURI(uri)
-		}
-
-		options = append(options, "--uri="+uri)
-	}
-
-	if *queryPtr != "" {
-		options = append(options, "--query="+*queryPtr)
-	}
-
-	if *queryFilePtr != "" {
-		options = append(options, "--queryFile="+*queryFilePtr)
-	}
-
-	if *readPreferencePtr != "" {
-		options = append(options, "--readPreference="+*readPreferencePtr)
-	}
-
-	if *forceTableScanPtr {
+	if c.ForceTableScan {
 		options = append(options, "--forceTableScan")
 	}
 
 	return options
 }
 
-func getAzBlobStorage() (storage.Storage, error) {
-	az := new(storage.AzBlob)
-	err := az.Init(*azAccountNamePtr, *azAccountKeyPtr, *azContainerNamePtr, *azEndpointPtr)
-	if err != nil {
-		return nil, err
-	}
-
-	return az, nil
+func (c *Config) GetStorages() []storage.Storage {
+	return c.StorageOptions.GetStorages(c.ExpiryDays)
 }
 
-func getAwsS3Storage() (storage.Storage, error) {
-	s3 := new(storage.AwsS3)
-	err := s3.Init(*awsEndpointPtr, *awsAccessKeyIdPtr, *awsSecretAccessKeyPtr, *awsRegionPtr, *awsBucketPtr, *awsS3ForcePathStylePtr, expiryDays)
-	if err != nil {
-		return nil, err
-	}
-
-	return s3, nil
-}
-
-func getGcpStorage() (storage.Storage, error) {
-	storage := new(storage.GcpStorage)
-	err := storage.Init(*gcpEndpointPtr, *gcpBucketPtr, *gcpCredsFilePtr, *gcpProjectIDPtr, *gcpPrivateKeyIdPtr, *gcpPrivateKeyPtr, *gcpClientEmailPtr, *gcpClientIDPtr)
-	if err != nil {
-		return nil, err
-	}
-
-	return storage, nil
-}
-
-func getLocalStorage() (storage.Storage, error) {
-	storage := new(storage.LocalStorage)
-	err := storage.Init(*localPathPtr, expiryDays)
-	if err != nil {
-		return nil, err
-	}
-
-	return storage, nil
-}
-
-func GetStorages() []storage.Storage {
-	type option struct {
-		name    string
-		enabled func() bool
-		getter  func() (storage.Storage, error)
-	}
-
-	options := []option{
-		{"Local", useLocal, getLocalStorage},
-		{"Azure", useAzure, getAzBlobStorage},
-		{"AWS", useAWS, getAwsS3Storage},
-		{"GCP", useGCP, getGcpStorage},
-	}
-
-	storages := make([]storage.Storage, 0)
-
-	for _, opt := range options {
-		if opt.enabled() {
-			if s, _ := opt.getter(); s != nil {
-				mlog.Logvf(mlog.Always, "Found Storage Option: %v", opt.name)
-				storages = append(storages, s)
-			}
-		}
-	}
-
-	return storages
-}
-
-func getRocketChat() (*notification.RocketChat, error) {
+func (c *Config) getRocketChat() (*notification.RocketChat, error) {
 	rc := new(notification.RocketChat)
-	err := rc.Init(*rocketChatWebhookUrlPtr, *rocketChatWebhookPrefixPtr, *rocketChatNotifyOnFailureOnlyPtr)
+	err := rc.Init(c.RocketChatWebhookURL, c.RocketChatWebhookPrefix, c.RocketChatNotifyOnFailureOnly)
 	return rc, err
 }
 
-func GetNotifications() []notification.Notification {
+func (c *Config) getSlack() (*notification.Slack, error) {
+	slack := new(notification.Slack)
+	err := slack.Init(c.SlackWebhookURL, c.SlackWebhookPrefix, c.SlackNotifyOnFailureOnly)
+	return slack, err
+}
+
+func (c *Config) getSMTP() (*notification.SMTP, error) {
+	smtpNotification := new(notification.SMTP)
+	err := smtpNotification.Init(c.SMTPHost, c.SMTPPort, c.SMTPUsername, c.SMTPPassword, c.SMTPFrom, c.SMTPTo, c.SMTPSubjectPrefix, c.SMTPNotifyOnFailureOnly)
+	return smtpNotification, err
+}
+
+func (c *Config) getSES() (*notification.SES, error) {
+	sesNotification := new(notification.SES)
+	err := sesNotification.Init(c.SESEndpoint, c.SESRegion, c.SESAccessKeyID, c.SESSecretAccessKey, c.SESFrom, c.SESTo, c.SESSubjectPrefix, c.SESNotifyOnFailureOnly)
+	return sesNotification, err
+}
+
+func (c *Config) GetNotifications() []notification.Notification {
 	notifications := make([]notification.Notification, 0)
 
-	if useRocketChat() {
-		rc, _ := getRocketChat()
-		if rc != nil {
+	if c.useRocketChat() {
+		rc, err := c.getRocketChat()
+		if err != nil {
+			mlog.Logvf(mlog.Always, "Failed to initialize RocketChat notification: %v", err)
+		} else if rc != nil {
 			mlog.Logvf(mlog.Always, "Found Notification Option: %v", "RocketChat")
 			notifications = append(notifications, rc)
+		}
+	}
+
+	if c.useSlack() {
+		slack, err := c.getSlack()
+		if err != nil {
+			mlog.Logvf(mlog.Always, "Failed to initialize Slack notification: %v", err)
+		} else if slack != nil {
+			mlog.Logvf(mlog.Always, "Found Notification Option: %v", "Slack")
+			notifications = append(notifications, slack)
+		}
+	}
+
+	if c.useSMTP() {
+		smtpNotification, err := c.getSMTP()
+		if err != nil {
+			mlog.Logvf(mlog.Always, "Failed to initialize SMTP notification: %v", err)
+		} else if smtpNotification != nil {
+			mlog.Logvf(mlog.Always, "Found Notification Option: %v", "SMTP")
+			notifications = append(notifications, smtpNotification)
+		}
+	}
+
+	if c.useSES() {
+		sesNotification, err := c.getSES()
+		if err != nil {
+			mlog.Logvf(mlog.Always, "Failed to initialize SES notification: %v", err)
+		} else if sesNotification != nil {
+			mlog.Logvf(mlog.Always, "Found Notification Option: %v", "SES")
+			notifications = append(notifications, sesNotification)
 		}
 	}
 
 	return notifications
 }
 
-func GetLocation() *time.Location {
-	return loc
+func (c *Config) GetLocation() *time.Location {
+	return c.Location
 }
 
-func GetCronExpression() string {
-	return cronExpression
+func (c *Config) GetCronExpression() string {
+	if c.CronExpression == "" {
+		return defaultCronExpr
+	}
+
+	return c.CronExpression
 }
 
-func HasCron() bool {
-	return *cronPtr
+func (c *Config) HasCron() bool {
+	return c.Cron
 }
 
-func HasKeep() bool {
-	return *keepPtr
+func (c *Config) HasKeep() bool {
+	return c.Keep
 }
 
-func useAzure() bool {
-	return *azAccountNamePtr != "" && *azAccountKeyPtr != "" && *azContainerNamePtr != ""
+func (c *Config) useRocketChat() bool {
+	return c.RocketChatWebhookURL != ""
 }
 
-func useAWS() bool {
-	return *awsAccessKeyIdPtr != "" && *awsSecretAccessKeyPtr != "" && *awsBucketPtr != ""
+func (c *Config) useSlack() bool {
+	return c.SlackWebhookURL != ""
 }
 
-func useGCP() bool {
-	return *gcpBucketPtr != ""
+func (c *Config) useSMTP() bool {
+	return c.SMTPHost != "" || c.SMTPFrom != "" || c.SMTPTo != ""
 }
 
-func useLocal() bool {
-	return *localPathPtr != ""
-}
-
-func useRocketChat() bool {
-	return *rocketChatWebhookUrlPtr != ""
+func (c *Config) useSES() bool {
+	return c.SESFrom != "" || c.SESTo != ""
 }

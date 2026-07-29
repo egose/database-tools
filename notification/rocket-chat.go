@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
+
+const webhookTimeout = 10 * time.Second
 
 type RocketChat struct {
 	WebhookUrl          string
@@ -22,57 +25,30 @@ func (this *RocketChat) Init(webhookUrl, webhookPrefix string, notifyOnFailureOn
 }
 
 func (this *RocketChat) Send(success bool, loc *time.Location, filenameOrError string) error {
-	var text string
-	var color string
-	var status string
-	var filenameOrErrorLabel string
-
-	if success {
-		if this.notifyOnFailureOnly {
-			return nil
-		}
-
-		msg := "Database archiving completed successfully"
-		if this.WebhookPrefix != "" {
-			text = fmt.Sprintf("%s %s", this.WebhookPrefix, msg)
-		} else {
-			text = msg
-		}
-		color = "#00AA00"
-		status = "Success"
-		filenameOrErrorLabel = "Filename"
-	} else {
-		msg := "Database archiving failed"
-		if this.WebhookPrefix != "" {
-			text = fmt.Sprintf("%s %s", this.WebhookPrefix, msg)
-		} else {
-			text = msg
-		}
-		color = "#FF0000"
-		status = "Failure"
-		filenameOrErrorLabel = "Error"
+	if success && this.notifyOnFailureOnly {
+		return nil
 	}
 
-	currentTime := time.Now().In(loc).Format("2006-01-02 15:04:05")
+	msg := BuildMessage(success, loc, this.WebhookPrefix, filenameOrError)
 	attachments := []map[string]interface{}{
 		{
 			"title": "Details",
 			"text":  "",
-			"color": color,
+			"color": msg.Color,
 			"fields": []map[string]interface{}{
 				{
 					"title": "Status",
-					"value": status,
+					"value": msg.Status,
 					"short": false,
 				},
 				{
 					"title": "Time",
-					"value": currentTime,
+					"value": msg.CurrentTime,
 					"short": false,
 				},
 				{
-					"title": filenameOrErrorLabel,
-					"value": filenameOrError,
+					"title": msg.FilenameOrErrorLabel,
+					"value": msg.FilenameOrError,
 					"short": false,
 				},
 			},
@@ -80,7 +56,7 @@ func (this *RocketChat) Send(success bool, loc *time.Location, filenameOrError s
 	}
 
 	payload := map[string]interface{}{
-		"text":        text,
+		"text":        msg.Text,
 		"attachments": attachments,
 	}
 
@@ -96,12 +72,17 @@ func (this *RocketChat) Send(success bool, loc *time.Location, filenameOrError s
 
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	client := &http.Client{Timeout: webhookTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("Error sending request: %v", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unexpected webhook response status %d: %s", resp.StatusCode, string(body))
+	}
 
 	return nil
 }

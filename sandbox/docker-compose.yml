@@ -54,7 +54,7 @@ services:
     platform: linux/amd64
     container_name: database-tools-azurite
     # See https://github.com/Azure/Azurite/tags
-    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+    image: mcr.microsoft.com/azure-storage/azurite:3.36.0
     restart: always
     environment:
       AZURITE_ACCOUNTS: ${AZURITE_ACCOUNT_NAME}:${AZURITE_ACCOUNT_KEY}
@@ -65,14 +65,14 @@ services:
     - type: bind
       source: ./mnt/azurite
       target: /home/host
-    command: azurite --blobHost 0.0.0.0 --blobPort 10000 --location /home/host --debug /home/host/azure.log
+    command: azurite --blobHost 0.0.0.0 --blobPort 10000 --location /home/host --debug /home/host/azure.log --skipApiVersionCheck
 
   # See https://github.com/fsouza/fake-gcs-server
   # See https://hub.docker.com/r/fsouza/fake-gcs-server/tags
   fake-gcs-server:
     platform: linux/amd64
     container_name: database-tools-fake-gcs-server
-    image: fsouza/fake-gcs-server:1.54.0
+    image: fsouza/fake-gcs-server:1.55.1
     restart: always
     ports:
     - ${FAKE_GCP_PORT}:${FAKE_GCP_PORT}
@@ -83,5 +83,5 @@ services:
     entrypoint: >
       /bin/sh -c "
        mkdir -p /data/${FAKE_GCP_BUCKET};
-      /bin/fake-gcs-server -data /data -scheme http -port ${FAKE_GCP_PORT} -public-host localhost:${FAKE_GCP_PORT} -backend memory;
+      exec /bin/fake-gcs-server -data /data -scheme http -port ${FAKE_GCP_PORT} -public-host localhost:${FAKE_GCP_PORT};
       "
