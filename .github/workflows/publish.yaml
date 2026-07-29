@@ -11,7 +11,7 @@ env:
 
 jobs:
   build-push:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       actions: read
@@ -19,13 +19,13 @@ jobs:
       security-events: write
 
     steps:
-    - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
     - name: Setup Tools
       uses: ./.github/actions/setup-tools
 
     - name: Build and Push
-      uses: egose/actions/docker-build-push@9a09f2377dc8c8b8f8cfacc5f695448999670434
+      uses: egose/actions/docker-build-push@799b388fb3497236093c6eb7e3eac0b4c8f956ce
       with:
         registry-url: ${{ env.DOCKER_REGISTRY }}
         registry-username: ${{ github.actor }}
