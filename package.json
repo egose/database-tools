@@ -8,8 +8,7 @@
     "test": "test"
   },
   "scripts": {
-    "release": "release-it",
-    "changelog": "conventional-changelog -p conventionalcommits -i CHANGELOG.md -n .conventional-changelog.mjs -s -r 0 --skip-unstable"
+    "changelog": "repo-toolkit-changelog"
   },
   "repository": {
     "type": "git",
