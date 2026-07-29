@@ -16,6 +16,11 @@ func Tar(root string, destPath string) error {
 		return err
 	}
 
+	err = os.MkdirAll(filepath.Dir(destPath), os.ModePerm)
+	if err != nil {
+		return err
+	}
+
 	paths, err := getChildren(root)
 	if err != nil {
 		return err
@@ -31,6 +36,11 @@ func Tar(root string, destPath string) error {
 
 func UnTar(filePath string, destPath string) error {
 	err := DeleteDirectory(destPath)
+	if err != nil {
+		return err
+	}
+
+	err = os.MkdirAll(destPath, os.ModePerm)
 	if err != nil {
 		return err
 	}

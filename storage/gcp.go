@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -46,8 +47,7 @@ func (this *GcpStorage) Init(endpoint, bucket, credsPath, projectID, privateKeyI
 	ctx := context.Background()
 
 	if endpoint != "" {
-		// See https://pkg.go.dev/google.golang.org/api/option#WithEndpoint
-		client, err := storage.NewClient(ctx, option.WithEndpoint(endpoint))
+		client, err := newEmulatorStorageClient(ctx, endpoint)
 		if err != nil {
 			return err
 		}
@@ -111,6 +111,35 @@ func (this *GcpStorage) Init(endpoint, bucket, credsPath, projectID, privateKeyI
 	this.StorageClient = client
 
 	return nil
+}
+
+func newEmulatorStorageClient(ctx context.Context, endpoint string) (*storage.Client, error) {
+	endpoint = normalizeEndpoint(endpoint)
+	previous, hadPrevious := os.LookupEnv("STORAGE_EMULATOR_HOST")
+	if err := os.Setenv("STORAGE_EMULATOR_HOST", endpoint); err != nil {
+		return nil, err
+	}
+
+	client, err := storage.NewClient(ctx, option.WithoutAuthentication())
+
+	if hadPrevious {
+		_ = os.Setenv("STORAGE_EMULATOR_HOST", previous)
+	} else {
+		_ = os.Unsetenv("STORAGE_EMULATOR_HOST")
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func normalizeEndpoint(endpoint string) string {
+	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
+	endpoint = strings.TrimSuffix(endpoint, "/upload/storage/v1")
+	endpoint = strings.TrimSuffix(endpoint, "/storage/v1")
+	return endpoint
 }
 
 func (this *GcpStorage) Close() {

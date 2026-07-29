@@ -121,7 +121,7 @@ func copyFile(sourceFile string, destFile string) error {
 	}
 	defer source.Close()
 
-	destination, err := os.Create(destFile)
+	destination, err := utils.CreateFile(destFile)
 	if err != nil {
 		return err
 	}
