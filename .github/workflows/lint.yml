@@ -6,6 +6,9 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write
+
 jobs:
   pre-commit:
     runs-on: ubuntu-24.04
@@ -19,5 +22,5 @@ jobs:
       uses: egose/actions/precommit@799b388fb3497236093c6eb7e3eac0b4c8f956ce
       with:
         config: .pre-commit-config.yaml
-        commit-on-push: false
+        commit-on-push: true
         commit-on-pr: false
