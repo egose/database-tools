@@ -35,4 +35,4 @@ jobs:
           type=semver,pattern={{version}}
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
-        trivy: true
+        trivy: false
