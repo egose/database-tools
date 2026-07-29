@@ -54,7 +54,7 @@ services:
     platform: linux/amd64
     container_name: database-tools-azurite
     # See https://github.com/Azure/Azurite/tags
-    image: mcr.microsoft.com/azure-storage/azurite:3.35.0
+    image: mcr.microsoft.com/azure-storage/azurite:3.36.0
     restart: always
     environment:
       AZURITE_ACCOUNTS: ${AZURITE_ACCOUNT_NAME}:${AZURITE_ACCOUNT_KEY}
@@ -72,7 +72,7 @@ services:
   fake-gcs-server:
     platform: linux/amd64
     container_name: database-tools-fake-gcs-server
-    image: fsouza/fake-gcs-server:1.54.0
+    image: fsouza/fake-gcs-server:1.55.1
     restart: always
     ports:
     - ${FAKE_GCP_PORT}:${FAKE_GCP_PORT}
