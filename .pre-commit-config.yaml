@@ -39,7 +39,7 @@ repos:
     pass_filenames: true
     require_serial: true
     files: \.(ts|tsx|js|jsx|json|css|scss|md|html)$
-    exclude: .git/COMMIT_EDITMSG
+    exclude: ^(\.git/COMMIT_EDITMSG|flags\.md)$
   - id: gofmt
     name: gofmt
     entry: .bin/gofmt.sh
