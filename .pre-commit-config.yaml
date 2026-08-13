@@ -22,8 +22,14 @@ repos:
   rev: 68e8b45440415753fff70a312ece8da92ba85b4a  # pragma: allowlist secret; frozen: v1.5.0
   hooks:
   - id: detect-secrets
-    args: [--baseline, .secrets.baseline, --exclude-files]
-    exclude: ^(pnpm-lock\.yaml|.*/pnpm-lock\.yaml)$
+    args: [--baseline, .secrets.baseline]
+    exclude: |
+      (?x)^(
+          pnpm-lock\.yaml$ |
+          .*/pnpm-lock\.yaml$ |
+          .env.example$ |
+          README.md$
+      )
 - repo: local
   hooks:
   - id: prettier
@@ -33,7 +39,7 @@ repos:
     pass_filenames: true
     require_serial: true
     files: \.(ts|tsx|js|jsx|json|css|scss|md|html)$
-    exclude: .git/COMMIT_EDITMSG
+    exclude: ^(\.git/COMMIT_EDITMSG|flags\.md)$
   - id: gofmt
     name: gofmt
     entry: .bin/gofmt.sh

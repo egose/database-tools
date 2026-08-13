@@ -1,9 +1,10 @@
 package notification
 
 import (
+	"context"
 	"time"
 )
 
 type Notification interface {
-	Send(bool, *time.Location, string) error
+	Send(context.Context, bool, *time.Location, string) error
 }

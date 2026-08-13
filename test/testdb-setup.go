@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/joho/godotenv"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
@@ -22,8 +21,6 @@ type Person struct {
 }
 
 func main() {
-	godotenv.Load(".env.test")
-
 	// Set up client options and connect to MongoDB
 	databaseUrl := os.Getenv("DATABASE_URL")
 	clientOptions := options.Client().ApplyURI(databaseUrl)

@@ -20,6 +20,7 @@
     "url": "https://github.com/egose/database-tools/issues"
   },
   "homepage": "https://github.com/egose/database-tools#readme",
+  "packageManager": "pnpm@11.17.0",
   "engines": {
     "node": ">=22.1.0"
   },

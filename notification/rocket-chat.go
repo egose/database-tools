@@ -1,30 +1,32 @@
 package notification
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
+	"context"
 	"time"
 )
 
-const webhookTimeout = 10 * time.Second
-
 type RocketChat struct {
-	WebhookUrl          string
-	WebhookPrefix       string
-	notifyOnFailureOnly bool
+	WebhookUrl                            string
+	WebhookPrefix                         string
+	AllowInsecureWebhookHTTPInDevelopment bool
+	Client                                httpDoer
+	notifyOnFailureOnly                   bool
 }
 
-func (this *RocketChat) Init(webhookUrl, webhookPrefix string, notifyOnFailureOnly bool) error {
+func (this *RocketChat) Init(webhookUrl, webhookPrefix string, notifyOnFailureOnly bool, allowInsecureWebhookHTTPInDevelopment bool) error {
+	if err := validateHTTPSURL(webhookUrl, allowInsecureWebhookHTTPInDevelopment, "Rocket.Chat webhook URL"); err != nil {
+		return err
+	}
+
 	this.WebhookUrl = webhookUrl
 	this.WebhookPrefix = webhookPrefix
+	this.AllowInsecureWebhookHTTPInDevelopment = allowInsecureWebhookHTTPInDevelopment
+	this.Client = httpClientOrDefault(this.Client)
 	this.notifyOnFailureOnly = notifyOnFailureOnly
 	return nil
 }
 
-func (this *RocketChat) Send(success bool, loc *time.Location, filenameOrError string) error {
+func (this *RocketChat) Send(ctx context.Context, success bool, loc *time.Location, filenameOrError string) error {
 	if success && this.notifyOnFailureOnly {
 		return nil
 	}
@@ -60,29 +62,5 @@ func (this *RocketChat) Send(success bool, loc *time.Location, filenameOrError s
 		"attachments": attachments,
 	}
 
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("Error encoding JSON: %v", err)
-	}
-
-	req, err := http.NewRequest("POST", this.WebhookUrl, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return fmt.Errorf("Error creating request: %v", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: webhookTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("Error sending request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected webhook response status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return sendWebhookJSON(ctx, this.Client, this.WebhookUrl, payload)
 }

@@ -18,5 +18,5 @@ runs:
         pnpm-${{ runner.os }}-
 
   - name: Install packages
-    run: pnpm install
+    run: pnpm install --frozen-lockfile
     shell: bash

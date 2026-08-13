@@ -1,7 +1,8 @@
 SHELL := /usr/bin/env bash
+DIST_DIR := dist
+TOOLS_DIR := tmp/bin
+GOVULNCHECK := $(TOOLS_DIR)/govulncheck
 
-DIRS := $(wildcard dist/*/)
-ARCHIVES := $(patsubst dist/%/,dist/%.tar.gz,$(DIRS))
 PREFIX := database-tools
 VERSION := localdev
 
@@ -23,8 +24,21 @@ OS_ARCH_PAIRS := \
     netbsd:amd64
 
 # See https://www.digitalocean.com/community/tutorials/how-to-build-go-executables-for-multiple-platforms-on-ubuntu-16-04#step-4-building-executables-for-different-architectures
+
+.PHONY: build-all build-single build-archive release-verify
+
 build-all:
-	@$(foreach pair, $(OS_ARCH_PAIRS), $(MAKE) build-single OS_ARCH=$(pair);)
+	@set -euo pipefail; \
+	for pair in $(OS_ARCH_PAIRS); do \
+		$(MAKE) --no-print-directory build-single OS_ARCH=$$pair VERSION=$(VERSION); \
+		os=$${pair%%:*}; \
+		arch=$${pair##*:}; \
+		ext=""; \
+		if [ "$$os" = "windows" ]; then ext=".exe"; fi; \
+		test -s "$(DIST_DIR)/$$os-$$arch/mongo-archive$$ext"; \
+		test -s "$(DIST_DIR)/$$os-$$arch/mongo-unarchive$$ext"; \
+	done; \
+	echo complete
 
 build-single:
 	@set -e; \
@@ -38,6 +52,20 @@ build-single:
 	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -ldflags "-X \"main.version=$(VERSION) $${OS}-$${ARCH}\"" -o $$DIR/mongo-archive$$EXT ./mongoarchive/main/mongoarchive.go &&\
 	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -ldflags "-X \"main.version=$(VERSION) $${OS}-$${ARCH}\"" -o $$DIR/mongo-unarchive$$EXT ./mongounarchive/main/mongounarchive.go
 	echo complete
+$(GOVULNCHECK):
+	@mkdir -p "$(TOOLS_DIR)"
+	GOBIN="$(CURDIR)/$(TOOLS_DIR)" go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+
+release-verify: $(GOVULNCHECK)
+	pnpm install --frozen-lockfile
+	go test -shuffle=on ./...
+	go test -race -shuffle=on ./...
+	go vet ./...
+	go mod verify
+	./scripts/release-govulncheck.sh "$(CURDIR)/$(GOVULNCHECK)" ./...
+	docker buildx build --check .
+	$(MAKE) --no-print-directory build-all VERSION=$(VERSION)
+	$(MAKE) --no-print-directory build-archive VERSION=$(VERSION)
 
 .PHONY: build
 build:
@@ -45,10 +73,18 @@ build:
 	CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o dist/mongo-unarchive ./mongounarchive/main/mongounarchive.go
 	echo complete
 
-build-archive: $(ARCHIVES)
-dist/%.tar.gz: dist/%
-	tar -czvf $@ -C dist/$* .
-	mv $@ dist/$(PREFIX)-$*.tar.gz
+build-archive:
+	@set -euo pipefail; \
+	for pair in $(OS_ARCH_PAIRS); do \
+		os=$${pair%%:*}; \
+		arch=$${pair##*:}; \
+		dir="$(DIST_DIR)/$$os-$$arch"; \
+		archive="$(DIST_DIR)/$(PREFIX)-$$os-$$arch.tar.gz"; \
+		test -d "$$dir"; \
+		tar -czvf "$$archive" -C "$$dir" .; \
+		test -s "$$archive"; \
+	done; \
+	echo complete
 
 
 .PHONY: format

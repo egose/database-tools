@@ -2,6 +2,8 @@ package notification
 
 import (
 	"fmt"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -22,7 +24,7 @@ func BuildMessage(success bool, loc *time.Location, prefix string, filenameOrErr
 	}
 
 	msg := Message{
-		FilenameOrError: filenameOrError,
+		FilenameOrError: redactSensitiveText(filenameOrError),
 		CurrentTime:     timestamp.Format("2006-01-02 15:04:05"),
 	}
 
@@ -51,4 +53,69 @@ func joinPrefix(prefix string, text string) string {
 	}
 
 	return strings.TrimSpace(prefix) + " " + text
+}
+
+var uriPattern = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://[^\s]+`)
+
+func redactSensitiveText(raw string) string {
+	return uriPattern.ReplaceAllStringFunc(raw, redactSensitiveURI)
+}
+
+func redactSensitiveURI(raw string) string {
+	uri, suffix := trimTrailingURIJunk(raw)
+	sanitized := pruneURIUserInfo(uri)
+
+	parsed, err := url.Parse(sanitized)
+	if err == nil && parsed.RawQuery != "" {
+		query := parsed.Query()
+		changed := false
+		for key := range query {
+			if isSensitiveQueryKey(key) {
+				query.Set(key, "REDACTED")
+				changed = true
+			}
+		}
+		if changed {
+			parsed.RawQuery = query.Encode()
+			sanitized = parsed.String()
+		}
+	}
+
+	return sanitized + suffix
+}
+
+func trimTrailingURIJunk(raw string) (string, string) {
+	trimmed := strings.TrimRight(raw, ".,;:!?)")
+	return trimmed, raw[len(trimmed):]
+}
+
+func pruneURIUserInfo(raw string) string {
+	schemeIndex := strings.Index(raw, "://")
+	if schemeIndex == -1 {
+		return raw
+	}
+
+	authorityStart := schemeIndex + len("://")
+	remainder := raw[authorityStart:]
+	authorityEnd := strings.IndexAny(remainder, "/?#")
+	if authorityEnd == -1 {
+		authorityEnd = len(remainder)
+	}
+
+	authority := remainder[:authorityEnd]
+	atIndex := strings.LastIndex(authority, "@")
+	if atIndex == -1 {
+		return raw
+	}
+
+	return raw[:authorityStart] + authority[atIndex+1:] + remainder[authorityEnd:]
+}
+
+func isSensitiveQueryKey(key string) bool {
+	switch strings.ToLower(key) {
+	case "access_token", "accountkey", "awsaccesskeyid", "password", "passwd", "pwd", "sig", "signature", "token", "x-amz-security-token", "x-amz-signature", "x-goog-credential", "x-goog-security-token", "x-goog-signature":
+		return true
+	default:
+		return false
+	}
 }

@@ -7,7 +7,53 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  go-test-cover:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+    - name: Setup Tools
+      uses: ./.github/actions/setup-tools
+
+    - name: Run go test with coverage
+      run: go test -shuffle=on -coverprofile=coverage.out ./...
+
+    - name: Enforce coverage floor
+      run: |
+        total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); print $3}')
+        minimum=17.5
+        printf 'total coverage: %s%%\n' "$total"
+        awk -v total="$total" -v minimum="$minimum" 'BEGIN { if (total + 0 < minimum + 0) { exit 1 } }'
+
+    - name: Upload coverage artifact
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: coverage.out
+        path: coverage.out
+
+  go-test-race:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+    - name: Setup Tools
+      uses: ./.github/actions/setup-tools
+
+    - name: Run go test with race detector
+      run: go test -race -shuffle=on ./...
+
+  go-vet:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+    - name: Setup Tools
+      uses: ./.github/actions/setup-tools
+
+    - name: Run go vet
+      run: go vet ./...
+
+  integration-bats:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -18,7 +64,7 @@ jobs:
     - name: Setup NPM Packages
       uses: ./.github/actions/setup-npm
 
-    - name: Run test
+    - name: Start integration services
       run: |
         mkdir -p ./sandbox/mnt/mongodb
         mkdir -p ./sandbox/mnt/minio
@@ -26,27 +72,46 @@ jobs:
         mkdir -p ./sandbox/mnt/fake-gcs-server
 
         cp .env.example .env.test
+        set -a
+        source .env.test
+        set +a
 
         export MACHINE_HOST_IP=$(hostname -I | awk '{print $1}')
         docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml up -d
-        node_modules/.bin/wait-on tcp::27017 --timeout 120000
-        node_modules/.bin/wait-on http://localhost:9001 --timeout 120000
 
+        node_modules/.bin/wait-on tcp:127.0.0.1:27017 tcp:127.0.0.1:9000 http://localhost:9001 tcp:127.0.0.1:10000 tcp:127.0.0.1:$FAKE_GCP_PORT --timeout 120000
+        for attempt in $(seq 1 60); do
+          if output=$(mongosh "$DATABASE_URL" --quiet --eval 'db.adminCommand({ ping: 1 }).ok' 2>/dev/null) && [ "$output" = "1" ]; then
+            break
+          fi
+          if [ "$attempt" -eq 60 ]; then
+            mongosh "$DATABASE_URL" --eval 'db.adminCommand({ ping: 1 })'
+            exit 1
+          fi
+          sleep 2
+        done
+        curl -fsS http://localhost:9000/minio/health/live >/dev/null
+
+    - name: Run Bats suite
+      run: |
         bats test
 
-        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml down
+    - name: Capture service logs
+      if: always()
+      run: |
+        mkdir -p ./sandbox/test-logs
+        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml ps > ./sandbox/test-logs/compose-ps.txt || true
+        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml logs --no-color > ./sandbox/test-logs/compose.log || true
+
+    - name: Upload integration logs
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: integration-service-logs
+        path: ./sandbox/test-logs
+
+    - name: Cleanup integration services
+      if: always()
+      run: |
+        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml down -v --remove-orphans || true
         sudo rm -rf ./sandbox/mnt
-    #
-    # Keep old test script
-    # - name: Run test
-    #   run: |
-    #     mkdir -p ./dist/mongo/db
-    #     mongod --fork --dbpath ./dist/mongo/db --logpath ./dist/mongo/mongod.log
-    #
-    #     until nc -z 127.0.0.1 27017
-    #     do
-    #       echo "Waiting for MongoDB to be ready..."
-    #       sleep 1
-    #     done
-    #
-    #     bats test

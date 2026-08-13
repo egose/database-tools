@@ -83,83 +83,34 @@ mongo-unarchive --version
 
 Both `mongo-archive` and `mongo-unarchive` follow the conventions of MongoDB’s native tools (e.g., `mongodump`, `mongorestore`), using similar command-line arguments. Configuration values can also be passed via environment variables for convenience or container-based execution.
 
+The authoritative flag reference lives in [`flags.md`](./flags.md). It is verified by tests against the current flag definitions so documentation drift is caught during CI.
+
 ## 📦 `mongo-archive`
 
 ### Functionality
 
 - Dumps MongoDB data locally.
 - Uploads the dump to cloud storage (Azure Blob, AWS S3, or Google Cloud Storage).
-- Can be run once or as a cron-scheduled job.
+- Can be run once or as a cron-scheduled job. Scheduled runs skip overlapping executions for the same job while a prior run is still active.
 
-### Parameters
+### Managed Backup Object Contract
 
-| Flag                                | Environment Variable                              | Type   | Description                                                          |
-| ----------------------------------- | ------------------------------------------------- | ------ | -------------------------------------------------------------------- |
-| `uri`                               | `MONGOARCHIVE__URI`                               | string | MongoDB URI connection string                                        |
-| `db`                                | `MONGOARCHIVE__DB`                                | string | Database to use                                                      |
-| `collection`                        | `MONGOARCHIVE__COLLECTION`                        | string | Collection to use                                                    |
-| `host`                              | `MONGOARCHIVE__HOST`                              | string | MongoDB host to connect to (for replica sets: `setname/host1,host2`) |
-| `port`                              | `MONGOARCHIVE__PORT`                              | string | MongoDB port (can also use `--host hostname:port`)                   |
-| `ssl`                               | `MONGOARCHIVE__SSL`                               | bool   | Connect to a mongod or mongos that has SSL enabled                   |
-| `ssl-ca-file`                       | `MONGOARCHIVE__SSL_CA_FILE`                       | string | `.pem` file containing the root certificate chain from the CA        |
-| `ssl-pem-key-file`                  | `MONGOARCHIVE__SSL_PEM_KEY_FILE`                  | string | `.pem` file containing the certificate and key                       |
-| `ssl-pem-key-password`              | `MONGOARCHIVE__SSL_PEM_KEY_PASSWORD`              | string | Password to decrypt the `sslPEMKeyFile`                              |
-| `ssl-crl-file`                      | `MONGOARCHIVE__SSL_CRL_FILE`                      | string | `.pem` file containing the certificate revocation list               |
-| `ssl-allow-invalid-certificates`    | `MONGOARCHIVE__SSL_ALLOW_INVALID_CERTIFICATES`    | bool   | Bypass validation for server certificates                            |
-| `ssl-allow-invalid-hostnames`       | `MONGOARCHIVE__SSL_ALLOW_INVALID_HOSTNAMES`       | bool   | Bypass validation for server hostnames                               |
-| `ssl-fips-mode`                     | `MONGOARCHIVE__SSL_FIPS_MODE`                     | bool   | Use FIPS mode of the installed OpenSSL library                       |
-| `username`                          | `MONGOARCHIVE__USERNAME`                          | string | Username for authentication                                          |
-| `password`                          | `MONGOARCHIVE__PASSWORD`                          | string | Password for authentication                                          |
-| `authentication-database`           | `MONGOARCHIVE__AUTHENTICATION_DATABASE`           | string | Database that holds the user's credentials                           |
-| `authentication-mechanism`          | `MONGOARCHIVE__AUTHENTICATION_MECHANISM`          | string | Authentication mechanism to use                                      |
-| `gssapi-service-name`               | `MONGOARCHIVE__GSSAPI_SERVICE_NAME`               | string | Service name for GSSAPI/Kerberos auth (default: `mongodb`)           |
-| `gssapi-host-name`                  | `MONGOARCHIVE__GSSAPI_HOST_NAME`                  | string | Hostname for GSSAPI/Kerberos auth (default: server address)          |
-| `uri-prune`                         | `MONGOARCHIVE__URI_PRUNE`                         | bool   | Prune MongoDB URI connection string (remove credentials etc.)        |
-| `query`                             | `MONGOARCHIVE__QUERY`                             | string | Query filter as v2 Extended JSON string                              |
-| `query-file`                        | `MONGOARCHIVE__QUERY_FILE`                        | string | Path to file containing query filter (v2 Extended JSON)              |
-| `read-preference`                   | `MONGOARCHIVE__READ_PREFERENCE`                   | string | Preference mode (e.g., `nearest`) or preference JSON object          |
-| `force-table-scan`                  | `MONGOARCHIVE__FORCE_TABLE_SCAN`                  | bool   | Force a table scan                                                   |
-| `verbose`                           | `MONGOARCHIVE__VERBOSE`                           | string | More detailed log output (`-vvvvv` or `--verbose=N`)                 |
-| `quiet`                             | `MONGOARCHIVE__QUIET`                             | bool   | Hide all log output                                                  |
-| `az-endpoint`                       | `MONGOARCHIVE__AZ_ENDPOINT`                       | string | Azure Blob Storage emulator hostname and port                        |
-| `az-account-name`                   | `MONGOARCHIVE__AZ_ACCOUNT_NAME`                   | string | Azure Blob Storage account name                                      |
-| `az-account-key`                    | `MONGOARCHIVE__AZ_ACCOUNT_KEY`                    | string | Azure Blob Storage account key                                       |
-| `az-container-name`                 | `MONGOARCHIVE__AZ_CONTAINER_NAME`                 | string | Azure Blob Storage container name                                    |
-| `aws-endpoint`                      | `MONGOARCHIVE__AWS_ENDPOINT`                      | string | AWS endpoint URL (hostname only or fully qualified URI)              |
-| `aws-access-key-id`                 | `MONGOARCHIVE__AWS_ACCESS_KEY_ID`                 | string | AWS access key associated with an IAM account                        |
-| `aws-secret-access-key`             | `MONGOARCHIVE__AWS_SECRET_ACCESS_KEY`             | string | AWS secret key associated with the access key                        |
-| `aws-region`                        | `MONGOARCHIVE__AWS_REGION`                        | string | AWS region to send requests to                                       |
-| `aws-bucket`                        | `MONGOARCHIVE__AWS_BUCKET`                        | string | AWS S3 bucket name                                                   |
-| `aws-s3-force-path-style`           | `MONGOARCHIVE__AWS_S3_FORCE_PATH_STYLE`           | bool   | Force path-style S3 addressing instead of virtual-hosted             |
-| `gcp-endpoint`                      | `MONGOARCHIVE__GCP_ENDPOINT`                      | string | GCP endpoint URL                                                     |
-| `gcp-bucket`                        | `MONGOARCHIVE__GCP_BUCKET`                        | string | GCP storage bucket name                                              |
-| `gcp-creds-file`                    | `MONGOARCHIVE__GCP_CREDS_FILE`                    | string | Path to GCP service account credentials file                         |
-| `gcp-project-id`                    | `MONGOARCHIVE__GCP_PROJECT_ID`                    | string | GCP project ID                                                       |
-| `gcp-private-key-id`                | `MONGOARCHIVE__GCP_PRIVATE_KEY_ID`                | string | GCP private key ID                                                   |
-| `gcp-private-key`                   | `MONGOARCHIVE__GCP_PRIVATE_KEY`                   | string | GCP private key                                                      |
-| `gcp-client-email`                  | `MONGOARCHIVE__GCP_CLIENT_EMAIL`                  | string | GCP client email                                                     |
-| `gcp-client-id`                     | `MONGOARCHIVE__GCP_CLIENT_ID`                     | string | GCP client ID                                                        |
-| `local-path`                        | `MONGOARCHIVE__LOCAL_PATH`                        | string | Local directory path to store backups                                |
-| `expiry-days`                       | `MONGOARCHIVE__EXPIRY_DAYS`                       | string | Max age (in days) for archives to be retained                        |
-| `rocketchat-webhook-url`            | `MONGOARCHIVE__ROCKETCHAT_WEBHOOK_URL`            | string | Rocket.Chat webhook URL                                              |
-| `rocketchat-webhook-prefix`         | `MONGOARCHIVE__ROCKETCHAT_WEBHOOK_PREFIX`         | string | Prefix for Rocket.Chat webhook messages                              |
-| `rocketchat-notify-on-failure-only` | `MONGOARCHIVE__ROCKETCHAT_NOTIFY_ON_FAILURE_ONLY` | bool   | Send Rocket.Chat notifications only on failure                       |
-| `slack-webhook-url`                 | `MONGOARCHIVE__SLACK_WEBHOOK_URL`                 | string | Slack webhook URL                                                    |
-| `slack-webhook-prefix`              | `MONGOARCHIVE__SLACK_WEBHOOK_PREFIX`              | string | Prefix for Slack messages                                            |
-| `slack-notify-on-failure-only`      | `MONGOARCHIVE__SLACK_NOTIFY_ON_FAILURE_ONLY`      | bool   | Send Slack notifications only on failure                             |
-| `smtp-host`                         | `MONGOARCHIVE__SMTP_HOST`                         | string | SMTP server host                                                     |
-| `smtp-port`                         | `MONGOARCHIVE__SMTP_PORT`                         | string | SMTP server port                                                     |
-| `smtp-username`                     | `MONGOARCHIVE__SMTP_USERNAME`                     | string | SMTP username                                                        |
-| `smtp-password`                     | `MONGOARCHIVE__SMTP_PASSWORD`                     | string | SMTP password                                                        |
-| `smtp-from`                         | `MONGOARCHIVE__SMTP_FROM`                         | string | SMTP sender address                                                  |
-| `smtp-to`                           | `MONGOARCHIVE__SMTP_TO`                           | string | Comma-separated SMTP recipient addresses                             |
-| `smtp-subject-prefix`               | `MONGOARCHIVE__SMTP_SUBJECT_PREFIX`               | string | Prefix for SMTP email subjects                                       |
-| `smtp-notify-on-failure-only`       | `MONGOARCHIVE__SMTP_NOTIFY_ON_FAILURE_ONLY`       | bool   | Send SMTP notifications only on failure                              |
-| `cron`                              | `MONGOARCHIVE__CRON`                              | bool   | Run a cron scheduler and block current execution path                |
-| `cron-expression`                   | `MONGOARCHIVE__CRON_EXPRESSION`                   | string | Cron schedule expression                                             |
-| `tz`                                | `MONGOARCHIVE__TZ`                                | string | User-specified time zone (see GNU `TZ` variable format)              |
-| `keep`                              | `MONGOARCHIVE__KEEP`                              | bool   | Keep data dump after completion                                      |
-| `version`                           | _(no env var)_                                    | bool   | Show the version and exit                                            |
+`mongo-archive` now stores managed backups under a dedicated prefix. By default that prefix is `mongo-archive/`, and it can be overridden with `--backup-prefix` or `MONGOARCHIVE__BACKUP_PREFIX`.
+
+- Managed backup object names use `<backup-prefix><generated-name>.tar.gz`.
+- Automatic latest-object selection and retention only consider objects inside that prefix whose filename matches the generated backup format.
+- Objects outside the prefix, or malformed objects inside the prefix, are ignored by automatic selection and retention.
+- New uploads are verified before retention runs, so a failed upload does not trigger deletions.
+- Existing legacy backups stored outside the managed prefix are no longer selected automatically; restore them by passing `--object-name` explicitly during `mongo-unarchive`.
+
+### Multi-Backend Archive Contract
+
+When more than one archive backend is configured, `mongo-archive` now runs in two phases:
+
+1. Upload the new archive to every configured backend.
+2. Run retention on each backend only after every upload succeeds.
+
+In one-shot mode, any upload or retention failure returns a nonzero exit. In cron mode, the scheduled run is logged as failed and failure notifications are sent while the scheduler keeps running. In both cases, the error output names which backends already received the new archive or completed retention so operators can see any partial state. A later backend failure can still leave the freshly uploaded archive on an earlier backend, but retention never starts until the upload phase succeeds for all configured backends.
 
 ## 🔄 `mongo-unarchive`
 
@@ -169,73 +120,15 @@ Both `mongo-archive` and `mongo-unarchive` follow the conventions of MongoDB’s
 - Restores the data to a MongoDB database.
 - Supports applying update operations post-restore using a JSON configuration.
 
-### Parameters
+### Archive Extraction Limits
 
-| Flag                                   | Environment Variable                                   | Type   | Description                                                                                                                       |
-| -------------------------------------- | ------------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| `verbose`                              | `MONGOUNARCHIVE__VERBOSE`                              | string | More detailed log output (`-vvvvv` or `--verbose=N`)                                                                              |
-| `quiet`                                | `MONGOUNARCHIVE__QUIET`                                | bool   | Hide all log output                                                                                                               |
-| `host`                                 | `MONGOUNARCHIVE__HOST`                                 | string | MongoDB host to connect to (for replica sets: `setname/host1,host2`)                                                              |
-| `port`                                 | `MONGOUNARCHIVE__PORT`                                 | string | MongoDB port (can also use `--host hostname:port`)                                                                                |
-| `ssl`                                  | `MONGOUNARCHIVE__SSL`                                  | bool   | Connect to a mongod or mongos that has SSL enabled                                                                                |
-| `ssl-ca-file`                          | `MONGOUNARCHIVE__SSL_CA_FILE`                          | string | `.pem` file containing the root certificate chain from the CA                                                                     |
-| `ssl-pem-key-file`                     | `MONGOUNARCHIVE__SSL_PEM_KEY_FILE`                     | string | `.pem` file containing the certificate and key                                                                                    |
-| `ssl-pem-key-password`                 | `MONGOUNARCHIVE__SSL_PEM_KEY_PASSWORD`                 | string | Password to decrypt the `sslPEMKeyFile`                                                                                           |
-| `ssl-crl-file`                         | `MONGOUNARCHIVE__SSL_CRL_FILE`                         | string | `.pem` file containing the certificate revocation list                                                                            |
-| `ssl-allow-invalid-certificates`       | `MONGOUNARCHIVE__SSL_ALLOW_INVALID_CERTIFICATES`       | bool   | Bypass validation for server certificates                                                                                         |
-| `ssl-allow-invalid-hostnames`          | `MONGOUNARCHIVE__SSL_ALLOW_INVALID_HOSTNAMES`          | bool   | Bypass validation for server hostnames                                                                                            |
-| `ssl-fips-mode`                        | `MONGOUNARCHIVE__SSL_FIPS_MODE`                        | bool   | Use FIPS mode of the installed OpenSSL library                                                                                    |
-| `username`                             | `MONGOUNARCHIVE__USERNAME`                             | string | Username for authentication                                                                                                       |
-| `password`                             | `MONGOUNARCHIVE__PASSWORD`                             | string | Password for authentication                                                                                                       |
-| `authentication-database`              | `MONGOUNARCHIVE__AUTHENTICATION_DATABASE`              | string | Database that holds the user's credentials                                                                                        |
-| `authentication-mechanism`             | `MONGOUNARCHIVE__AUTHENTICATION_MECHANISM`             | string | Authentication mechanism to use                                                                                                   |
-| `gssapi-service-name`                  | `MONGOUNARCHIVE__GSSAPI_SERVICE_NAME`                  | string | Service name for GSSAPI/Kerberos auth (default: `mongodb`)                                                                        |
-| `gssapi-host-name`                     | `MONGOUNARCHIVE__GSSAPI_HOST_NAME`                     | string | Hostname for GSSAPI/Kerberos auth (default: server address)                                                                       |
-| `uri`                                  | `MONGOUNARCHIVE__URI`                                  | string | MongoDB URI connection string                                                                                                     |
-| `uri-prune`                            | `MONGOUNARCHIVE__URI_PRUNE`                            | bool   | Prune MongoDB URI connection string (remove credentials etc.)                                                                     |
-| `db`                                   | `MONGOUNARCHIVE__DB`                                   | string | Database to use                                                                                                                   |
-| `collection`                           | `MONGOUNARCHIVE__COLLECTION`                           | string | Collection to use                                                                                                                 |
-| `ns-exclude`                           | `MONGOUNARCHIVE__NS_EXCLUDE`                           | string | Exclude matching namespaces                                                                                                       |
-| `ns-include`                           | `MONGOUNARCHIVE__NS_INCLUDE`                           | string | Include matching namespaces                                                                                                       |
-| `ns-from`                              | `MONGOUNARCHIVE__NS_FROM`                              | string | Rename matching namespaces (requires matching `ns-to`)                                                                            |
-| `ns-to`                                | `MONGOUNARCHIVE__NS_TO`                                | string | Rename matched namespaces (requires matching `ns-from`)                                                                           |
-| `drop`                                 | `MONGOUNARCHIVE__DROP`                                 | bool   | Drop each collection before import                                                                                                |
-| `dry-run`                              | `MONGOUNARCHIVE__DRY_RUN`                              | bool   | View summary without importing anything (recommended with verbosity)                                                              |
-| `write-concern`                        | `MONGOUNARCHIVE__WRITE_CONCERN`                        | string | Write concern options                                                                                                             |
-| `no-index-restore`                     | `MONGOUNARCHIVE__NO_INDEX_RESTORE`                     | bool   | Do not restore indexes                                                                                                            |
-| `no-options-restore`                   | `MONGOUNARCHIVE__NO_OPTIONS_RESTORE`                   | bool   | Do not restore collection options                                                                                                 |
-| `keep-index-version`                   | `MONGOUNARCHIVE__KEEP_INDEX_VERSION`                   | bool   | Do not update index version                                                                                                       |
-| `maintain-insertion-order`             | `MONGOUNARCHIVE__MAINTAIN_INSERTION_ORDER`             | bool   | Restore documents in the order they appear in the input source; also enables `--stopOnError` and restricts insertion workers to 1 |
-| `num-parallel-collections`             | `MONGOUNARCHIVE__NUM_PARALLEL_COLLECTIONS`             | string | Number of collections to restore in parallel (default: 4)                                                                         |
-| `num-insertion-workers-per-collection` | `MONGOUNARCHIVE__NUM_INSERTION_WORKERS_PER_COLLECTION` | string | Number of insert operations to run concurrently per collection (default: 1)                                                       |
-| `stop-on-error`                        | `MONGOUNARCHIVE__STOP_ON_ERROR`                        | bool   | Halt after any insertion error instead of continuing                                                                              |
-| `bypass-document-validation`           | `MONGOUNARCHIVE__BYPASS_DOCUMENT_VALIDATION`           | bool   | Bypass document validation                                                                                                        |
-| `preserve-uuid`                        | `MONGOUNARCHIVE__PRESERVE_UUID`                        | bool   | Preserve original collection UUIDs (requires `--drop`)                                                                            |
-| `az-endpoint`                          | `MONGOUNARCHIVE__AZ_ENDPOINT`                          | string | Azure Blob Storage emulator hostname and port                                                                                     |
-| `az-account-name`                      | `MONGOUNARCHIVE__AZ_ACCOUNT_NAME`                      | string | Azure Blob Storage account name                                                                                                   |
-| `az-account-key`                       | `MONGOUNARCHIVE__AZ_ACCOUNT_KEY`                       | string | Azure Blob Storage account key                                                                                                    |
-| `az-container-name`                    | `MONGOUNARCHIVE__AZ_CONTAINER_NAME`                    | string | Azure Blob Storage container name                                                                                                 |
-| `aws-endpoint`                         | `MONGOUNARCHIVE__AWS_ENDPOINT`                         | string | AWS endpoint URL (hostname only or fully qualified URI)                                                                           |
-| `aws-access-key-id`                    | `MONGOUNARCHIVE__AWS_ACCESS_KEY_ID`                    | string | AWS access key associated with an IAM account                                                                                     |
-| `aws-secret-access-key`                | `MONGOUNARCHIVE__AWS_SECRET_ACCESS_KEY`                | string | AWS secret key associated with the access key                                                                                     |
-| `aws-region`                           | `MONGOUNARCHIVE__AWS_REGION`                           | string | AWS region to send requests to                                                                                                    |
-| `aws-bucket`                           | `MONGOUNARCHIVE__AWS_BUCKET`                           | string | AWS S3 bucket name                                                                                                                |
-| `aws-s3-force-path-style`              | `MONGOUNARCHIVE__AWS_S3_FORCE_PATH_STYLE`              | bool   | Force path-style S3 addressing instead of virtual-hosted                                                                          |
-| `gcp-endpoint`                         | `MONGOUNARCHIVE__GCP_ENDPOINT`                         | string | GCP endpoint URL                                                                                                                  |
-| `gcp-bucket`                           | `MONGOUNARCHIVE__GCP_BUCKET`                           | string | GCP storage bucket name                                                                                                           |
-| `gcp-creds-file`                       | `MONGOUNARCHIVE__GCP_CREDS_FILE`                       | string | Path to GCP service account credentials file                                                                                      |
-| `gcp-project-id`                       | `MONGOUNARCHIVE__GCP_PROJECT_ID`                       | string | GCP project ID                                                                                                                    |
-| `gcp-private-key-id`                   | `MONGOUNARCHIVE__GCP_PRIVATE_KEY_ID`                   | string | GCP private key ID                                                                                                                |
-| `gcp-private-key`                      | `MONGOUNARCHIVE__GCP_PRIVATE_KEY`                      | string | GCP private key                                                                                                                   |
-| `gcp-client-email`                     | `MONGOUNARCHIVE__GCP_CLIENT_EMAIL`                     | string | GCP client email                                                                                                                  |
-| `gcp-client-id`                        | `MONGOUNARCHIVE__GCP_CLIENT_ID`                        | string | GCP client ID                                                                                                                     |
-| `local-path`                           | `MONGOUNARCHIVE__LOCAL_PATH`                           | string | Local directory path to store backups                                                                                             |
-| `object-name`                          | `MONGOUNARCHIVE__OBJECT_NAME`                          | string | Object name of the archived file in the storage (optional)                                                                        |
-| `dir`                                  | `MONGOUNARCHIVE__DIR`                                  | string | Directory containing the dumped files                                                                                             |
-| `updates`                              | `MONGOUNARCHIVE__UPDATES`                              | string | Array of update specifications in JSON string format                                                                              |
-| `updates-file`                         | `MONGOUNARCHIVE__UPDATES_FILE`                         | string | Path to a file containing an array of update specifications                                                                       |
-| `keep`                                 | `MONGOUNARCHIVE__KEEP`                                 | bool   | Keep data dump after completion                                                                                                   |
-| `version`                              | _(no env var)_                                         | bool   | Show the version and exit                                                                                                         |
+`mongo-unarchive` extracts only regular files and directories from `.tar.gz` backups. Absolute paths, `..` traversal, symlinks, hard links, devices, FIFOs, and other unsupported archive entries are rejected. Extraction is staged in a private directory and only moved into place after a full successful extract.
+
+| Environment Variable                      | Default        | Description                                                       |
+| ----------------------------------------- | -------------- | ----------------------------------------------------------------- |
+| `MONGOUNARCHIVE__ARCHIVE_MAX_ENTRIES`     | `100000`       | Maximum number of archive entries to extract.                     |
+| `MONGOUNARCHIVE__ARCHIVE_MAX_ENTRY_BYTES` | `34359738368`  | Maximum size in bytes for a single extracted file (32 GiB).       |
+| `MONGOUNARCHIVE__ARCHIVE_MAX_TOTAL_BYTES` | `274877906944` | Maximum combined size in bytes for all extracted files (256 GiB). |
 
 ## 🔔 Notifications
 
@@ -246,7 +139,7 @@ Both `mongo-archive` and `mongo-unarchive` follow the conventions of MongoDB’s
 - SMTP email
 - AWS SES email
 
-Each backend can be enabled independently, and multiple backends can be enabled at the same time.
+Each backend can be enabled independently, and multiple backends can be enabled at the same time. For archive uploads, multi-backend runs follow the two-phase contract above: upload all configured backends first, then run retention. One-shot runs return nonzero on backend failure, while cron runs log and notify the failed execution without stopping the scheduler.
 
 ### Failure-Only Notifications
 

@@ -1,29 +1,45 @@
 package mongounarchive
 
 import (
+	"context"
+	"errors"
 	"flag"
+	"fmt"
+	"io"
 	"os"
 	"path"
+	"strconv"
 
 	"github.com/egose/database-tools/internal/toolconfig"
 	"github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
 	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 const (
-	envPrefix         = "MONGOUNARCHIVE__"
-	fallbackEnvPrefix = "MONGO__"
+	envPrefix                   = "MONGOUNARCHIVE__"
+	fallbackEnvPrefix           = "MONGO__"
+	defaultUpdateMaxBytes int64 = 1 << 20
 )
 
 type Config struct {
 	toolconfig.MongoOptions
 	toolconfig.StorageOptions
-	NSExclude                        string
-	NSInclude                        string
-	NSFrom                           string
-	NSTo                             string
+	RestoreNamespaceOptions
+	RestoreExecutionOptions
+	RestoreSourceOptions
+	UpdateOptions
+	Keep bool
+}
+
+type RestoreNamespaceOptions struct {
+	NSExclude string
+	NSInclude string
+	NSFrom    string
+	NSTo      string
+}
+
+type RestoreExecutionOptions struct {
 	Drop                             bool
 	DryRun                           bool
 	WriteConcern                     string
@@ -36,73 +52,138 @@ type Config struct {
 	StopOnError                      bool
 	BypassDocumentValidation         bool
 	PreserveUUID                     bool
-	ObjectName                       string
-	Dir                              string
-	Updates                          string
-	UpdatesFile                      string
-	Keep                             bool
 }
 
-func ParseFlags() (*Config, bool) {
+type RestoreSourceOptions struct {
+	ObjectName string
+	Dir        string
+}
+
+type UpdateOptions struct {
+	Updates     string
+	UpdatesFile string
+}
+
+var restoreFlagDefs = struct {
+	nsExclude                        toolconfig.StringFlagDef
+	nsInclude                        toolconfig.StringFlagDef
+	nsFrom                           toolconfig.StringFlagDef
+	nsTo                             toolconfig.StringFlagDef
+	drop                             toolconfig.BoolFlagDef
+	dryRun                           toolconfig.BoolFlagDef
+	writeConcern                     toolconfig.StringFlagDef
+	noIndexRestore                   toolconfig.BoolFlagDef
+	noOptionsRestore                 toolconfig.BoolFlagDef
+	keepIndexVersion                 toolconfig.BoolFlagDef
+	maintainInsertionOrder           toolconfig.BoolFlagDef
+	numParallelCollections           toolconfig.StringFlagDef
+	numInsertionWorkersPerCollection toolconfig.StringFlagDef
+	stopOnError                      toolconfig.BoolFlagDef
+	bypassDocumentValidation         toolconfig.BoolFlagDef
+	preserveUUID                     toolconfig.BoolFlagDef
+	objectName                       toolconfig.StringFlagDef
+	dir                              toolconfig.StringFlagDef
+	updates                          toolconfig.StringFlagDef
+	updatesFile                      toolconfig.StringFlagDef
+	keep                             toolconfig.BoolFlagDef
+	version                          toolconfig.BoolFlagDef
+}{
+	nsExclude:                        toolconfig.StringFlagDef{Name: "ns-exclude", EnvKey: "NS_EXCLUDE", Usage: "exclude matching namespaces"},
+	nsInclude:                        toolconfig.StringFlagDef{Name: "ns-include", EnvKey: "NS_INCLUDE", Usage: "include matching namespaces"},
+	nsFrom:                           toolconfig.StringFlagDef{Name: "ns-from", EnvKey: "NS_FROM", Usage: "rename matching namespaces, must have matching nsTo"},
+	nsTo:                             toolconfig.StringFlagDef{Name: "ns-to", EnvKey: "NS_TO", Usage: "rename matched namespaces, must have matching nsFrom"},
+	drop:                             toolconfig.BoolFlagDef{Name: "drop", EnvKey: "DROP", Usage: "drop each collection before import"},
+	dryRun:                           toolconfig.BoolFlagDef{Name: "dry-run", EnvKey: "DRY_RUN", Usage: "view summary without importing anything; cannot be combined with updates"},
+	writeConcern:                     toolconfig.StringFlagDef{Name: "write-concern", EnvKey: "WRITE_CONCERN", Usage: "write concern options"},
+	noIndexRestore:                   toolconfig.BoolFlagDef{Name: "no-index-restore", EnvKey: "NO_INDEX_RESTORE", Usage: "don't restore indexes"},
+	noOptionsRestore:                 toolconfig.BoolFlagDef{Name: "no-options-restore", EnvKey: "NO_OPTIONS_RESTORE", Usage: "don't restore collection options"},
+	keepIndexVersion:                 toolconfig.BoolFlagDef{Name: "keep-index-version", EnvKey: "KEEP_INDEX_VERSION", Usage: "don't update index version"},
+	maintainInsertionOrder:           toolconfig.BoolFlagDef{Name: "maintain-insertion-order", EnvKey: "MAINTAIN_INSERTION_ORDER", Usage: "restore the documents in the order of their appearance in the input source. By default the insertions will be performed in an arbitrary order. Setting this flag also enables the behavior of --stopOnError and restricts NumInsertionWorkersPerCollection to 1"},
+	numParallelCollections:           toolconfig.StringFlagDef{Name: "num-parallel-collections", EnvKey: "NUM_PARALLEL_COLLECTIONS", Usage: "number of collections to restore in parallel (default: 4)"},
+	numInsertionWorkersPerCollection: toolconfig.StringFlagDef{Name: "num-insertion-workers-per-collection", EnvKey: "NUM_INSERTION_WORKERS_PER_COLLECTION", Usage: "number of insert operations to run concurrently per collection (default: 1)"},
+	stopOnError:                      toolconfig.BoolFlagDef{Name: "stop-on-error", EnvKey: "STOP_ON_ERROR", Usage: "halt after encountering any error during insertion. By default, mongorestore will attempt to continue through document validation and DuplicateKey errors, but with this option enabled, the tool will stop instead. A small number of documents may be inserted after encountering an error even with this option enabled; use --maintainInsertionOrder to halt immediately after an error"},
+	bypassDocumentValidation:         toolconfig.BoolFlagDef{Name: "bypass-document-validation", EnvKey: "BYPASS_DOCUMENT_VALIDATION", Usage: "bypass document validation"},
+	preserveUUID:                     toolconfig.BoolFlagDef{Name: "preserve-uuid", EnvKey: "PRESERVE_UUID", Usage: "preserve original collection UUIDs (off by default, requires drop)"},
+	objectName:                       toolconfig.StringFlagDef{Name: "object-name", EnvKey: "OBJECT_NAME", Usage: "Object name of the archived file in the storage (optional)"},
+	dir:                              toolconfig.StringFlagDef{Name: "dir", EnvKey: "DIR", Usage: "directory name that contains the dumped files"},
+	updates:                          toolconfig.StringFlagDef{Name: "updates", EnvKey: "UPDATES", Usage: "array of update specifications in JSON string"},
+	updatesFile:                      toolconfig.StringFlagDef{Name: "updates-file", EnvKey: "UPDATES_FILE", Usage: "path to a file containing an array of update specifications"},
+	keep:                             toolconfig.BoolFlagDef{Name: "keep", EnvKey: "KEEP", Usage: "keep data dump"},
+	version:                          toolconfig.BoolFlagDef{Name: "version", Usage: "Show the version"},
+}
+
+func ParseFlags() (*Config, bool, error) {
 	env := utils.NewEnv(envPrefix, fallbackEnvPrefix, "")
+	return parseFlags(flag.CommandLine, env, os.Args[1:])
+}
+
+func parseFlags(flagSet *flag.FlagSet, env toolconfig.EnvReader, args []string) (*Config, bool, error) {
 	cfg := &Config{}
 
-	mongoBindings := toolconfig.BindMongoFlags(env)
-	nsExclude := flag.String("ns-exclude", env.GetValue("NS_EXCLUDE"), "exclude matching namespaces")
-	nsInclude := flag.String("ns-include", env.GetValue("NS_INCLUDE"), "include matching namespaces")
-	nsFrom := flag.String("ns-from", env.GetValue("NS_FROM"), "rename matching namespaces, must have matching nsTo")
-	nsTo := flag.String("ns-to", env.GetValue("NS_TO"), "rename matched namespaces, must have matching nsFrom")
-	drop := flag.Bool("drop", env.GetValue("DROP") == "true", "drop each collection before import")
-	dryRun := flag.Bool("dry-run", env.GetValue("DRY_RUN") == "true", "view summary without importing anything. recommended with verbosity")
-	writeConcern := flag.String("write-concern", env.GetValue("WRITE_CONCERN"), "write concern options")
-	noIndexRestore := flag.Bool("no-index-restore", env.GetValue("NO_INDEX_RESTORE") == "true", "don't restore indexes")
-	noOptionsRestore := flag.Bool("no-options-restore", env.GetValue("NO_OPTIONS_RESTORE") == "true", "don't restore collection options")
-	keepIndexVersion := flag.Bool("keep-index-version", env.GetValue("KEEP_INDEX_VERSION") == "true", "don't update index version")
-	maintainInsertionOrder := flag.Bool("maintain-insertion-order", env.GetValue("MAINTAIN_INSERTION_ORDER") == "true", "restore the documents in the order of their appearance in the input source. By default the insertions will be performed in an arbitrary order. Setting this flag also enables the behavior of --stopOnError and restricts NumInsertionWorkersPerCollection to 1")
-	numParallelCollections := flag.String("num-parallel-collections", env.GetValue("NUM_PARALLEL_COLLECTIONS"), "number of collections to restore in parallel (default: 4)")
-	numInsertionWorkersPerCollection := flag.String("num-insertion-workers-per-collection", env.GetValue("NUM_INSERTION_WORKERS_PER_COLLECTION"), "number of insert operations to run concurrently per collection (default: 1)")
-	stopOnError := flag.Bool("stop-on-error", env.GetValue("STOP_ON_ERROR") == "true", "halt after encountering any error during insertion. By default, mongorestore will attempt to continue through document validation and DuplicateKey errors, but with this option enabled, the tool will stop instead. A small number of documents may be inserted after encountering an error even with this option enabled; use --maintainInsertionOrder to halt immediately after an error")
-	bypassDocumentValidation := flag.Bool("bypass-document-validation", env.GetValue("BYPASS_DOCUMENT_VALIDATION") == "true", "bypass document validation")
-	preserveUUID := flag.Bool("preserve-uuid", env.GetValue("PRESERVE_UUID") == "true", "preserve original collection UUIDs (off by default, requires drop)")
-	storageBindings := toolconfig.BindStorageFlags(env)
-	objectName := flag.String("object-name", env.GetValue("OBJECT_NAME"), "Object name of the archived file in the storage (optional)")
-	dir := flag.String("dir", env.GetValue("DIR"), "directory name that contains the dumped files")
-	updates := flag.String("updates", env.GetValue("UPDATES"), "array of update specifications in JSON string")
-	updatesFile := flag.String("updates-file", env.GetValue("UPDATES_FILE"), "path to a file containing an array of update specifications")
-	keep := flag.Bool("keep", env.GetValue("KEEP") == "true", "keep data dump")
-	showVersion := flag.Bool("version", false, "Show the version")
+	mongoBindings := toolconfig.BindMongoFlags(flagSet, env)
+	nsExclude := restoreFlagDefs.nsExclude.Bind(flagSet, env)
+	nsInclude := restoreFlagDefs.nsInclude.Bind(flagSet, env)
+	nsFrom := restoreFlagDefs.nsFrom.Bind(flagSet, env)
+	nsTo := restoreFlagDefs.nsTo.Bind(flagSet, env)
+	drop := restoreFlagDefs.drop.Bind(flagSet, env)
+	dryRun := restoreFlagDefs.dryRun.Bind(flagSet, env)
+	writeConcern := restoreFlagDefs.writeConcern.Bind(flagSet, env)
+	noIndexRestore := restoreFlagDefs.noIndexRestore.Bind(flagSet, env)
+	noOptionsRestore := restoreFlagDefs.noOptionsRestore.Bind(flagSet, env)
+	keepIndexVersion := restoreFlagDefs.keepIndexVersion.Bind(flagSet, env)
+	maintainInsertionOrder := restoreFlagDefs.maintainInsertionOrder.Bind(flagSet, env)
+	numParallelCollections := restoreFlagDefs.numParallelCollections.Bind(flagSet, env)
+	numInsertionWorkersPerCollection := restoreFlagDefs.numInsertionWorkersPerCollection.Bind(flagSet, env)
+	stopOnError := restoreFlagDefs.stopOnError.Bind(flagSet, env)
+	bypassDocumentValidation := restoreFlagDefs.bypassDocumentValidation.Bind(flagSet, env)
+	preserveUUID := restoreFlagDefs.preserveUUID.Bind(flagSet, env)
+	storageBindings := toolconfig.BindStorageFlags(flagSet, env)
+	objectName := restoreFlagDefs.objectName.Bind(flagSet, env)
+	dir := restoreFlagDefs.dir.Bind(flagSet, env)
+	updates := restoreFlagDefs.updates.Bind(flagSet, env)
+	updatesFile := restoreFlagDefs.updatesFile.Bind(flagSet, env)
+	keep := restoreFlagDefs.keep.Bind(flagSet, env)
+	showVersion := restoreFlagDefs.version.Bind(flagSet, env)
 
-	flag.Parse()
+	if err := flagSet.Parse(args); err != nil {
+		return nil, false, err
+	}
 
 	mongoBindings.Apply(&cfg.MongoOptions)
-	cfg.NSExclude = *nsExclude
-	cfg.NSInclude = *nsInclude
-	cfg.NSFrom = *nsFrom
-	cfg.NSTo = *nsTo
-	cfg.Drop = *drop
-	cfg.DryRun = *dryRun
-	cfg.WriteConcern = *writeConcern
-	cfg.NoIndexRestore = *noIndexRestore
-	cfg.NoOptionsRestore = *noOptionsRestore
-	cfg.KeepIndexVersion = *keepIndexVersion
-	cfg.MaintainInsertionOrder = *maintainInsertionOrder
-	cfg.NumParallelCollections = *numParallelCollections
-	cfg.NumInsertionWorkersPerCollection = *numInsertionWorkersPerCollection
-	cfg.StopOnError = *stopOnError
-	cfg.BypassDocumentValidation = *bypassDocumentValidation
-	cfg.PreserveUUID = *preserveUUID
+	cfg.RestoreNamespaceOptions = RestoreNamespaceOptions{
+		NSExclude: *nsExclude,
+		NSInclude: *nsInclude,
+		NSFrom:    *nsFrom,
+		NSTo:      *nsTo,
+	}
+	cfg.RestoreExecutionOptions = RestoreExecutionOptions{
+		Drop:                             *drop,
+		DryRun:                           *dryRun,
+		WriteConcern:                     *writeConcern,
+		NoIndexRestore:                   *noIndexRestore,
+		NoOptionsRestore:                 *noOptionsRestore,
+		KeepIndexVersion:                 *keepIndexVersion,
+		MaintainInsertionOrder:           *maintainInsertionOrder,
+		NumParallelCollections:           *numParallelCollections,
+		NumInsertionWorkersPerCollection: *numInsertionWorkersPerCollection,
+		StopOnError:                      *stopOnError,
+		BypassDocumentValidation:         *bypassDocumentValidation,
+		PreserveUUID:                     *preserveUUID,
+	}
 	storageBindings.Apply(&cfg.StorageOptions)
-	cfg.ObjectName = *objectName
-	cfg.Dir = *dir
-	cfg.Updates = *updates
-	cfg.UpdatesFile = *updatesFile
+	cfg.RestoreSourceOptions = RestoreSourceOptions{ObjectName: *objectName, Dir: *dir}
+	cfg.UpdateOptions = UpdateOptions{Updates: *updates, UpdatesFile: *updatesFile}
 	cfg.Keep = *keep
 
 	if showVersion != nil && *showVersion {
-		return cfg, true
+		return cfg, true, nil
 	}
 
-	return cfg, false
+	if err := cfg.Validate(); err != nil {
+		return nil, false, err
+	}
+
+	return cfg, false, nil
 }
 
 func (c *Config) GetMongounarchiveOptions(destPath string) []string {
@@ -169,22 +250,26 @@ func (c *Config) GetMongounarchiveOptions(destPath string) []string {
 	return options
 }
 
-func (c *Config) GetStorages() []storage.Storage {
-	return c.StorageOptions.GetStorages(0)
+func (c *Config) GetStorages(ctx context.Context) ([]storage.Storage, error) {
+	return c.StorageOptions.GetStorages(ctx, 0)
 }
 
 func (c *Config) GetObjectName() string {
 	return c.ObjectName
 }
 
-func (c *Config) GetMongoClient() (*mongo.Client, *mongo.Database, error) {
-	uri, err := c.MongoOptions.MongoConnectionURI()
+func (c *Config) GetMongoClient(ctx context.Context) (*mongo.Client, *mongo.Database, error) {
+	clientOptions, err := c.MongoOptions.MongoClientOptions()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	client, err := mongo.Connect(options.Client().ApplyURI(uri))
+	client, err := mongo.Connect(clientOptions)
 	if err != nil {
+		return nil, nil, err
+	}
+	if err := client.Ping(ctx, nil); err != nil {
+		_ = client.Disconnect(ctx)
 		return nil, nil, err
 	}
 
@@ -192,11 +277,19 @@ func (c *Config) GetMongoClient() (*mongo.Client, *mongo.Database, error) {
 }
 
 func (c *Config) GetUpdates() ([]byte, error) {
+	maxBytes, err := readPositiveInt64Env(envPrefix+"UPDATE_MAX_BYTES", defaultUpdateMaxBytes)
+	if err != nil {
+		return nil, err
+	}
+
 	if c.Updates != "" {
+		if int64(len(c.Updates)) > maxBytes {
+			return nil, fmt.Errorf("updates exceeds maximum size of %d bytes", maxBytes)
+		}
 		return []byte(c.Updates), nil
 	}
 	if c.UpdatesFile != "" {
-		return os.ReadFile(c.UpdatesFile)
+		return readLimitedFile(c.UpdatesFile, maxBytes)
 	}
 	return []byte(""), nil
 }
@@ -207,4 +300,91 @@ func (c *Config) HasUpdates() bool {
 
 func (c *Config) HasKeep() bool {
 	return c.Keep
+}
+
+func (c *Config) Validate() error {
+	if c.DryRun && c.HasUpdates() {
+		return errors.New("--dry-run cannot be combined with --updates or --updates-file")
+	}
+	if !c.HasUpdates() {
+		return nil
+	}
+	_, err := c.GetUpdates()
+	return err
+}
+
+func FlagDocumentation() toolconfig.CommandDoc {
+	flags := append([]toolconfig.FlagDoc{}, toolconfig.MongoFlagDocs(envPrefix)...)
+	flags = append(flags,
+		restoreFlagDefs.nsExclude.Doc(envPrefix),
+		restoreFlagDefs.nsInclude.Doc(envPrefix),
+		restoreFlagDefs.nsFrom.Doc(envPrefix),
+		restoreFlagDefs.nsTo.Doc(envPrefix),
+		restoreFlagDefs.drop.Doc(envPrefix),
+		restoreFlagDefs.dryRun.Doc(envPrefix),
+		restoreFlagDefs.writeConcern.Doc(envPrefix),
+		restoreFlagDefs.noIndexRestore.Doc(envPrefix),
+		restoreFlagDefs.noOptionsRestore.Doc(envPrefix),
+		restoreFlagDefs.keepIndexVersion.Doc(envPrefix),
+		restoreFlagDefs.maintainInsertionOrder.Doc(envPrefix),
+		restoreFlagDefs.numParallelCollections.Doc(envPrefix),
+		restoreFlagDefs.numInsertionWorkersPerCollection.Doc(envPrefix),
+		restoreFlagDefs.stopOnError.Doc(envPrefix),
+		restoreFlagDefs.bypassDocumentValidation.Doc(envPrefix),
+		restoreFlagDefs.preserveUUID.Doc(envPrefix),
+	)
+	flags = append(flags, toolconfig.StorageFlagDocs(envPrefix)...)
+	flags = append(flags,
+		restoreFlagDefs.objectName.Doc(envPrefix),
+		restoreFlagDefs.dir.Doc(envPrefix),
+		restoreFlagDefs.updates.Doc(envPrefix),
+		restoreFlagDefs.updatesFile.Doc(envPrefix),
+		restoreFlagDefs.keep.Doc(envPrefix),
+		restoreFlagDefs.version.Doc(envPrefix),
+	)
+
+	return toolconfig.CommandDoc{
+		Name:  "mongo-unarchive",
+		Flags: flags,
+		EnvVars: []toolconfig.EnvDoc{
+			{EnvVar: envPrefix + "RESTORE_PATH", Description: "Base directory for per-run restore workspaces before extraction"},
+			{EnvVar: envPrefix + "UPDATE_MAX_BYTES", DefaultValue: strconv.FormatInt(defaultUpdateMaxBytes, 10), Description: "Maximum size in bytes allowed for inline or file-based update specifications"},
+			{EnvVar: envPrefix + "STORAGE_OPERATION_TIMEOUT", Description: "Optional timeout applied to storage lookup and download operations"},
+			{EnvVar: envPrefix + "UPDATE_TIMEOUT", Description: "Optional timeout applied to MongoDB update connections and update operations"},
+		},
+	}
+}
+
+func readPositiveInt64Env(key string, fallback int64) (int64, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback, nil
+	}
+
+	value, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || value <= 0 {
+		return 0, fmt.Errorf("%s must be a positive integer", key)
+	}
+
+	return value, nil
+}
+
+func readLimitedFile(path string, maxBytes int64) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = file.Close()
+	}()
+
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("updates file %q exceeds maximum size of %d bytes", path, maxBytes)
+	}
+
+	return data, nil
 }

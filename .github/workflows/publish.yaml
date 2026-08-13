@@ -1,9 +1,14 @@
 name: Publish Docker image
 
 on:
-  push:
-    tags:
-    - v*.*.*
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+      tag_name:
+        required: true
+        type: string
 
 env:
   DOCKER_REGISTRY: ghcr.io
@@ -14,25 +19,65 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      actions: read
       packages: write
       security-events: write
+      attestations: write
+      id-token: write
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-
-    - name: Setup Tools
-      uses: ./.github/actions/setup-tools
-
-    - name: Build and Push
-      uses: egose/actions/docker-build-push@799b388fb3497236093c6eb7e3eac0b4c8f956ce
       with:
-        registry-url: ${{ env.DOCKER_REGISTRY }}
-        registry-username: ${{ github.actor }}
-        registry-password: ${{ secrets.GITHUB_TOKEN }}
-        image-name: ${{ env.IMAGE_NAME }}
-        metadata-tags: |
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
-          type=semver,pattern={{major}}
-        trivy: false
+        ref: ${{ inputs.ref }}
+
+    - name: Derive image version
+      id: version
+      run: printf 'value=%s\n' "${TAG_NAME#v}" >> "$GITHUB_OUTPUT"
+      env:
+        TAG_NAME: ${{ inputs.tag_name }}
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
+
+    - name: Log in to GHCR
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+      with:
+        registry: ${{ env.DOCKER_REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract image metadata
+      id: meta
+      uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+      with:
+        images: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=raw,value=${{ steps.version.outputs.value }}
+          type=semver,pattern={{version}},value=${{ inputs.tag_name }}
+          type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag_name }}
+          type=semver,pattern={{major}},value=${{ inputs.tag_name }}
+
+    - name: Build and push image
+      uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+      with:
+        context: .
+        push: true
+        sbom: true
+        provenance: mode=max
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+
+    - name: Scan published image
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+      with:
+        image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.value }}
+        format: sarif
+        output: trivy-results.sarif
+        exit-code: 1
+        ignore-unfixed: true
+        severity: HIGH,CRITICAL
+
+    - name: Upload image scan results
+      if: always()
+      uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
+      with:
+        sarif_file: trivy-results.sarif

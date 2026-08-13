@@ -1,7 +1,8 @@
 package toolconfig
 
 import (
-	"flag"
+	"context"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
 	mlog "github.com/mongodb/mongo-tools/common/log"
+	mongooptions "go.mongodb.org/mongo-driver/v2/mongo/options"
 )
 
 type MongoFlagBindings struct {
@@ -36,32 +38,105 @@ type MongoFlagBindings struct {
 	URIPrune                    *bool
 }
 
-func BindMongoFlags(env interface {
-	GetValue(string, ...string) string
-}) MongoFlagBindings {
+var mongoFlagDefs = struct {
+	verbose                     StringFlagDef
+	quiet                       BoolFlagDef
+	host                        StringFlagDef
+	port                        StringFlagDef
+	ssl                         BoolFlagDef
+	sslCAFile                   StringFlagDef
+	sslPEMKeyFile               StringFlagDef
+	sslPEMKeyPassword           StringFlagDef
+	sslCRLFile                  StringFlagDef
+	sslAllowInvalidCertificates BoolFlagDef
+	sslAllowInvalidHostnames    BoolFlagDef
+	sslFIPSMode                 BoolFlagDef
+	username                    StringFlagDef
+	password                    StringFlagDef
+	authenticationDatabase      StringFlagDef
+	authenticationMechanism     StringFlagDef
+	gssapiServiceName           StringFlagDef
+	gssapiHostName              StringFlagDef
+	db                          StringFlagDef
+	collection                  StringFlagDef
+	uri                         StringFlagDef
+	uriPrune                    BoolFlagDef
+}{
+	verbose:                     StringFlagDef{Name: "verbose", EnvKey: "VERBOSE", Usage: "more detailed log output (include multiple times for more verbosity, e.g. -vvvvv, or specify a numeric value, e.g. --verbose=N)"},
+	quiet:                       BoolFlagDef{Name: "quiet", EnvKey: "QUIET", Usage: "hide all log output"},
+	host:                        StringFlagDef{Name: "host", EnvKey: "HOST", Usage: "MongoDB host to connect to (setname/host1,host2 for replica sets)"},
+	port:                        StringFlagDef{Name: "port", EnvKey: "PORT", Usage: "MongoDB port (can also use --host hostname:port)"},
+	ssl:                         BoolFlagDef{Name: "ssl", EnvKey: "SSL", Usage: "connect to a mongod or mongos that has ssl enabled"},
+	sslCAFile:                   StringFlagDef{Name: "ssl-ca-file", EnvKey: "SSL_CA_FILE", Usage: "the .pem file containing the root certificate chain from the certificate authority"},
+	sslPEMKeyFile:               StringFlagDef{Name: "ssl-pem-key-file", EnvKey: "SSL_PEM_KEY_FILE", Usage: "the .pem file containing the certificate and key"},
+	sslPEMKeyPassword:           StringFlagDef{Name: "ssl-pem-key-password", EnvKey: "SSL_PEM_KEY_PASSWORD", Usage: "the password to decrypt the sslPEMKeyFile, if necessary"},
+	sslCRLFile:                  StringFlagDef{Name: "ssl-crl-file", EnvKey: "SSL_CRL_FILE", Usage: "the .pem file containing the certificate revocation list"},
+	sslAllowInvalidCertificates: BoolFlagDef{Name: "ssl-allow-invalid-certificates", EnvKey: "SSL_ALLOW_INVALID_CERTIFICATES", Usage: "bypass the validation for server certificates"},
+	sslAllowInvalidHostnames:    BoolFlagDef{Name: "ssl-allow-invalid-hostnames", EnvKey: "SSL_ALLOW_INVALID_HOSTNAMES", Usage: "bypass the validation for server name"},
+	sslFIPSMode:                 BoolFlagDef{Name: "ssl-fips-mode", EnvKey: "SSL_FIPS_MODE", Usage: "use FIPS mode of the installed openssl library"},
+	username:                    StringFlagDef{Name: "username", EnvKey: "USERNAME", Usage: "username for authentication"},
+	password:                    StringFlagDef{Name: "password", EnvKey: "PASSWORD", Usage: "password for authentication"},
+	authenticationDatabase:      StringFlagDef{Name: "authentication-database", EnvKey: "AUTHENTICATION_DATABASE", Usage: "database that holds the user's credentials"},
+	authenticationMechanism:     StringFlagDef{Name: "authentication-mechanism", EnvKey: "AUTHENTICATION_MECHANISM", Usage: "authentication mechanism to use"},
+	gssapiServiceName:           StringFlagDef{Name: "gssapi-service-name", EnvKey: "GSSAPI_SERVICE_NAME", Usage: "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)"},
+	gssapiHostName:              StringFlagDef{Name: "gssapi-host-name", EnvKey: "GSSAPI_HOST_NAME", Usage: "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)"},
+	db:                          StringFlagDef{Name: "db", EnvKey: "DB", Usage: "database to use"},
+	collection:                  StringFlagDef{Name: "collection", EnvKey: "COLLECTION", Usage: "collection to use"},
+	uri:                         StringFlagDef{Name: "uri", EnvKey: "URI", Usage: "MongoDB uri connection string"},
+	uriPrune:                    BoolFlagDef{Name: "uri-prune", EnvKey: "URI_PRUNE", Usage: "prune MongoDB uri connection string"},
+}
+
+func BindMongoFlags(fs FlagBinder, env EnvReader) MongoFlagBindings {
 	return MongoFlagBindings{
-		Verbose:                     flag.String("verbose", env.GetValue("VERBOSE"), "more detailed log output (include multiple times for more verbosity, e.g. -vvvvv, or specify a numeric value, e.g. --verbose=N)"),
-		Quiet:                       flag.Bool("quiet", env.GetValue("QUIET") == "true", "hide all log output"),
-		Host:                        flag.String("host", env.GetValue("HOST"), "MongoDB host to connect to (setname/host1,host2 for replica sets)"),
-		Port:                        flag.String("port", env.GetValue("PORT"), "MongoDB port (can also use --host hostname:port)"),
-		SSL:                         flag.Bool("ssl", env.GetValue("SSL") == "true", "connect to a mongod or mongos that has ssl enabled"),
-		SSLCAFile:                   flag.String("ssl-ca-file", env.GetValue("SSL_CA_FILE"), "the .pem file containing the root certificate chain from the certificate authority"),
-		SSLPEMKeyFile:               flag.String("ssl-pem-key-file", env.GetValue("SSL_PEM_KEY_FILE"), "the .pem file containing the certificate and key"),
-		SSLPEMKeyPassword:           flag.String("ssl-pem-key-password", env.GetValue("SSL_PEM_KEY_PASSWORD"), "the password to decrypt the sslPEMKeyFile, if necessary"),
-		SSLCRLFile:                  flag.String("ssl-crl-file", env.GetValue("SSL_CRL_FILE"), "the .pem file containing the certificate revocation list"),
-		SSLAllowInvalidCertificates: flag.Bool("ssl-allow-invalid-certificates", env.GetValue("SSL_ALLOW_INVALID_CERTIFICATES") == "true", "bypass the validation for server certificates"),
-		SSLAllowInvalidHostnames:    flag.Bool("ssl-allow-invalid-hostnames", env.GetValue("SSL_ALLOW_INVALID_HOSTNAMES") == "true", "bypass the validation for server name"),
-		SSLFIPSMode:                 flag.Bool("ssl-fips-mode", env.GetValue("SSL_FIPS_MODE") == "true", "use FIPS mode of the installed openssl library"),
-		Username:                    flag.String("username", env.GetValue("USERNAME"), "username for authentication"),
-		Password:                    flag.String("password", env.GetValue("PASSWORD"), "password for authentication"),
-		AuthenticationDatabase:      flag.String("authentication-database", env.GetValue("AUTHENTICATION_DATABASE"), "database that holds the user's credentials"),
-		AuthenticationMechanism:     flag.String("authentication-mechanism", env.GetValue("AUTHENTICATION_MECHANISM"), "authentication mechanism to use"),
-		GSSAPIServiceName:           flag.String("gssapi-service-name", env.GetValue("GSSAPI_SERVICE_NAME"), "service name to use when authenticating using GSSAPI/Kerberos (default: mongodb)"),
-		GSSAPIHostName:              flag.String("gssapi-host-name", env.GetValue("GSSAPI_HOST_NAME"), "hostname to use when authenticating using GSSAPI/Kerberos (default: <remote server's address>)"),
-		DB:                          flag.String("db", env.GetValue("DB"), "database to use"),
-		Collection:                  flag.String("collection", env.GetValue("COLLECTION"), "collection to use"),
-		URI:                         flag.String("uri", env.GetValue("URI"), "MongoDB uri connection string"),
-		URIPrune:                    flag.Bool("uri-prune", env.GetValue("URI_PRUNE") == "true", "prune MongoDB uri connection string"),
+		Verbose:                     mongoFlagDefs.verbose.Bind(fs, env),
+		Quiet:                       mongoFlagDefs.quiet.Bind(fs, env),
+		Host:                        mongoFlagDefs.host.Bind(fs, env),
+		Port:                        mongoFlagDefs.port.Bind(fs, env),
+		SSL:                         mongoFlagDefs.ssl.Bind(fs, env),
+		SSLCAFile:                   mongoFlagDefs.sslCAFile.Bind(fs, env),
+		SSLPEMKeyFile:               mongoFlagDefs.sslPEMKeyFile.Bind(fs, env),
+		SSLPEMKeyPassword:           mongoFlagDefs.sslPEMKeyPassword.Bind(fs, env),
+		SSLCRLFile:                  mongoFlagDefs.sslCRLFile.Bind(fs, env),
+		SSLAllowInvalidCertificates: mongoFlagDefs.sslAllowInvalidCertificates.Bind(fs, env),
+		SSLAllowInvalidHostnames:    mongoFlagDefs.sslAllowInvalidHostnames.Bind(fs, env),
+		SSLFIPSMode:                 mongoFlagDefs.sslFIPSMode.Bind(fs, env),
+		Username:                    mongoFlagDefs.username.Bind(fs, env),
+		Password:                    mongoFlagDefs.password.Bind(fs, env),
+		AuthenticationDatabase:      mongoFlagDefs.authenticationDatabase.Bind(fs, env),
+		AuthenticationMechanism:     mongoFlagDefs.authenticationMechanism.Bind(fs, env),
+		GSSAPIServiceName:           mongoFlagDefs.gssapiServiceName.Bind(fs, env),
+		GSSAPIHostName:              mongoFlagDefs.gssapiHostName.Bind(fs, env),
+		DB:                          mongoFlagDefs.db.Bind(fs, env),
+		Collection:                  mongoFlagDefs.collection.Bind(fs, env),
+		URI:                         mongoFlagDefs.uri.Bind(fs, env),
+		URIPrune:                    mongoFlagDefs.uriPrune.Bind(fs, env),
+	}
+}
+
+func MongoFlagDocs(envPrefix string) []FlagDoc {
+	return []FlagDoc{
+		mongoFlagDefs.verbose.Doc(envPrefix),
+		mongoFlagDefs.quiet.Doc(envPrefix),
+		mongoFlagDefs.host.Doc(envPrefix),
+		mongoFlagDefs.port.Doc(envPrefix),
+		mongoFlagDefs.ssl.Doc(envPrefix),
+		mongoFlagDefs.sslCAFile.Doc(envPrefix),
+		mongoFlagDefs.sslPEMKeyFile.Doc(envPrefix),
+		mongoFlagDefs.sslPEMKeyPassword.Doc(envPrefix),
+		mongoFlagDefs.sslCRLFile.Doc(envPrefix),
+		mongoFlagDefs.sslAllowInvalidCertificates.Doc(envPrefix),
+		mongoFlagDefs.sslAllowInvalidHostnames.Doc(envPrefix),
+		mongoFlagDefs.sslFIPSMode.Doc(envPrefix),
+		mongoFlagDefs.username.Doc(envPrefix),
+		mongoFlagDefs.password.Doc(envPrefix),
+		mongoFlagDefs.authenticationDatabase.Doc(envPrefix),
+		mongoFlagDefs.authenticationMechanism.Doc(envPrefix),
+		mongoFlagDefs.gssapiServiceName.Doc(envPrefix),
+		mongoFlagDefs.gssapiHostName.Doc(envPrefix),
+		mongoFlagDefs.db.Doc(envPrefix),
+		mongoFlagDefs.collection.Doc(envPrefix),
+		mongoFlagDefs.uri.Doc(envPrefix),
+		mongoFlagDefs.uriPrune.Doc(envPrefix),
 	}
 }
 
@@ -110,31 +185,105 @@ type StorageFlagBindings struct {
 	GCPClientEmail      *string
 	GCPClientID         *string
 	LocalPath           *string
+	BackupPrefix        *string
+	StorageBackend      *string
 }
 
-func BindStorageFlags(env interface {
-	GetValue(string, ...string) string
-}) StorageFlagBindings {
+var storageFlagDefs = struct {
+	azEndpoint          StringFlagDef
+	azAccountName       StringFlagDef
+	azAccountKey        StringFlagDef
+	azContainerName     StringFlagDef
+	awsEndpoint         StringFlagDef
+	awsAccessKeyID      StringFlagDef
+	awsSecretAccessKey  StringFlagDef
+	awsRegion           StringFlagDef
+	awsBucket           StringFlagDef
+	awsS3ForcePathStyle BoolFlagDef
+	gcpEndpoint         StringFlagDef
+	gcpBucket           StringFlagDef
+	gcpCredsFile        StringFlagDef
+	gcpProjectID        StringFlagDef
+	gcpPrivateKeyID     StringFlagDef
+	gcpPrivateKey       StringFlagDef
+	gcpClientEmail      StringFlagDef
+	gcpClientID         StringFlagDef
+	localPath           StringFlagDef
+	backupPrefix        StringFlagDef
+	storageBackend      StringFlagDef
+}{
+	azEndpoint:          StringFlagDef{Name: "az-endpoint", EnvKey: "AZ_ENDPOINT", Usage: "specify the emulator hostname and Azure Blob Storage port"},
+	azAccountName:       StringFlagDef{Name: "az-account-name", EnvKey: "AZ_ACCOUNT_NAME", Usage: "Azure Blob Storage Account Name"},
+	azAccountKey:        StringFlagDef{Name: "az-account-key", EnvKey: "AZ_ACCOUNT_KEY", Usage: "Azure Blob Storage Account Key"},
+	azContainerName:     StringFlagDef{Name: "az-container-name", EnvKey: "AZ_CONTAINER_NAME", Usage: "Azure Blob Storage Container Name"},
+	awsEndpoint:         StringFlagDef{Name: "aws-endpoint", EnvKey: "AWS_ENDPOINT", Usage: "AWS endpoint URL (hostname only or fully qualified URI)"},
+	awsAccessKeyID:      StringFlagDef{Name: "aws-access-key-id", EnvKey: "AWS_ACCESS_KEY_ID", Usage: "AWS access key associated with an IAM account"},
+	awsSecretAccessKey:  StringFlagDef{Name: "aws-secret-access-key", EnvKey: "AWS_SECRET_ACCESS_KEY", Usage: "AWS secret key associated with the access key"},
+	awsRegion:           StringFlagDef{Name: "aws-region", EnvKey: "AWS_REGION", Usage: "AWS Region whose servers you want to send your requests to", Defaults: []string{"us-east-1"}},
+	awsBucket:           StringFlagDef{Name: "aws-bucket", EnvKey: "AWS_BUCKET", Usage: "AWS S3 bucket name"},
+	awsS3ForcePathStyle: BoolFlagDef{Name: "aws-s3-force-path-style", EnvKey: "AWS_S3_FORCE_PATH_STYLE", Usage: "force the request to use path-style addressing, i.e., `http://s3.amazonaws.com/BUCKET/KEY`. By default, the S3 client will use virtual hosted bucket addressing when possible (`http://BUCKET.s3.amazonaws.com/KEY`)"},
+	gcpEndpoint:         StringFlagDef{Name: "gcp-endpoint", EnvKey: "GCP_ENDPOINT", Usage: "GCP endpoint URL"},
+	gcpBucket:           StringFlagDef{Name: "gcp-bucket", EnvKey: "GCP_BUCKET", Usage: "GCP storage bucket name"},
+	gcpCredsFile:        StringFlagDef{Name: "gcp-creds-file", EnvKey: "GCP_CREDS_FILE", Usage: "GCP service account's credentials file"},
+	gcpProjectID:        StringFlagDef{Name: "gcp-project-id", EnvKey: "GCP_PROJECT_ID", Usage: "GCP service account's project id"},
+	gcpPrivateKeyID:     StringFlagDef{Name: "gcp-private-key-id", EnvKey: "GCP_PRIVATE_KEY_ID", Usage: "GCP service account's private key id"},
+	gcpPrivateKey:       StringFlagDef{Name: "gcp-private-key", EnvKey: "GCP_PRIVATE_KEY", Usage: "GCP service account's private key"},
+	gcpClientEmail:      StringFlagDef{Name: "gcp-client-email", EnvKey: "GCP_CLIENT_EMAIL", Usage: "GCP service account's client email"},
+	gcpClientID:         StringFlagDef{Name: "gcp-client-id", EnvKey: "GCP_CLIENT_ID", Usage: "GCP service account's client id"},
+	localPath:           StringFlagDef{Name: "local-path", EnvKey: "LOCAL_PATH", Usage: "Local directory path to store backups"},
+	backupPrefix:        StringFlagDef{Name: "backup-prefix", EnvKey: "BACKUP_PREFIX", Usage: "Prefix/namespace used for managed backup objects", Defaults: []string{storage.DefaultBackupPrefix}},
+	storageBackend:      StringFlagDef{Name: "storage-backend", EnvKey: "STORAGE_BACKEND", Usage: "Storage backend to use for restore when multiple backends are configured (azure, aws, gcp, local)"},
+}
+
+func BindStorageFlags(fs FlagBinder, env EnvReader) StorageFlagBindings {
 	return StorageFlagBindings{
-		AZEndpoint:          flag.String("az-endpoint", env.GetValue("AZ_ENDPOINT", ""), "specify the emulator hostname and Azure Blob Storage port"),
-		AZAccountName:       flag.String("az-account-name", env.GetValue("AZ_ACCOUNT_NAME"), "Azure Blob Storage Account Name"),
-		AZAccountKey:        flag.String("az-account-key", env.GetValue("AZ_ACCOUNT_KEY"), "Azure Blob Storage Account Key"),
-		AZContainerName:     flag.String("az-container-name", env.GetValue("AZ_CONTAINER_NAME"), "Azure Blob Storage Container Name"),
-		AWSEndpoint:         flag.String("aws-endpoint", env.GetValue("AWS_ENDPOINT", ""), "AWS endpoint URL (hostname only or fully qualified URI)"),
-		AWSAccessKeyID:      flag.String("aws-access-key-id", env.GetValue("AWS_ACCESS_KEY_ID"), "AWS access key associated with an IAM account"),
-		AWSSecretAccessKey:  flag.String("aws-secret-access-key", env.GetValue("AWS_SECRET_ACCESS_KEY"), "AWS secret key associated with the access key"),
-		AWSRegion:           flag.String("aws-region", env.GetValue("AWS_REGION", "us-east-1"), "AWS Region whose servers you want to send your requests to"),
-		AWSBucket:           flag.String("aws-bucket", env.GetValue("AWS_BUCKET"), "AWS S3 bucket name"),
-		AWSS3ForcePathStyle: flag.Bool("aws-s3-force-path-style", env.GetValue("AWS_S3_FORCE_PATH_STYLE") == "true", "force the request to use path-style addressing, i.e., `http://s3.amazonaws.com/BUCKET/KEY`. By default, the S3 client will use virtual hosted bucket addressing when possible (`http://BUCKET.s3.amazonaws.com/KEY`)"),
-		GCPEndpoint:         flag.String("gcp-endpoint", env.GetValue("GCP_ENDPOINT", ""), "GCP endpoint URL"),
-		GCPBucket:           flag.String("gcp-bucket", env.GetValue("GCP_BUCKET"), "GCP storage bucket name"),
-		GCPCredsFile:        flag.String("gcp-creds-file", env.GetValue("GCP_CREDS_FILE"), "GCP service account's credentials file"),
-		GCPProjectID:        flag.String("gcp-project-id", env.GetValue("GCP_PROJECT_ID"), "GCP service account's project id"),
-		GCPPrivateKeyID:     flag.String("gcp-private-key-id", env.GetValue("GCP_PRIVATE_KEY_ID"), "GCP service account's private key id"),
-		GCPPrivateKey:       flag.String("gcp-private-key", env.GetValue("GCP_PRIVATE_KEY"), "GCP service account's private key"),
-		GCPClientEmail:      flag.String("gcp-client-email", env.GetValue("GCP_CLIENT_EMAIL"), "GCP service account's client email"),
-		GCPClientID:         flag.String("gcp-client-id", env.GetValue("GCP_CLIENT_ID"), "GCP service account's client id"),
-		LocalPath:           flag.String("local-path", env.GetValue("LOCAL_PATH"), "Local directory path to store backups"),
+		AZEndpoint:          storageFlagDefs.azEndpoint.Bind(fs, env),
+		AZAccountName:       storageFlagDefs.azAccountName.Bind(fs, env),
+		AZAccountKey:        storageFlagDefs.azAccountKey.Bind(fs, env),
+		AZContainerName:     storageFlagDefs.azContainerName.Bind(fs, env),
+		AWSEndpoint:         storageFlagDefs.awsEndpoint.Bind(fs, env),
+		AWSAccessKeyID:      storageFlagDefs.awsAccessKeyID.Bind(fs, env),
+		AWSSecretAccessKey:  storageFlagDefs.awsSecretAccessKey.Bind(fs, env),
+		AWSRegion:           storageFlagDefs.awsRegion.Bind(fs, env),
+		AWSBucket:           storageFlagDefs.awsBucket.Bind(fs, env),
+		AWSS3ForcePathStyle: storageFlagDefs.awsS3ForcePathStyle.Bind(fs, env),
+		GCPEndpoint:         storageFlagDefs.gcpEndpoint.Bind(fs, env),
+		GCPBucket:           storageFlagDefs.gcpBucket.Bind(fs, env),
+		GCPCredsFile:        storageFlagDefs.gcpCredsFile.Bind(fs, env),
+		GCPProjectID:        storageFlagDefs.gcpProjectID.Bind(fs, env),
+		GCPPrivateKeyID:     storageFlagDefs.gcpPrivateKeyID.Bind(fs, env),
+		GCPPrivateKey:       storageFlagDefs.gcpPrivateKey.Bind(fs, env),
+		GCPClientEmail:      storageFlagDefs.gcpClientEmail.Bind(fs, env),
+		GCPClientID:         storageFlagDefs.gcpClientID.Bind(fs, env),
+		LocalPath:           storageFlagDefs.localPath.Bind(fs, env),
+		BackupPrefix:        storageFlagDefs.backupPrefix.Bind(fs, env),
+		StorageBackend:      storageFlagDefs.storageBackend.Bind(fs, env),
+	}
+}
+
+func StorageFlagDocs(envPrefix string) []FlagDoc {
+	return []FlagDoc{
+		storageFlagDefs.azEndpoint.Doc(envPrefix),
+		storageFlagDefs.azAccountName.Doc(envPrefix),
+		storageFlagDefs.azAccountKey.Doc(envPrefix),
+		storageFlagDefs.azContainerName.Doc(envPrefix),
+		storageFlagDefs.awsEndpoint.Doc(envPrefix),
+		storageFlagDefs.awsAccessKeyID.Doc(envPrefix),
+		storageFlagDefs.awsSecretAccessKey.Doc(envPrefix),
+		storageFlagDefs.awsRegion.Doc(envPrefix),
+		storageFlagDefs.awsBucket.Doc(envPrefix),
+		storageFlagDefs.awsS3ForcePathStyle.Doc(envPrefix),
+		storageFlagDefs.gcpEndpoint.Doc(envPrefix),
+		storageFlagDefs.gcpBucket.Doc(envPrefix),
+		storageFlagDefs.gcpCredsFile.Doc(envPrefix),
+		storageFlagDefs.gcpProjectID.Doc(envPrefix),
+		storageFlagDefs.gcpPrivateKeyID.Doc(envPrefix),
+		storageFlagDefs.gcpPrivateKey.Doc(envPrefix),
+		storageFlagDefs.gcpClientEmail.Doc(envPrefix),
+		storageFlagDefs.gcpClientID.Doc(envPrefix),
+		storageFlagDefs.localPath.Doc(envPrefix),
+		storageFlagDefs.backupPrefix.Doc(envPrefix),
+		storageFlagDefs.storageBackend.Doc(envPrefix),
 	}
 }
 
@@ -158,6 +307,8 @@ func (b StorageFlagBindings) Apply(target *StorageOptions) {
 	target.GCPClientEmail = *b.GCPClientEmail
 	target.GCPClientID = *b.GCPClientID
 	target.LocalPath = *b.LocalPath
+	target.BackupPrefix = *b.BackupPrefix
+	target.StorageBackend = *b.StorageBackend
 }
 
 type MongoOptions struct {
@@ -326,6 +477,39 @@ func (m MongoOptions) MongoConnectionURI() (string, error) {
 	return uri.String(), nil
 }
 
+func (m MongoOptions) MongoClientOptions() (*mongooptions.ClientOptions, error) {
+	uri, err := m.MongoConnectionURI()
+	if err != nil {
+		return nil, err
+	}
+
+	if m.SSLCRLFile != "" {
+		return nil, errors.New("ssl-crl-file is not supported for update operations via the MongoDB Go driver")
+	}
+	if m.SSLFIPSMode {
+		return nil, errors.New("ssl-fips-mode is not supported for update operations via the MongoDB Go driver")
+	}
+
+	parsedURI, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	query := parsedURI.Query()
+	if m.SSLCAFile != "" {
+		query.Set("tlsCAFile", m.SSLCAFile)
+	}
+	if m.SSLPEMKeyFile != "" {
+		query.Set("tlsCertificateKeyFile", m.SSLPEMKeyFile)
+	}
+	if m.SSLPEMKeyPassword != "" {
+		query.Set("tlsCertificateKeyFilePassword", m.SSLPEMKeyPassword)
+	}
+	parsedURI.RawQuery = query.Encode()
+
+	return mongooptions.Client().ApplyURI(parsedURI.String()), nil
+}
+
 type StorageOptions struct {
 	AZEndpoint          string
 	AZAccountName       string
@@ -346,9 +530,11 @@ type StorageOptions struct {
 	GCPClientEmail      string
 	GCPClientID         string
 	LocalPath           string
+	BackupPrefix        string
+	StorageBackend      string
 }
 
-func (s StorageOptions) GetStorages(expiryDays int) []storage.Storage {
+func (s StorageOptions) GetStorages(ctx context.Context, expiryDays int) ([]storage.Storage, error) {
 	type option struct {
 		name    string
 		enabled func() bool
@@ -359,30 +545,43 @@ func (s StorageOptions) GetStorages(expiryDays int) []storage.Storage {
 		{"Local", s.useLocal, func() (storage.Storage, error) { return s.getLocalStorage(expiryDays) }},
 		{"Azure", s.useAzure, func() (storage.Storage, error) { return s.getAzBlobStorage(expiryDays) }},
 		{"AWS", s.useAWS, func() (storage.Storage, error) { return s.getAwsS3Storage(expiryDays) }},
-		{"GCP", s.useGCP, func() (storage.Storage, error) { return s.getGcpStorage(expiryDays) }},
+		{"GCP", s.useGCP, func() (storage.Storage, error) { return s.getGcpStorage(ctx, expiryDays) }},
 	}
 
 	storages := make([]storage.Storage, 0)
+	foundNames := make([]string, 0)
+	initErrors := make([]error, 0)
 	for _, opt := range options {
 		if opt.enabled() {
 			storageBackend, err := opt.getter()
 			if err != nil {
-				mlog.Logvf(mlog.Always, "Failed to initialize %v storage: %v", opt.name, err)
+				initErrors = append(initErrors, fmt.Errorf("%s storage initialization failed: %w", opt.name, err))
 				continue
 			}
 			if storageBackend != nil {
-				mlog.Logvf(mlog.Always, "Found Storage Option: %v", opt.name)
 				storages = append(storages, storageBackend)
+				foundNames = append(foundNames, opt.name)
 			}
 		}
 	}
 
-	return storages
+	if len(initErrors) > 0 {
+		for _, storageBackend := range storages {
+			_ = storageBackend.Close()
+		}
+		return nil, errors.Join(initErrors...)
+	}
+
+	for _, name := range foundNames {
+		mlog.Logvf(mlog.Always, "Found Storage Option: %v", name)
+	}
+
+	return storages, nil
 }
 
 func (s StorageOptions) getAzBlobStorage(expiryDays int) (storage.Storage, error) {
 	az := new(storage.AzBlob)
-	if err := az.Init(s.AZAccountName, s.AZAccountKey, s.AZContainerName, s.AZEndpoint, expiryDays); err != nil {
+	if err := az.Init(s.AZAccountName, s.AZAccountKey, s.AZContainerName, s.AZEndpoint, expiryDays, s.BackupPrefix); err != nil {
 		return nil, err
 	}
 	return az, nil
@@ -390,15 +589,15 @@ func (s StorageOptions) getAzBlobStorage(expiryDays int) (storage.Storage, error
 
 func (s StorageOptions) getAwsS3Storage(expiryDays int) (storage.Storage, error) {
 	s3 := new(storage.AwsS3)
-	if err := s3.Init(s.AWSEndpoint, s.AWSAccessKeyID, s.AWSSecretAccessKey, s.AWSRegion, s.AWSBucket, s.AWSS3ForcePathStyle, expiryDays); err != nil {
+	if err := s3.Init(s.AWSEndpoint, s.AWSAccessKeyID, s.AWSSecretAccessKey, s.AWSRegion, s.AWSBucket, s.AWSS3ForcePathStyle, expiryDays, s.BackupPrefix); err != nil {
 		return nil, err
 	}
 	return s3, nil
 }
 
-func (s StorageOptions) getGcpStorage(expiryDays int) (storage.Storage, error) {
+func (s StorageOptions) getGcpStorage(ctx context.Context, expiryDays int) (storage.Storage, error) {
 	gcpStorage := new(storage.GcpStorage)
-	if err := gcpStorage.Init(s.GCPEndpoint, s.GCPBucket, s.GCPCredsFile, s.GCPProjectID, s.GCPPrivateKeyID, s.GCPPrivateKey, s.GCPClientEmail, s.GCPClientID, expiryDays); err != nil {
+	if err := gcpStorage.Init(ctx, s.GCPEndpoint, s.GCPBucket, s.GCPCredsFile, s.GCPProjectID, s.GCPPrivateKeyID, s.GCPPrivateKey, s.GCPClientEmail, s.GCPClientID, expiryDays, s.BackupPrefix); err != nil {
 		return nil, err
 	}
 	return gcpStorage, nil
@@ -406,7 +605,7 @@ func (s StorageOptions) getGcpStorage(expiryDays int) (storage.Storage, error) {
 
 func (s StorageOptions) getLocalStorage(expiryDays int) (storage.Storage, error) {
 	localStorage := new(storage.LocalStorage)
-	if err := localStorage.Init(s.LocalPath, expiryDays); err != nil {
+	if err := localStorage.Init(s.LocalPath, expiryDays, s.BackupPrefix); err != nil {
 		return nil, err
 	}
 	return localStorage, nil

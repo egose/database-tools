@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/storage"
@@ -25,6 +26,9 @@ type GcpStorage struct {
 	Bucket        string
 	StorageClient *storage.Client
 	ExpiryDays    int
+	BackupPrefix  string
+	closeOnce     sync.Once
+	closeErr      error
 }
 
 type GcpServiceAccountCreds struct {
@@ -40,11 +44,12 @@ type GcpServiceAccountCreds struct {
 	UniverseDomain          string `json:"universe_domain"`
 }
 
-func (this *GcpStorage) Init(endpoint, bucket, credsPath, projectID, privateKeyId, privateKey, clientEmail, clientID string, expiryDays int) error {
+func (this *GcpStorage) Init(ctx context.Context, endpoint, bucket, credsPath, projectID, privateKeyId, privateKey, clientEmail, clientID string, expiryDays int, backupPrefix string) error {
 	this.Bucket = bucket
 	this.ExpiryDays = expiryDays
+	this.BackupPrefix = NormalizeBackupPrefix(backupPrefix)
 
-	ctx := context.Background()
+	ctx = contextOrBackground(ctx)
 
 	if endpoint != "" {
 		client, err := newEmulatorStorageClient(ctx, endpoint)
@@ -95,7 +100,7 @@ func (this *GcpStorage) Init(endpoint, bucket, credsPath, projectID, privateKeyI
 	}
 
 	if jsonData != nil {
-		c, err := google.CredentialsFromJSON(context.Background(), jsonData, "https://www.googleapis.com/auth/cloud-platform")
+		c, err := google.CredentialsFromJSON(ctx, jsonData, "https://www.googleapis.com/auth/cloud-platform")
 		if err != nil {
 			return fmt.Errorf("failed to read credentials file: %w", err)
 		}
@@ -114,58 +119,64 @@ func (this *GcpStorage) Init(endpoint, bucket, credsPath, projectID, privateKeyI
 }
 
 func newEmulatorStorageClient(ctx context.Context, endpoint string) (*storage.Client, error) {
-	endpoint = normalizeEndpoint(endpoint)
-	previous, hadPrevious := os.LookupEnv("STORAGE_EMULATOR_HOST")
-	if err := os.Setenv("STORAGE_EMULATOR_HOST", endpoint); err != nil {
-		return nil, err
-	}
-
-	client, err := storage.NewClient(ctx, option.WithoutAuthentication())
-
-	if hadPrevious {
-		_ = os.Setenv("STORAGE_EMULATOR_HOST", previous)
-	} else {
-		_ = os.Unsetenv("STORAGE_EMULATOR_HOST")
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return client, nil
+	return storage.NewClient(ctx, option.WithoutAuthentication(), option.WithEndpoint(normalizeEndpoint(endpoint)))
 }
 
 func normalizeEndpoint(endpoint string) string {
 	endpoint = strings.TrimRight(strings.TrimSpace(endpoint), "/")
 	endpoint = strings.TrimSuffix(endpoint, "/upload/storage/v1")
+	if strings.HasSuffix(endpoint, "/storage/v1") {
+		return endpoint + "/"
+	}
 	endpoint = strings.TrimSuffix(endpoint, "/storage/v1")
-	return endpoint
+	return endpoint + "/storage/v1/"
 }
 
-func (this *GcpStorage) Close() {
-	this.StorageClient.Close()
+func (this *GcpStorage) Close() error {
+	if this.StorageClient == nil {
+		return nil
+	}
+
+	this.closeOnce.Do(func() {
+		this.closeErr = this.StorageClient.Close()
+	})
+
+	return this.closeErr
 }
 
-func (this *GcpStorage) GetTargetObjectName(objectName string) (string, error) {
+func (this *GcpStorage) GetTargetObjectName(ctx context.Context, objectName string) (string, error) {
+	ctx = contextOrBackground(ctx)
+
 	if objectName == "" {
-		return this.getLastUpdatedObjectName()
+		return this.getLastUpdatedObjectName(ctx)
 	}
 
-	if _, err := this.getMetadata(objectName); err != nil {
-		if err.Error() == "storage: object doesn't exist" {
-			return this.getLastUpdatedObjectName()
+	resolved, found, err := resolveExplicitObjectName(this.BackupPrefix, objectName, func(candidate string) (bool, error) {
+		if _, err := this.getMetadata(ctx, candidate); err != nil {
+			if errors.Is(err, storage.ErrObjectNotExist) {
+				return false, nil
+			}
+			return false, fmt.Errorf("failed to retrieve metadata: %w", err)
 		}
-		return "", fmt.Errorf("failed to retrieve metadata: %w", err)
+
+		return true, nil
+	})
+	if err != nil {
+		return "", err
+	}
+	if found {
+		return resolved, nil
 	}
 
-	return objectName, nil
+	return "", fmt.Errorf("object %q not found in bucket %q", objectName, this.Bucket)
 }
 
-func (this *GcpStorage) getLastUpdatedObjectName() (string, error) {
+func (this *GcpStorage) getLastUpdatedObjectName(ctx context.Context) (string, error) {
 	bucket := this.StorageClient.Bucket(this.Bucket)
 
-	ctx := context.Background()
-	it := bucket.Objects(ctx, nil)
+	listOptions := newGCPListObjectsOptions(this.BackupPrefix)
+	it := bucket.Objects(ctx, listOptions.Query)
+	it.PageInfo().MaxSize = listOptions.PageSize
 
 	var latest *objectTimestamp
 	for {
@@ -177,6 +188,9 @@ func (this *GcpStorage) getLastUpdatedObjectName() (string, error) {
 			return "", err
 		}
 
+		if !isEligibleBackupObject(objAttrs.Name, this.BackupPrefix) {
+			continue
+		}
 		latest = chooseLaterObject(latest, objectTimestamp{Name: objAttrs.Name, ModifiedAt: objAttrs.Updated})
 	}
 
@@ -187,8 +201,8 @@ func (this *GcpStorage) getLastUpdatedObjectName() (string, error) {
 	return latest.Name, nil
 }
 
-func generateServiceAccountKey(projectID, serviceAccountEmail string) ([]byte, error) {
-	ctx := context.Background()
+func generateServiceAccountKey(ctx context.Context, projectID, serviceAccountEmail string) ([]byte, error) {
+	ctx = contextOrBackground(ctx)
 
 	iamService, err := iam.NewService(ctx)
 	if err != nil {
@@ -215,16 +229,14 @@ func generateServiceAccountKey(projectID, serviceAccountEmail string) ([]byte, e
 }
 
 // See https://cloud.google.com/storage/docs/uploading-objects-from-memory#storage-upload-object-from-memory-go
-func (this *GcpStorage) Upload(objectName string, filePath string) (string, error) {
-	bctx := context.Background()
+func (this *GcpStorage) Upload(ctx context.Context, objectName string, filePath string) (string, error) {
+	ctx = contextOrBackground(ctx)
+
 	reader, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open source file: %w", err)
 	}
 	defer reader.Close()
-
-	ctx, cancel := context.WithTimeout(bctx, time.Second*50)
-	defer cancel()
 
 	wc := this.StorageClient.Bucket(this.Bucket).Object(objectName).NewWriter(ctx)
 
@@ -237,21 +249,17 @@ func (this *GcpStorage) Upload(objectName string, filePath string) (string, erro
 		return "", fmt.Errorf("failed to close writer: %w", err)
 	}
 
-	attrs, err := this.getMetadata(objectName)
+	attrs, err := this.getMetadata(ctx, objectName)
 	if err != nil {
-		return "", fmt.Errorf("failed to retrieve metadata: %w", err)
+		return "", fmt.Errorf("failed to verify uploaded object: %w", err)
 	}
 
 	return attrs.Etag, nil
 }
 
 // See https://cloud.google.com/storage/docs/viewing-editing-metadata#storage-view-object-metadata-go
-func (this *GcpStorage) getMetadata(objectName string) (*storage.ObjectAttrs, error) {
+func (this *GcpStorage) getMetadata(ctx context.Context, objectName string) (*storage.ObjectAttrs, error) {
 	obj := this.StorageClient.Bucket(this.Bucket).Object(objectName)
-
-	ctx := context.Background()
-	ctx, cancel := context.WithTimeout(ctx, time.Second*10)
-	defer cancel()
 
 	attrs, err := obj.Attrs(ctx)
 	if err != nil {
@@ -263,41 +271,41 @@ func (this *GcpStorage) getMetadata(objectName string) (*storage.ObjectAttrs, er
 }
 
 // See https://cloud.google.com/storage/docs/downloading-objects#storage-download-object-go
-func (this *GcpStorage) Download(objectName string, filePath string) error {
+func (this *GcpStorage) Download(ctx context.Context, objectName string, filePath string) error {
+	ctx = contextOrBackground(ctx)
+
 	obj := this.StorageClient.Bucket(this.Bucket).Object(objectName)
 
-	dest, err := utils.CreateFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
-	}
-	defer dest.Close()
-
-	ctx := context.Background()
 	reader, err := obj.NewReader(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create object reader: %w", err)
 	}
 	defer reader.Close()
 
-	_, err = io.Copy(dest, reader)
-	if err != nil {
-		return fmt.Errorf("failed to download object: %w", err)
-	}
-
-	return nil
+	return utils.WriteFileAtomically(filePath, func(dest *os.File) error {
+		_, err := io.Copy(dest, reader)
+		if err != nil {
+			return fmt.Errorf("failed to download object: %w", err)
+		}
+		return nil
+	})
 }
 
-func (this *GcpStorage) DeleteOldObjects() error {
+func (this *GcpStorage) DeleteOldObjects(ctx context.Context, currentObjectName string) error {
+	ctx = contextOrBackground(ctx)
+
 	if this.ExpiryDays == 0 {
 		return nil
 	}
 
 	bucket := this.StorageClient.Bucket(this.Bucket)
-	ctx := context.Background()
-	it := bucket.Objects(ctx, nil)
+	listOptions := newGCPListObjectsOptions(this.BackupPrefix)
+	it := bucket.Objects(ctx, listOptions.Query)
+	it.PageInfo().MaxSize = listOptions.PageSize
 	now := time.Now()
 
 	for {
+		candidates := make([]objectTimestamp, 0, 1)
 		objAttrs, err := it.Next()
 		if err == iterator.Done {
 			break
@@ -308,16 +316,17 @@ func (this *GcpStorage) DeleteOldObjects() error {
 
 		daysOld := now.Sub(objAttrs.Updated).Hours() / 24
 		mlog.Logvf(mlog.Info, "Checking object: %s (%.1f days old)", objAttrs.Name, daysOld)
+		candidates = append(candidates, objectTimestamp{Name: objAttrs.Name, ModifiedAt: objAttrs.Updated})
 
-		if !isExpired(objAttrs.Updated, this.ExpiryDays, now) {
-			continue
+		if err := deleteExpiredObjects(candidates, this.BackupPrefix, this.ExpiryDays, now, currentObjectName, func(name string) error {
+			err := bucket.Object(name).Delete(ctx)
+			if err == nil {
+				mlog.Logvf(mlog.Info, "Deleted object: %s", name)
+			}
+			return err
+		}); err != nil {
+			return err
 		}
-
-		if err := bucket.Object(objAttrs.Name).Delete(ctx); err != nil {
-			return fmt.Errorf("failed to delete object %q: %w", objAttrs.Name, err)
-		}
-
-		mlog.Logvf(mlog.Info, "Deleted object: %s", objAttrs.Name)
 	}
 
 	return nil
