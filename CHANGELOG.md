@@ -1,9 +1,42 @@
-## [Unreleased]
+## [0.15.0](https://github.com/egose/database-tools/compare/v0.14.0...v0.15.0) (2026-08-13)
+
+### Features
+
+* add remediation plan and release hardening workflow ([e0f8f46](https://github.com/egose/database-tools/commit/e0f8f464d63a326e6ab59bea4d253666af524356))
 
 ### Bug Fixes
 
-* **mongoarchive:** delay multi-backend retention until all uploads succeed and report partial backend state on failure
-* **mongoarchive:** document cron singleton scheduling that skips overlapping runs while a prior archive is still active
+* exclude flag documentation from pre-commit markdown checks ([e94a643](https://github.com/egose/database-tools/commit/e94a643a2ba317541aec7f817cdbd0e66def44af))
+* retry MongoDB readiness check in test workflow ([7219fb5](https://github.com/egose/database-tools/commit/7219fb5c4f7b358f729d2ad76d5b9652df38e983))
+* update secret scanning allowlists and inline annotations ([3fa8c89](https://github.com/egose/database-tools/commit/3fa8c890622f774913d43f07e597e201caaba343))
+
+### Documentation
+
+* add codebase health remediation task plan ([9a9496b](https://github.com/egose/database-tools/commit/9a9496b90567fc9ee923a2cecd24cb88fdf107c5))
+* refresh flags documentation to match current behavior ([e26c9fa](https://github.com/egose/database-tools/commit/e26c9fa0217804ba8bac96cdb1a178c9f0f92f5e))
+
+## [0.14.0](https://github.com/egose/database-tools/compare/v0.13.0...v0.14.0) (2026-07-29)
+
+### Features
+
+* automate release tagging and signing ([929e40f](https://github.com/egose/database-tools/commit/929e40fe0f8115d8809d916faa0ce51c4f00b740))
+* upload build artifacts and generate release notes ([fe2cefe](https://github.com/egose/database-tools/commit/fe2cefe41ba97076861d6a29ea975dd0032f61de))
+
+## [0.13.0](https://github.com/egose/database-tools/compare/v0.12.3...v0.13.0) (2026-07-29)
+
+### Features
+
+* add notification backends and archive storage updates ([1fc38be](https://github.com/egose/database-tools/commit/1fc38be03446ca70cb307f050add603c73a15827))
+* harden storage emulators and filesystem helpers ([dec4045](https://github.com/egose/database-tools/commit/dec4045655d46e13bfbd9ee02e84f45fbc169ceb))
+
+### Bug Fixes
+
+* allow pre-commit workflow to push lint fixes ([4e6071f](https://github.com/egose/database-tools/commit/4e6071fd51368d11b095f90255d543fabf6b8804))
+
+### Documentation
+
+* update project license to apache 2.0 ([169e3f3](https://github.com/egose/database-tools/commit/169e3f3d424da6b3b04a6c7607440b87ba9f0afa))
+* update release tag dispatch instructions ([7902827](https://github.com/egose/database-tools/commit/7902827a37e61234d1f078e5ebb9740e298189f4))
 
 ## [0.12.3](https://github.com/egose/database-tools/compare/v0.12.2...v0.12.3) (2026-01-19)
 
