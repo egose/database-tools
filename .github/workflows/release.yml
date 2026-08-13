@@ -6,10 +6,12 @@ on:
     - v*.*.*
 
 jobs:
-  release:
+  verify:
     runs-on: ubuntu-24.04
     permissions:
-      contents: write
+      contents: read
+      attestations: write
+      id-token: write
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -17,19 +19,66 @@ jobs:
     - name: Setup Tools
       uses: ./.github/actions/setup-tools
 
-    - name: Build
-      run: |
-        make build-all VERSION=${{ github.ref_name}}
-        make build-archive
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-    - name: Upload Build Artifact
+    - name: Verify tagged release candidate
+      run: make release-verify VERSION=${{ github.ref_name }}
+
+    - name: Write checksums
+      run: sha256sum dist/*.tar.gz > dist/database-tools-${{ github.ref_name }}-sha256.txt
+
+    - name: Generate SBOM
+      run: |
+        docker run --rm \
+          -v "$PWD:/workspace" \
+          anchore/syft:v1.38.0 \
+          dir:/workspace/dist \
+          -o spdx-json=/workspace/dist/database-tools-${{ github.ref_name }}-sbom.spdx.json
+
+    - name: Attest release artifacts
+      uses: actions/attest-build-provenance@v2
+      with:
+        subject-path: |
+          dist/*.tar.gz
+          dist/*.txt
+          dist/*.spdx.json
+
+    - name: Upload release artifacts
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
       with:
-        name: database-tools-${{ github.ref_name }}
-        path: dist/*.tar.gz
+        name: release-artifacts-${{ github.ref_name }}
+        path: |
+          dist/*.tar.gz
+          dist/*.txt
+          dist/*.spdx.json
+
+  release:
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download verified release artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: release-artifacts-${{ github.ref_name }}
+        path: dist
 
     - name: Release
       uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228
       with:
         generate_release_notes: true
-        files: dist/*.tar.gz
+        files: |
+          dist/*.tar.gz
+          dist/*.txt
+          dist/*.spdx.json
+
+  publish-image:
+    needs: verify
+    uses: ./.github/workflows/publish.yaml
+    with:
+      ref: ${{ github.sha }}
+      tag_name: ${{ github.ref_name }}
+    secrets: inherit # pragma: allowlist secret

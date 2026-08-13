@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -26,9 +27,10 @@ type AwsS3 struct {
 	Session          *session.Session
 	Service          *s3.S3
 	ExpiryDays       int
+	BackupPrefix     string
 }
 
-func (this *AwsS3) Init(endpoint string, accessKeyId string, secretAccessKey string, region string, bucket string, s3ForcePathStyle bool, expiryDays int) error {
+func (this *AwsS3) Init(endpoint string, accessKeyId string, secretAccessKey string, region string, bucket string, s3ForcePathStyle bool, expiryDays int, backupPrefix string) error {
 	this.Endpoint = endpoint
 	this.AccessKeyId = accessKeyId
 	this.SecretAccessKey = secretAccessKey
@@ -36,6 +38,7 @@ func (this *AwsS3) Init(endpoint string, accessKeyId string, secretAccessKey str
 	this.Bucket = bucket
 	this.S3ForcePathStyle = s3ForcePathStyle
 	this.ExpiryDays = expiryDays
+	this.BackupPrefix = NormalizeBackupPrefix(backupPrefix)
 
 	creds := credentials.NewStaticCredentials(accessKeyId, secretAccessKey, "")
 	config := &aws.Config{
@@ -55,38 +58,57 @@ func (this *AwsS3) Init(endpoint string, accessKeyId string, secretAccessKey str
 	return nil
 }
 
-func (this *AwsS3) GetTargetObjectName(objectKey string) (string, error) {
+func (this *AwsS3) GetTargetObjectName(ctx context.Context, objectKey string) (string, error) {
+	ctx = contextOrBackground(ctx)
+
 	if objectKey == "" {
-		return this.getLastUpdatedObjectName()
+		return this.getLastUpdatedObjectName(ctx)
 	}
 
-	input := &s3.HeadObjectInput{
-		Bucket: aws.String(this.Bucket),
-		Key:    aws.String(objectKey),
-	}
-
-	_, err := this.Service.HeadObject(input)
-	if err != nil {
-		if awsErr, ok := err.(awserr.Error); ok && awsErr.Code() == "NotFound" {
-			return "", fmt.Errorf("object %q not found in bucket %q", objectKey, this.Bucket)
+	resolved, found, err := resolveExplicitObjectName(this.BackupPrefix, objectKey, func(candidate string) (bool, error) {
+		err := this.headObject(ctx, candidate)
+		if err == nil {
+			return true, nil
 		}
-		return "", fmt.Errorf("failed to retrieve metadata: %w", err)
+		if isS3NotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to retrieve metadata: %w", err)
+	})
+	if err != nil {
+		return "", err
+	}
+	if found {
+		return resolved, nil
 	}
 
-	return objectKey, nil
+	return "", fmt.Errorf("object %q not found in bucket %q", objectKey, this.Bucket)
 }
 
-func (this *AwsS3) getLastUpdatedObjectName() (string, error) {
+func (this *AwsS3) getLastUpdatedObjectName(ctx context.Context) (string, error) {
 	var latest objectTimestamp
 	hasLatest := false
 
-	err := this.Service.ListObjectsV2Pages(&s3.ListObjectsV2Input{
-		Bucket: aws.String(this.Bucket),
-	}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
-		pageLatest, ok := latestS3Object(page.Contents)
+	err := this.Service.ListObjectsV2PagesWithContext(ctx, newS3ListObjectsInput(this.Bucket, this.BackupPrefix), func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+		candidates := make([]objectTimestamp, 0, len(page.Contents))
+		for _, obj := range page.Contents {
+			if obj == nil || obj.Key == nil || obj.LastModified == nil {
+				continue
+			}
+			candidates = append(candidates, objectTimestamp{Name: *obj.Key, ModifiedAt: *obj.LastModified})
+		}
+
+		pageLatest, ok := latestEligibleObject(candidates, this.BackupPrefix)
 		if ok {
-			if !hasLatest || pageLatest.ModifiedAt.After(latest.ModifiedAt) {
-				latest = pageLatest
+			latestPtr := chooseLaterObject(func() *objectTimestamp {
+				if !hasLatest {
+					return nil
+				}
+				latestCopy := latest
+				return &latestCopy
+			}(), pageLatest)
+			if latestPtr != nil {
+				latest = *latestPtr
 				hasLatest = true
 			}
 		}
@@ -104,7 +126,9 @@ func (this *AwsS3) getLastUpdatedObjectName() (string, error) {
 	return latest.Name, nil
 }
 
-func (this *AwsS3) Upload(blobName string, filePath string) (string, error) {
+func (this *AwsS3) Upload(ctx context.Context, blobName string, filePath string) (string, error) {
+	ctx = contextOrBackground(ctx)
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open source file: %w", err)
@@ -118,35 +142,37 @@ func (this *AwsS3) Upload(blobName string, filePath string) (string, error) {
 		Body:   file,
 	}
 
-	output, err := uploader.Upload(input)
+	output, err := uploader.UploadWithContext(ctx, input)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload object: %v", err)
+	}
+
+	if err := this.headObject(ctx, blobName); err != nil {
+		return "", fmt.Errorf("failed to verify uploaded object: %w", err)
 	}
 
 	return *output.ETag, nil
 }
 
-func (this *AwsS3) Download(objectName string, filePath string) error {
-	dest, err := utils.CreateFile(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
-	}
-	defer dest.Close()
+func (this *AwsS3) Download(ctx context.Context, objectName string, filePath string) error {
+	ctx = contextOrBackground(ctx)
 
 	downloader := s3manager.NewDownloader(this.Session)
-	_, err = downloader.Download(dest, &s3.GetObjectInput{
-		Bucket: aws.String(this.Bucket),
-		Key:    aws.String(objectName),
+	return utils.WriteFileAtomically(filePath, func(dest *os.File) error {
+		_, err := downloader.DownloadWithContext(ctx, dest, &s3.GetObjectInput{
+			Bucket: aws.String(this.Bucket),
+			Key:    aws.String(objectName),
+		})
+		if err != nil {
+			return fmt.Errorf("failed to download object: %w", err)
+		}
+		return nil
 	})
-
-	if err != nil {
-		return fmt.Errorf("failed to download object: %w", err)
-	}
-
-	return nil
 }
 
-func (this *AwsS3) DeleteOldObjects() error {
+func (this *AwsS3) DeleteOldObjects(ctx context.Context, currentObjectName string) error {
+	ctx = contextOrBackground(ctx)
+
 	// If expiry days is not set, do not delete backups
 	if this.ExpiryDays == 0 {
 		return nil
@@ -155,41 +181,70 @@ func (this *AwsS3) DeleteOldObjects() error {
 	svc := this.Service
 	bucket := aws.String(this.Bucket)
 
-	var err error
+	now := time.Now()
+	var pageErr error
 
-	err = svc.ListObjectsV2Pages(&s3.ListObjectsV2Input{
-		Bucket: bucket,
-		Prefix: aws.String(""),
-	}, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+	err := svc.ListObjectsV2PagesWithContext(ctx, newS3ListObjectsInput(this.Bucket, this.BackupPrefix), func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+		candidates := make([]objectTimestamp, 0, len(page.Contents))
 		for _, obj := range page.Contents {
-			// Safety check (should never be nil)
 			if obj.LastModified == nil || obj.Key == nil {
 				continue
 			}
 
-			daysOld := time.Since(*obj.LastModified).Hours() / 24
+			daysOld := now.Sub(*obj.LastModified).Hours() / 24
 			mlog.Logvf(mlog.Info, "Checking object: %s (%.1f days old)", *obj.Key, daysOld)
+			candidates = append(candidates, objectTimestamp{Name: *obj.Key, ModifiedAt: *obj.LastModified})
+		}
 
-			if isExpired(*obj.LastModified, this.ExpiryDays, time.Now()) {
-				_, delErr := svc.DeleteObject(&s3.DeleteObjectInput{
-					Bucket: bucket,
-					Key:    obj.Key,
-				})
-
-				if delErr != nil {
-					mlog.Logvf(mlog.Info, "Failed to delete object %s: %v", *obj.Key, delErr)
-					continue
-				}
-				mlog.Logvf(mlog.Info, "Deleted object: %s", *obj.Key)
+		pageErr = deleteExpiredObjects(candidates, this.BackupPrefix, this.ExpiryDays, now, currentObjectName, func(name string) error {
+			_, delErr := svc.DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
+				Bucket: bucket,
+				Key:    aws.String(name),
+			})
+			if delErr == nil {
+				mlog.Logvf(mlog.Info, "Deleted object: %s", name)
 			}
+			return delErr
+		})
+		if pageErr != nil {
+			return false
 		}
 
 		return true // continue paging
 	})
+	if pageErr != nil {
+		return pageErr
+	}
 
 	if err != nil {
 		return fmt.Errorf("error listing S3 objects: %w", err)
 	}
 
 	return nil
+}
+
+func (this *AwsS3) Close() error {
+	return nil
+}
+
+func (this *AwsS3) headObject(ctx context.Context, objectKey string) error {
+	_, err := this.Service.HeadObjectWithContext(ctx, &s3.HeadObjectInput{
+		Bucket: aws.String(this.Bucket),
+		Key:    aws.String(objectKey),
+	})
+	return err
+}
+
+func isS3NotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var requestFailure awserr.RequestFailure
+	if errors.As(err, &requestFailure) && requestFailure.StatusCode() == 404 {
+		return true
+	}
+
+	var awsErr awserr.Error
+	return errors.As(err, &awsErr) && awsErr.Code() == "NotFound"
 }

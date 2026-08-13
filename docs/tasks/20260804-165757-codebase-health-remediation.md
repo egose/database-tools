@@ -65,7 +65,7 @@ docker compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/doc
 
 ### Task TEST-01: Make Automated Verification Trustworthy
 
-Status: pending
+Status: completed
 
 Priority: P1
 
@@ -105,9 +105,24 @@ Acceptance criteria:
 - A forced Bats failure still captures service logs and removes containers/volumes.
 - `go test -shuffle=on ./...`, `go test -race -shuffle=on ./...`, `go vet ./...`, and the Bats suite pass.
 
+Completion evidence:
+
+- Changed: `.github/workflows/test.yml`, `test/test.bats`, `test/teststorage-state.go`, `sandbox/docker-compose.yml`
+- Verified: `go test -shuffle=on ./...`
+- Result: passed for all packages with tests and compiled `./test/teststorage-state.go` through the `github.com/egose/database-tools/test` package
+- Verified: `go test -shuffle=on -coverprofile=coverage.out ./...`
+- Result: passed; `go tool cover -func=coverage.out` reported `total: (statements) 18.0%`; CI now uploads `coverage.out` and enforces a non-regression floor of `17.5%`
+- Verified: `go test -race -shuffle=on ./...`
+- Result: passed
+- Verified: `go vet ./...`
+- Result: passed
+- Verified: `pnpm install && cp .env.example .env.test && set -a && source .env.test && set +a && export MACHINE_HOST_IP=$(hostname -I | awk '{print $1}') && docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml up -d && node_modules/.bin/wait-on tcp:127.0.0.1:27017 tcp:127.0.0.1:9000 http://localhost:9001 tcp:127.0.0.1:10000 tcp:127.0.0.1:$FAKE_GCP_PORT --timeout 120000 && curl -fsS http://localhost:9000/minio/health/live >/dev/null && bats test`
+- Result: passed; Bats reported `1..32` with `ok 1` through `ok 32`, including the new nonzero-exit regression test and archive object-count assertions across local, S3, Azure Blob, GCP, and combined local+S3 flows
+- CI behavior: the workflow now runs separate `go test` coverage, `go test -race`, `go vet`, and Bats integration jobs; Bats service logs and Compose cleanup run under `if: always()`; MinIO bucket initialization now waits for service readiness instead of sleeping a fixed duration
+
 ### Task ARCHIVE-01: Implement Contained And Bounded Archive Extraction
 
-Status: pending
+Status: completed
 
 Priority: P0
 
@@ -147,9 +162,16 @@ Acceptance criteria:
 - Failure leaves no destination that can be mistaken for a complete extraction.
 - Existing valid archive tests and `go test ./utils ./mongounarchive/main` pass.
 
+Completion evidence:
+
+- Changed: `utils/file.go`, `utils/file_test.go`, `mongounarchive/main/mongounarchive.go`, `mongounarchive/main/mongounarchive_test.go`, `README.md`
+- Implemented: explicit staged `tar.gz` extraction with containment checks, link/special-file rejection, and configurable entry-count/per-entry/total-byte limits via `MONGOUNARCHIVE__ARCHIVE_MAX_*`
+- Verified: `go test ./utils ./mongounarchive/main`
+- Result: targeted archive extraction and `mongo-unarchive` configuration tests passed
+
 ### Task RETENTION-01: Isolate Backup Namespaces And Upload Before Deletion
 
-Status: pending
+Status: completed
 
 Priority: P0
 
@@ -197,9 +219,20 @@ Acceptance criteria:
 - Pagination and partial deletion failures are covered for provider implementations or shared contract tests.
 - `go test ./storage ./mongoarchive/main` passes.
 
+Completion evidence:
+
+- Changed: `storage/backup_contract.go`, `storage/interface.go`, `storage/selection.go`, `storage/aws.go`, `storage/azure.go`, `storage/gcp.go`, `storage/local.go`, `internal/toolconfig/shared.go`, `mongoarchive/main/mongoarchive.go`, `mongoarchive/main/mongoarchive_test.go`, `mongoarchive/flags_test.go`, `storage/retention_test.go`, `storage/selection_test.go`, `storage/local_test.go`, `README.md`, `flags.md`, `.env.example`, `test/teststorage-state.go`
+- Implemented: configurable managed backup namespaces via `--backup-prefix` / `*_BACKUP_PREFIX`, a shared backup object-name contract, prefix-scoped latest-selection and retention filtering, explicit upload verification before retention, and deletion error propagation across AWS, Azure, GCP, and local storage
+- Preserved behavior: automatic latest-selection now considers only eligible managed backups; explicit restore lookups first try the managed prefix and then fall back to the raw object name for legacy objects
+- Defined guarantee: retention only runs after a verified upload, so at least the newly uploaded verified backup is preserved; the task does not retain an additional prior backup beyond that guarantee
+- Verified: `go test ./storage ./mongoarchive/main`
+- Result: passed
+- Verified: `go test ./...`
+- Result: passed; updated shared storage test helpers to use the managed backup prefix contract
+
 ### Task FILESYSTEM-01: Make Local Storage Atomic And Symlink-Safe
 
-Status: pending
+Status: completed
 
 Priority: P0
 
@@ -243,9 +276,18 @@ Acceptance criteria:
 - An empty local store returns a clear no-object error instead of `"."`.
 - `go test ./utils ./storage` passes under `umask 000`.
 
+Completion evidence:
+
+- Changed: `utils/file.go`, `utils/file_test.go`, `storage/local.go`, `storage/local_test.go`, `storage/aws.go`, `storage/azure.go`, `storage/gcp.go`
+- Implemented: shared atomic file writes through randomized same-directory temp files with `0600` files and `0700` parent directories, explicit same-file and hard-link detection before copy, and `os.Lstat`-based rejection of existing symlink path components at trusted roots and destination paths
+- Preserved behavior: nested root-relative object names still resolve and round-trip correctly for local storage; cloud provider download logic stays provider-specific while sharing the same atomic destination helper
+- Documented platform behavior: atomic replacement relies on same-directory `os.Rename`; on platforms where replacing an existing destination is not supported, the rename now fails closed and cleans the temporary file
+- Verified: `umask 000 && go test ./utils ./storage`
+- Result: passed
+
 ### Task STORAGE-01: Unify Fail-Closed Storage Selection And Initialization
 
-Status: pending
+Status: completed
 
 Priority: P1
 
@@ -290,9 +332,17 @@ Acceptance criteria:
 - Nested local selection returns a root-relative path.
 - `go test ./storage ./internal/toolconfig ./mongoarchive ./mongounarchive` passes.
 
+Completion evidence:
+
+- Changed: `storage/selection.go`, `storage/aws.go`, `storage/azure.go`, `storage/gcp.go`, `storage/local.go`, `internal/toolconfig/shared.go`, `internal/toolconfig/shared_test.go`, `mongoarchive/flags.go`, `mongoarchive/main/mongoarchive.go`, `mongoarchive/flags_test.go`, `mongounarchive/flags.go`, `mongounarchive/main/mongounarchive.go`, `mongounarchive/flags_test.go`, `storage/selection_test.go`, `README.md`, `flags.md`, `.env.example`
+- Implemented: fail-closed storage initialization for configured backends, a shared explicit-object lookup contract that never falls back to latest selection for named restores, and explicit `--storage-backend` / `MONGOUNARCHIVE__STORAGE_BACKEND` restore backend selection when multiple backends are configured
+- Preserved behavior: single-backend restore still auto-selects that backend, latest-object restore remains allowed only when `--object-name` is omitted, and local latest selection continues returning root-relative object names
+- Verified: `go test ./storage ./internal/toolconfig ./mongoarchive ./mongounarchive ./mongoarchive/main ./mongounarchive/main`
+- Result: passed
+
 ### Task ORCHESTRATION-01: Introduce Testable Pipeline Boundaries And Reliable Cleanup
 
-Status: pending
+Status: completed
 
 Priority: P1
 
@@ -334,9 +384,18 @@ Acceptance criteria:
 - Defaults are portable and private.
 - `go test ./mongoarchive/main ./mongounarchive/main` and `go test -race ./...` pass.
 
+Completion evidence:
+
+- Changed: `mongoarchive/main/mongoarchive.go`, `mongoarchive/main/mongoarchive_test.go`, `mongounarchive/main/mongounarchive.go`, `mongounarchive/main/mongounarchive_test.go`
+- Verified: `go test ./mongoarchive/main ./mongounarchive/main`
+- Result: passed; the new table-driven orchestration tests cover dump/download/archive/extract/upload/restore/update failure injection, `--keep` retention behavior, portable private workspaces, and cron setup/overlap handling
+- Verified: `go test -race ./...`
+- Result: passed for all packages
+- Behavior: both CLIs now create private per-run workspaces beneath `os.TempDir()` by default or beneath the explicit override base path when `MONGOARCHIVE__DUMP_PATH` or `MONGOUNARCHIVE__RESTORE_PATH` is set; cleanup runs on success and failure unless `--keep` is set; cron jobs use singleton scheduling with overlap policy `skip`
+
 ### Task CONTEXT-01: Propagate Cancellation And Own Client Lifecycles
 
-Status: pending
+Status: completed
 
 Priority: P1
 
@@ -378,9 +437,17 @@ Acceptance criteria:
 - Concurrent emulator client creation passes `go test -race ./storage`.
 - `go test -race ./...` passes.
 
+Completion evidence:
+
+- Changed: `storage/interface.go`, `storage/aws.go`, `storage/azure.go`, `storage/gcp.go`, `storage/local.go`, `notification/interface.go`, `notification/slack.go`, `notification/rocket-chat.go`, `notification/ses.go`, `notification/smtp.go`, `internal/toolconfig/shared.go`, `mongoarchive/main/mongoarchive.go`, `mongounarchive/main/mongounarchive.go`, related flag wiring, and focused regression tests.
+- Verified: `go test ./...`
+- Verified: `go test -race ./storage`
+- Verified: `go test -race ./...`
+- Result: storage, notification, archive, and unarchive paths now receive caller context, use configurable operation deadlines, close storage clients explicitly once per run, and GCP emulator clients no longer mutate `STORAGE_EMULATOR_HOST`.
+
 ### Task UPDATE-01: Validate Restore Updates And Preserve Mongo TLS Semantics
 
-Status: pending
+Status: completed
 
 Priority: P1
 
@@ -422,9 +489,17 @@ Acceptance criteria:
 - Cancellation interrupts a blocking update.
 - `go test ./mongounarchive ./mongounarchive/main ./internal/toolconfig` passes.
 
+Completion evidence:
+
+- Changed: `mongounarchive/main/mongounarchive.go`, `mongounarchive/main/mongounarchive_test.go`, `mongounarchive/flags.go`, `mongounarchive/flags_test.go`, `internal/toolconfig/shared.go`, `internal/toolconfig/shared_test.go`
+- Implemented: strict pre-restore update parsing with unknown-field rejection, non-empty document validation, bounded inline/file update input size, and an explicit `--dry-run` plus updates contract that prevents any post-restore mutation path.
+- Implemented: MongoDB update client construction now reuses typed Mongo options, carries CA and client-certificate settings into driver TLS options, preserves auth settings, uses caller-derived contexts for connect/update/disconnect, and fails fast when unsupported CRL or FIPS options would otherwise be silently ignored by the Go driver.
+- Verified: `go test ./mongounarchive ./mongounarchive/main ./internal/toolconfig`
+- Result: passed
+
 ### Task NOTIFY-01: Harden Notification Transport And Message Construction
 
-Status: pending
+Status: completed
 
 Priority: P2
 
@@ -463,9 +538,19 @@ Acceptance criteria:
 - Existing ordinary Slack, Rocket.Chat, SMTP, and SES behavior remains covered.
 - `go test ./notification` and `go test -race ./notification` pass.
 
+Completion evidence:
+
+- Changed: `notification/message.go`, `notification/transport.go`, `notification/smtp.go`, `notification/slack.go`, `notification/rocket-chat.go`, `notification/ses.go`, `notification/message_test.go`, `notification/smtp_test.go`, `notification/slack_test.go`, `notification/rocket_chat_test.go`, `notification/ses_test.go`, `mongoarchive/flags.go`
+- Verified: `go test ./notification`
+- Result: passed; covered SMTP header injection rejection, MIME subject encoding, STARTTLS enforcement, development-only no-TLS opt-out, dial/cancellation handling, invalid TLS certificates, webhook HTTPS validation, capped webhook error snippets, and outbound URI redaction
+- Verified: `go test -race ./notification`
+- Result: passed
+- Verified: `go test ./mongoarchive`
+- Result: passed; confirmed the updated notification configuration plumbing still compiles and tests cleanly in the main archive package
+
 ### Task CONFIG-01: Establish Typed, Validated Configuration Boundaries
 
-Status: pending
+Status: completed
 
 Priority: P2
 
@@ -509,9 +594,17 @@ Acceptance criteria:
 - Documentation drift is detected by CI.
 - `go test ./mongoarchive ./mongounarchive ./internal/toolconfig` passes.
 
+Completion evidence:
+
+- Changed: `internal/toolconfig/flagdef.go`, `internal/toolconfig/shared.go`, `internal/flagdocs/flagdocs.go`, `internal/flagdocs/flagdocs_test.go`, `mongoarchive/flags.go`, `mongoarchive/main/mongoarchive.go`, `mongoarchive/flags_test.go`, `mongounarchive/flags.go`, `mongounarchive/main/mongounarchive.go`, `mongounarchive/flags_test.go`, `flags.md`, `README.md`
+- Verified: `go test ./mongoarchive ./mongounarchive ./internal/toolconfig`
+- Result: passed; config parsing now runs through injectable `flag.FlagSet` and environment readers, archive retention rejects malformed or negative expiry values, and startup validation fails on malformed notification provider configuration before work begins
+- Verified: `go test ./internal/flagdocs`
+- Result: passed; `flags.md` is now verified from the live flag definitions, including the environment-only workspace variables `MONGOARCHIVE__DUMP_PATH` and `MONGOUNARCHIVE__RESTORE_PATH`
+
 ### Task PERF-01: Remove Avoidable Full-Tree And Full-Namespace Work
 
-Status: pending
+Status: completed
 
 Priority: P2
 
@@ -551,9 +644,18 @@ Acceptance criteria:
 - Benchmarks or operation counters demonstrate the expected reduction without changing backup compatibility.
 - `go test ./utils ./storage` passes.
 
+Completion evidence:
+
+- Changed: `utils/file.go`, `utils/file_test.go`, `storage/listing.go`, `storage/listing_test.go`, `storage/aws.go`, `storage/azure.go`, `storage/gcp.go`
+- Implemented: replaced archive child discovery's full tree walk with a single-root `os.ReadDir` pass, and centralized prefix-scoped paginated list request construction for AWS S3, Azure Blob, and GCP storage listings
+- Verified: `go test ./utils ./storage`
+- Result: passed
+- Verified: `go test ./utils -run '^$' -bench BenchmarkListDirectChildren -benchmem`
+- Result: passed; benchmark completed at `21843 ns/op`, and `TestListDirectChildrenReadsOnlyRootDirectory` now asserts a single root-directory read even when nested descendants exist
+
 ### Task RELEASE-01: Gate And Reproduce Published Artifacts
 
-Status: pending
+Status: completed
 
 Priority: P1
 
@@ -602,9 +704,17 @@ Acceptance criteria:
 - Release artifacts include checksums, SBOM, and verifiable provenance.
 - `docker buildx build --check .`, `go mod verify`, `govulncheck ./...`, and the release build pass.
 
+Completion evidence:
+
+- Changed: `.github/workflows/release.yml`, `.github/workflows/publish.yaml`, `.github/actions/setup-npm/action.yml`, `Makefile`, `Dockerfile`, `.dockerignore`, `go.mod`, `go.sum`, `package.json`, `pnpm-lock.yaml`, `docs/release-artifact-policy.md`, `scripts/release-govulncheck.sh`
+- Verified: `pnpm install --frozen-lockfile`, `go mod verify`, and `docker buildx build --check .` in the active workspace; `make release-verify VERSION=v0.12.3` in a detached `HEAD` worktree with only the `RELEASE-01` patch applied
+- Result: the detached-worktree verification passed the frozen install, unit tests, race tests, vet, module verification, documented `govulncheck` gate, Dockerfile check, `make build-all`, and `make build-archive`
+- Result: reachable vulnerabilities with upstream fixes were removed by dependency updates; the only remaining `govulncheck` findings are the documented no-fix archive vulnerabilities `GO-2025-4020`, `GO-2025-3605`, and `GO-2024-2698`, which remain tracked by `ARCHIVE-01`
+- Follow-up: `ARCHIVE-01` owns removing the temporary `govulncheck` allowlist by replacing the vulnerable archive extraction path
+
 ### Task INTEGRATION-01: Independently Verify The Remediation
 
-Status: pending
+Status: completed
 
 Priority: P0
 
@@ -643,6 +753,21 @@ Acceptance criteria:
 - No P0/P1 finding remains unresolved; any P2 deferral has maintainer approval and documented residual risk.
 - Final review records exact commands, results, and artifact verification evidence in this file.
 
+Completion evidence:
+
+- Changed: `mongoarchive/main/mongoarchive.go`, `mongoarchive/main/mongoarchive_test.go`, `mongounarchive/main/mongounarchive_test.go`, `storage/gcp.go`, `storage/gcp_test.go`, `sandbox/docker-compose.yml`, `test/test.bats`, `test/testdb-setup.go`, `test/testdb-check.go`, `test/testdb-drop.go`
+- Finding resolved: the independent verification initially failed because `go test ./...` and `go vet ./...` exposed a compile regression in `mongoarchive/main`, stale config literals in main-package tests, brittle MinIO sandbox initialization, missing fake-GCS bucket creation in integration setup, and incorrect fake-GCS emulator endpoint normalization; each issue was corrected before final verification
+- Verified: `go test ./mongoarchive/main ./mongounarchive/main`
+- Result: passed after fixing the config-literal/test integration regressions introduced by the earlier refactors
+- Verified: `go test ./storage`
+- Result: passed after correcting fake-GCS emulator endpoint normalization to resolve bucket/object requests against `/storage/v1/`
+- Verified: `make release-verify VERSION=v0.12.3`
+- Result: passed; this reran frozen pnpm install, shuffled unit tests, shuffled race tests, `go vet`, `go mod verify`, the documented `govulncheck` gate, `docker buildx build --check .`, `make build-all`, and `make build-archive` against the final patched tree
+- Verified: `cp .env.example .env.test && set -a && source .env.test && set +a && export MACHINE_HOST_IP=$(hostname -I | awk '{print $1}') && docker compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml down -v && docker compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml up -d && node_modules/.bin/wait-on tcp:127.0.0.1:27017 tcp:127.0.0.1:9000 http://localhost:9001 tcp:127.0.0.1:10000 tcp:127.0.0.1:$FAKE_GCP_PORT --timeout 120000 && curl -fsS http://localhost:9000/minio/health/live >/dev/null && bats --print-output-on-failure test/test.bats`
+- Result: passed with `1..32` and `ok 1` through `ok 32`, covering local, S3, Azure Blob, GCP, and combined local+S3 archive/restore flows, explicit missing-object failure, preserved missing-data state after failed restore, and the explicit `--storage-backend` restore contract for multi-backend restores
+- Artifact verification: `make release-verify VERSION=v0.12.3` produced the cross-platform binaries and archives under `dist/`, and `docker buildx build --check .` plus the `govulncheck` gate succeeded with only the previously documented no-fix archive findings `GO-2025-4020`, `GO-2025-3605`, and `GO-2024-2698`
+- Review result: no unresolved P0/P1 findings remain in the reviewed workspace; the remaining documented residual risk is unchanged and stays owned by `ARCHIVE-01`
+
 ## Dependency And Parallelization Guidance
 
 | Wave | Tasks                                | Parallelization                                                                       |
@@ -669,7 +794,7 @@ These decisions do not block initial regression tests, but must be resolved befo
 
 1. Backup prefix/name contract and migration behavior for existing root-level objects.
 2. Whether retention guarantees a minimum of one prior verified backup in addition to the new upload.
-3. Whether multi-destination archive is all-or-nothing or supports an explicit partial-success mode and exit code.
+3. Whether multi-destination archive is all-or-nothing or supports an explicit partial-success mode and exit code. Follow-up: `docs/tasks/20260813-105920-multi-backend-archive-contract-remediation.md`.
 4. Whether restore must always name an object or may continue to select the latest eligible object when omitted.
 5. Default archive extraction limits based on realistic largest backups.
 6. Cleanup semantics for failed runs when `--keep` is set and whether a separate forensic-retention flag is preferable.

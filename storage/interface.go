@@ -1,8 +1,11 @@
 package storage
 
+import "context"
+
 type Storage interface {
-	Upload(string, string) (string, error)
-	Download(string, string) error
-	GetTargetObjectName(string) (string, error)
-	DeleteOldObjects() error
+	Upload(context.Context, string, string) (string, error)
+	Download(context.Context, string, string) error
+	GetTargetObjectName(context.Context, string) (string, error)
+	DeleteOldObjects(context.Context, string) error
+	Close() error
 }

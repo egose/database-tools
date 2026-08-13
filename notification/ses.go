@@ -1,35 +1,41 @@
 package notification
 
 import (
+	"context"
 	"fmt"
 	"net/mail"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/ses"
 )
 
 type sesEmailSender interface {
-	SendEmail(input *ses.SendEmailInput) (*ses.SendEmailOutput, error)
+	SendEmailWithContext(aws.Context, *ses.SendEmailInput, ...request.Option) (*ses.SendEmailOutput, error)
 }
 
 type SES struct {
-	Endpoint            string
-	Region              string
-	AccessKeyID         string
-	SecretAccessKey     string
-	From                string
-	To                  []string
-	SubjectPrefix       string
-	notifyOnFailureOnly bool
-	client              sesEmailSender
+	Endpoint                               string
+	Region                                 string
+	AccessKeyID                            string
+	SecretAccessKey                        string
+	From                                   string
+	To                                     []string
+	SubjectPrefix                          string
+	AllowInsecureEndpointHTTPInDevelopment bool
+	notifyOnFailureOnly                    bool
+	client                                 sesEmailSender
 }
 
-func (s *SES) Init(endpoint, region, accessKeyID, secretAccessKey, from, to, subjectPrefix string, notifyOnFailureOnly bool) error {
+func (s *SES) Init(endpoint, region, accessKeyID, secretAccessKey, from, to, subjectPrefix string, notifyOnFailureOnly bool, allowInsecureEndpointHTTPInDevelopment bool) error {
 	if region == "" {
 		return fmt.Errorf("SES region is required")
+	}
+	if err := validateHTTPSURL(endpoint, allowInsecureEndpointHTTPInDevelopment, "SES endpoint override"); err != nil {
+		return err
 	}
 	if from == "" {
 		return fmt.Errorf("SES from address is required")
@@ -66,12 +72,13 @@ func (s *SES) Init(endpoint, region, accessKeyID, secretAccessKey, from, to, sub
 	s.From = from
 	s.To = recipients
 	s.SubjectPrefix = subjectPrefix
+	s.AllowInsecureEndpointHTTPInDevelopment = allowInsecureEndpointHTTPInDevelopment
 	s.notifyOnFailureOnly = notifyOnFailureOnly
 	s.client = ses.New(sess)
 	return nil
 }
 
-func (s *SES) Send(success bool, loc *time.Location, filenameOrError string) error {
+func (s *SES) Send(ctx context.Context, success bool, loc *time.Location, filenameOrError string) error {
 	if success && s.notifyOnFailureOnly {
 		return nil
 	}
@@ -92,7 +99,7 @@ func (s *SES) Send(success bool, loc *time.Location, filenameOrError string) err
 		Source: aws.String(s.From),
 	}
 
-	if _, err := s.client.SendEmail(input); err != nil {
+	if _, err := s.client.SendEmailWithContext(aws.Context(contextOrBackground(ctx)), input); err != nil {
 		return fmt.Errorf("failed to send SES email: %w", err)
 	}
 

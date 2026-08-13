@@ -1,10 +1,13 @@
 package notification
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/request"
 	"github.com/aws/aws-sdk-go/service/ses"
 )
 
@@ -13,7 +16,7 @@ type fakeSESSender struct {
 	err   error
 }
 
-func (f *fakeSESSender) SendEmail(input *ses.SendEmailInput) (*ses.SendEmailOutput, error) {
+func (f *fakeSESSender) SendEmailWithContext(_ aws.Context, input *ses.SendEmailInput, _ ...request.Option) (*ses.SendEmailOutput, error) {
 	f.input = input
 	if f.err != nil {
 		return nil, f.err
@@ -23,9 +26,25 @@ func (f *fakeSESSender) SendEmail(input *ses.SendEmailInput) (*ses.SendEmailOutp
 
 func TestSESInitRejectsInvalidFrom(t *testing.T) {
 	sesNotification := new(SES)
-	err := sesNotification.Init("", "us-east-1", "", "", "bad", "to@example.com", "", false)
+	err := sesNotification.Init("", "us-east-1", "", "", "bad", "to@example.com", "", false, false)
 	if err == nil {
 		t.Fatal("Init() expected invalid from error")
+	}
+}
+
+func TestSESInitRejectsPlaintextEndpointOverride(t *testing.T) {
+	sesNotification := new(SES)
+	err := sesNotification.Init("http://localhost:9000", "us-east-1", "", "", "from@example.com", "to@example.com", "", false, false)
+	if err == nil {
+		t.Fatal("Init() expected plaintext endpoint rejection")
+	}
+}
+
+func TestSESInitAllowsPlaintextEndpointOverrideInDevelopment(t *testing.T) {
+	sesNotification := new(SES)
+	err := sesNotification.Init("http://localhost:9000", "us-east-1", "", "", "from@example.com", "to@example.com", "", false, true)
+	if err != nil {
+		t.Fatalf("Init() error = %v", err)
 	}
 }
 
@@ -38,7 +57,7 @@ func TestSESSendBuildsEmail(t *testing.T) {
 		client:        fake,
 	}
 
-	if err := sesNotification.Send(false, time.UTC, "boom"); err != nil {
+	if err := sesNotification.Send(context.Background(), false, time.UTC, "boom"); err != nil {
 		t.Fatalf("Send() error = %v", err)
 	}
 
@@ -57,7 +76,7 @@ func TestSESSendReturnsServiceError(t *testing.T) {
 		client: &fakeSESSender{err: errors.New("send failed")},
 	}
 
-	if err := sesNotification.Send(false, time.UTC, "boom"); err == nil {
+	if err := sesNotification.Send(context.Background(), false, time.UTC, "boom"); err == nil {
 		t.Fatal("Send() expected service error")
 	}
 }

@@ -1,28 +1,32 @@
 package notification
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
+	"context"
 	"time"
 )
 
 type Slack struct {
-	WebhookURL          string
-	WebhookPrefix       string
-	notifyOnFailureOnly bool
+	WebhookURL                            string
+	WebhookPrefix                         string
+	AllowInsecureWebhookHTTPInDevelopment bool
+	Client                                httpDoer
+	notifyOnFailureOnly                   bool
 }
 
-func (s *Slack) Init(webhookURL, webhookPrefix string, notifyOnFailureOnly bool) error {
+func (s *Slack) Init(webhookURL, webhookPrefix string, notifyOnFailureOnly bool, allowInsecureWebhookHTTPInDevelopment bool) error {
+	if err := validateHTTPSURL(webhookURL, allowInsecureWebhookHTTPInDevelopment, "Slack webhook URL"); err != nil {
+		return err
+	}
+
 	s.WebhookURL = webhookURL
 	s.WebhookPrefix = webhookPrefix
+	s.AllowInsecureWebhookHTTPInDevelopment = allowInsecureWebhookHTTPInDevelopment
+	s.Client = httpClientOrDefault(s.Client)
 	s.notifyOnFailureOnly = notifyOnFailureOnly
 	return nil
 }
 
-func (s *Slack) Send(success bool, loc *time.Location, filenameOrError string) error {
+func (s *Slack) Send(ctx context.Context, success bool, loc *time.Location, filenameOrError string) error {
 	if success && s.notifyOnFailureOnly {
 		return nil
 	}
@@ -49,28 +53,5 @@ func (s *Slack) Send(success bool, loc *time.Location, filenameOrError string) e
 		},
 	}
 
-	jsonPayload, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("Error encoding JSON: %v", err)
-	}
-
-	req, err := http.NewRequest("POST", s.WebhookURL, bytes.NewBuffer(jsonPayload))
-	if err != nil {
-		return fmt.Errorf("Error creating request: %v", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: webhookTimeout}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("Error sending request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("unexpected webhook response status %d: %s", resp.StatusCode, string(body))
-	}
-
-	return nil
+	return sendWebhookJSON(ctx, s.Client, s.WebhookURL, payload)
 }
