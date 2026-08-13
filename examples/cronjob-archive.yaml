@@ -35,7 +35,7 @@ spec:
               mongo-archive --db=mydb --read-preference=primary --force-table-scan
             env:
             - name: MONGOARCHIVE__URI
-              value: mongodb+srv://user:password@cluster0.my.mongodb.net
+              value: mongodb+srv://user:password@cluster0.my.mongodb.net # pragma: allowlist secret
             - name: MONGOARCHIVE__AZ_ACCOUNT_NAME
               value: mystorage
             - name: MONGOARCHIVE__AZ_ACCOUNT_KEY

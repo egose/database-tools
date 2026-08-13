@@ -33,7 +33,7 @@ type AwsS3 struct {
 func (this *AwsS3) Init(endpoint string, accessKeyId string, secretAccessKey string, region string, bucket string, s3ForcePathStyle bool, expiryDays int, backupPrefix string) error {
 	this.Endpoint = endpoint
 	this.AccessKeyId = accessKeyId
-	this.SecretAccessKey = secretAccessKey
+	this.SecretAccessKey = secretAccessKey // pragma: allowlist secret
 	this.Region = region
 	this.Bucket = bucket
 	this.S3ForcePathStyle = s3ForcePathStyle

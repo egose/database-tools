@@ -31,7 +31,7 @@ type AzBlob struct {
 
 func (this *AzBlob) Init(accountName string, accountKey string, containerName string, endpoint string, expiryDays int, backupPrefix string) error {
 	this.AccountName = accountName
-	this.AccountKey = accountKey
+	this.AccountKey = accountKey // pragma: allowlist secret
 	this.ContainerName = containerName
 	this.Endpoint = endpoint
 	this.ExpiryDays = expiryDays
