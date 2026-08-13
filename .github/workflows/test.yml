@@ -80,7 +80,16 @@ jobs:
         docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml up -d
 
         node_modules/.bin/wait-on tcp:127.0.0.1:27017 tcp:127.0.0.1:9000 http://localhost:9001 tcp:127.0.0.1:10000 tcp:127.0.0.1:$FAKE_GCP_PORT --timeout 120000
-        mongosh "$DATABASE_URL" --eval 'db.adminCommand({ ping: 1 })' >/dev/null
+        for attempt in $(seq 1 60); do
+          if output=$(mongosh "$DATABASE_URL" --quiet --eval 'db.adminCommand({ ping: 1 }).ok' 2>/dev/null) && [ "$output" = "1" ]; then
+            break
+          fi
+          if [ "$attempt" -eq 60 ]; then
+            mongosh "$DATABASE_URL" --eval 'db.adminCommand({ ping: 1 })'
+            exit 1
+          fi
+          sleep 2
+        done
         curl -fsS http://localhost:9000/minio/health/live >/dev/null
 
     - name: Run Bats suite
