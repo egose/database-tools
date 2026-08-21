@@ -14,7 +14,7 @@ COPY utils ./utils
 RUN make build
 
 # See https://hub.docker.com/_/alpine/tags
-FROM alpine:3.23.4
+FROM alpine:3.24.1
 
 RUN adduser -D -u 1000 nonroot
 
