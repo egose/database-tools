@@ -1,6 +1,6 @@
 nodejs 26.7.0
 python 3.14.6
-golang 1.26.6
+golang 1.27.0
 pnpm 11.21.0
 bats 1.14.0
 act 0.2.89
