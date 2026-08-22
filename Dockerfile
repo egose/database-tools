@@ -1,5 +1,5 @@
 # See docs/release-artifact-policy.md for the release toolchain contract.
-FROM golang:1.26.5 AS build
+FROM golang:1.27.0 AS build
 
 WORKDIR /app
 
