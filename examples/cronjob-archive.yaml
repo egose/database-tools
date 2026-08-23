@@ -27,7 +27,7 @@ spec:
               name: backup-volume
           containers:
           - name: backup-job
-            image: ghcr.io/egose/database-tools:0.3
+            image: ghcr.io/egose/database-tools:<latest-version>
             imagePullPolicy: IfNotPresent
             command: [/bin/sh, -c]
             args:
@@ -35,13 +35,25 @@ spec:
               mongo-archive --db=mydb --read-preference=primary --force-table-scan
             env:
             - name: MONGOARCHIVE__URI
-              value: mongodb+srv://user:password@cluster0.my.mongodb.net # pragma: allowlist secret
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-archive-secrets
+                  key: mongodb-uri
             - name: MONGOARCHIVE__AZ_ACCOUNT_NAME
-              value: mystorage
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-archive-secrets
+                  key: azure-account-name
             - name: MONGOARCHIVE__AZ_ACCOUNT_KEY
-              value: myaccountkey
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-archive-secrets
+                  key: azure-account-key
             - name: MONGOARCHIVE__AZ_CONTAINER_NAME
-              value: mybackup
+              valueFrom:
+                secretKeyRef:
+                  name: mongo-archive-secrets
+                  key: azure-container-name
             volumeMounts:
             - mountPath: /tmp
               name: backup-volume

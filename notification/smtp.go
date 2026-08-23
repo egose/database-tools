@@ -35,28 +35,12 @@ type SMTP struct {
 }
 
 func (s *SMTP) Init(host, port, username, password, from, to, subjectPrefix string, notifyOnFailureOnly bool, allowInsecureNoTLSInDevelopment bool) error {
-	if host == "" {
-		return fmt.Errorf("SMTP host is required")
-	}
-	if port == "" {
-		port = "587"
-	}
-	if from == "" {
-		return fmt.Errorf("SMTP from address is required")
-	}
-	if _, err := mail.ParseAddress(from); err != nil {
-		return fmt.Errorf("invalid SMTP from address: %w", err)
-	}
-	if err := validateEmailHeaderValue("SMTP subject prefix", subjectPrefix); err != nil {
-		return err
-	}
-
-	recipients, err := parseRecipientList(to)
+	recipients, err := ValidateSMTPOptions(host, port, username, password, from, to, subjectPrefix)
 	if err != nil {
 		return err
 	}
-	if password != "" && username == "" {
-		return fmt.Errorf("SMTP username is required when password is set")
+	if port == "" {
+		port = "587"
 	}
 
 	s.Host = host
@@ -69,6 +53,34 @@ func (s *SMTP) Init(host, port, username, password, from, to, subjectPrefix stri
 	s.AllowInsecureNoTLSInDevelopment = allowInsecureNoTLSInDevelopment
 	s.notifyOnFailureOnly = notifyOnFailureOnly
 	return nil
+}
+
+func ValidateSMTPOptions(host, port, username, password, from, to, subjectPrefix string) ([]string, error) {
+	if host == "" {
+		return nil, fmt.Errorf("SMTP host is required")
+	}
+	if port == "" {
+		port = "587"
+	}
+	if from == "" {
+		return nil, fmt.Errorf("SMTP from address is required")
+	}
+	if _, err := mail.ParseAddress(from); err != nil {
+		return nil, fmt.Errorf("invalid SMTP from address: %w", err)
+	}
+	if err := validateEmailHeaderValue("SMTP subject prefix", subjectPrefix); err != nil {
+		return nil, err
+	}
+
+	recipients, err := parseRecipientList(to)
+	if err != nil {
+		return nil, err
+	}
+	if password != "" && username == "" {
+		return nil, fmt.Errorf("SMTP username is required when password is set")
+	}
+
+	return recipients, nil
 }
 
 func (s *SMTP) Send(ctx context.Context, success bool, loc *time.Location, filenameOrError string) error {

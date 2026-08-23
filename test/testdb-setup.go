@@ -20,17 +20,31 @@ type Person struct {
 	Email string
 }
 
+// helperMongoTimeout bounds each MongoDB helper connection, ping, and shutdown call.
+const helperMongoTimeout = 10 * time.Second
+
 func main() {
 	// Set up client options and connect to MongoDB
 	databaseUrl := os.Getenv("DATABASE_URL")
-	clientOptions := options.Client().ApplyURI(databaseUrl)
+	clientOptions := options.Client().ApplyURI(databaseUrl).
+		SetConnectTimeout(helperMongoTimeout).
+		SetServerSelectionTimeout(helperMongoTimeout)
 	client, err := mongo.Connect(clientOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
+	defer func() {
+		disconnectCtx, cancel := context.WithTimeout(context.Background(), helperMongoTimeout)
+		defer cancel()
+		if err := client.Disconnect(disconnectCtx); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	// Check the connection
-	err = client.Ping(context.TODO(), nil)
+	pingCtx, cancel := context.WithTimeout(context.Background(), helperMongoTimeout)
+	defer cancel()
+	err = client.Ping(pingCtx, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

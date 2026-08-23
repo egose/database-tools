@@ -1,0 +1,24 @@
+---
+sidebar_label: Docker
+sidebar_position: 0
+---
+
+# Docker
+
+Run the published container image and pass the command you want to execute.
+
+```bash
+docker run --rm \
+  -v "$(pwd)/tmp:/tmp" \
+  -e MONGOARCHIVE__DUMP_PATH=/tmp/datadump \
+  ghcr.io/egose/database-tools:latest \
+  mongo-archive \
+  --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+  --db=<dbname> \
+  --az-account-name=<az_account_name> \
+  --az-account-key=<az_account_key> \
+  --az-container-name=<az_container_name> \
+  --keep
+```
+
+Use a maintained version tag instead of `latest` for production jobs.

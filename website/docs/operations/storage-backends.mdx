@@ -1,0 +1,51 @@
+---
+sidebar_label: Storage Backends
+sidebar_position: 2
+---
+
+# Storage Backends
+
+The tools support Azure Blob Storage, AWS S3, Google Cloud Storage, and local filesystem storage. Configure one or more archive backends for `mongo-archive`; configure the matching backend for `mongo-unarchive` when restoring.
+
+## Azure Blob Storage
+
+```bash
+mongo-archive \
+  --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+  --db=<dbname> \
+  --az-account-name=<az_account_name> \
+  --az-account-key=<az_account_key> \
+  --az-container-name=<az_container_name>
+```
+
+Use `--az-endpoint` for emulator or endpoint override scenarios.
+
+## AWS S3
+
+```bash
+mongo-archive \
+  --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+  --db=<dbname> \
+  --aws-region=us-east-1 \
+  --aws-access-key-id=<aws_access_key_id> \
+  --aws-secret-access-key=<aws_secret_access_key> \
+  --aws-bucket=<bucket_name>
+```
+
+Use `--aws-endpoint` and `--aws-s3-force-path-style` for S3-compatible services or local test backends.
+
+## Google Cloud Storage
+
+```bash
+mongo-archive \
+  --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+  --db=<dbname> \
+  --gcp-bucket=<bucket_name> \
+  --gcp-creds-file=/path/to/service-account.json
+```
+
+Service account fields can also be supplied directly with the `--gcp-project-id`, `--gcp-private-key-id`, `--gcp-private-key`, `--gcp-client-email`, and `--gcp-client-id` options.
+
+## Local Filesystem
+
+Use `--local-path` for local archive storage. This is useful for local development, controlled test environments, or a container mounted to persistent storage.

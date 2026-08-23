@@ -59,6 +59,98 @@ func TestParseFlagsRejectsInvalidRetentionAndNotificationConfig(t *testing.T) {
 	})
 }
 
+func TestParseFlagsParsesRuntimeEnvironment(t *testing.T) {
+	t.Parallel()
+
+	cfg, _, err := parseFlags(newTestFlagSet("mongo-archive"), mapEnv{
+		"DUMP_PATH":                 "/archive/work",
+		"STORAGE_OPERATION_TIMEOUT": "2s",
+		"NOTIFICATION_TIMEOUT":      "3s",
+	}, nil)
+	if err != nil {
+		t.Fatalf("parseFlags() error = %v", err)
+	}
+	if cfg.WorkspaceBasePath != "/archive/work" {
+		t.Fatalf("WorkspaceBasePath = %q, want injected value", cfg.WorkspaceBasePath)
+	}
+	if cfg.StorageOperationTimeout != 2*time.Second || cfg.NotificationTimeout != 3*time.Second {
+		t.Fatalf("timeouts = %v/%v, want 2s/3s", cfg.StorageOperationTimeout, cfg.NotificationTimeout)
+	}
+}
+
+func TestParseFlagsRejectsRestoreOnlyStorageBackendFlag(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := parseFlags(newTestFlagSet("mongo-archive"), mapEnv{}, []string{"--storage-backend=local"})
+	if err == nil || !strings.Contains(err.Error(), "storage-backend") {
+		t.Fatalf("parseFlags() error = %v, want unknown storage-backend flag", err)
+	}
+}
+
+func TestParseFlagsRejectsInvalidRuntimeEnvironment(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		env  mapEnv
+		want string
+	}{
+		{name: "storage timeout", env: mapEnv{"STORAGE_OPERATION_TIMEOUT": "bad"}, want: "STORAGE_OPERATION_TIMEOUT"},
+		{name: "notification timeout", env: mapEnv{"NOTIFICATION_TIMEOUT": "0s"}, want: "NOTIFICATION_TIMEOUT"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			_, _, err := parseFlags(newTestFlagSet("mongo-archive"), tt.env, nil)
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("parseFlags() error = %v, want %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseFlagsRejectsIncompleteStorageConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		env     mapEnv
+		missing []string
+		omitted []string
+	}{
+		{
+			name:    "local plus AWS bucket only",
+			env:     mapEnv{"LOCAL_PATH": t.TempDir(), "AWS_BUCKET": "archive-bucket"},
+			missing: []string{"AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY"},
+			omitted: []string{"archive-bucket"},
+		},
+		{
+			name:    "local plus Azure account name only",
+			env:     mapEnv{"LOCAL_PATH": t.TempDir(), "AZ_ACCOUNT_NAME": "archive-account"},
+			missing: []string{"AZ_ACCOUNT_KEY", "AZ_CONTAINER_NAME"},
+			omitted: []string{"archive-account"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := parseFlags(newTestFlagSet("mongo-archive"), tt.env, nil)
+			if err == nil {
+				t.Fatal("parseFlags() expected error")
+			}
+			for _, missing := range tt.missing {
+				if !strings.Contains(err.Error(), missing) {
+					t.Fatalf("parseFlags() error = %q, missing %q", err, missing)
+				}
+			}
+			for _, value := range tt.omitted {
+				if strings.Contains(err.Error(), value) {
+					t.Fatalf("parseFlags() error = %q, leaked supplied value %q", err, value)
+				}
+			}
+		})
+	}
+}
+
 func TestParseFlagsRunsInParallelWithoutGlobalState(t *testing.T) {
 	t.Parallel()
 

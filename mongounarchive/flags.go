@@ -8,7 +8,9 @@ import (
 	"io"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/egose/database-tools/internal/toolconfig"
 	"github.com/egose/database-tools/storage"
@@ -20,6 +22,7 @@ const (
 	envPrefix                   = "MONGOUNARCHIVE__"
 	fallbackEnvPrefix           = "MONGO__"
 	defaultUpdateMaxBytes int64 = 1 << 20
+	defaultWorkspaceDir         = "mongounarchive"
 )
 
 type Config struct {
@@ -29,6 +32,7 @@ type Config struct {
 	RestoreExecutionOptions
 	RestoreSourceOptions
 	UpdateOptions
+	RuntimeOptions
 	Keep bool
 }
 
@@ -62,6 +66,14 @@ type RestoreSourceOptions struct {
 type UpdateOptions struct {
 	Updates     string
 	UpdatesFile string
+}
+
+type RuntimeOptions struct {
+	WorkspaceBasePath       string
+	StorageOperationTimeout time.Duration
+	UpdateTimeout           time.Duration
+	ArchiveExtractionLimits utils.ArchiveExtractionLimits
+	UpdateMaxBytes          int64
 }
 
 var restoreFlagDefs = struct {
@@ -138,6 +150,7 @@ func parseFlags(flagSet *flag.FlagSet, env toolconfig.EnvReader, args []string) 
 	bypassDocumentValidation := restoreFlagDefs.bypassDocumentValidation.Bind(flagSet, env)
 	preserveUUID := restoreFlagDefs.preserveUUID.Bind(flagSet, env)
 	storageBindings := toolconfig.BindStorageFlags(flagSet, env)
+	storageBackend := toolconfig.BindRestoreStorageBackendFlag(flagSet, env)
 	objectName := restoreFlagDefs.objectName.Bind(flagSet, env)
 	dir := restoreFlagDefs.dir.Bind(flagSet, env)
 	updates := restoreFlagDefs.updates.Bind(flagSet, env)
@@ -171,6 +184,7 @@ func parseFlags(flagSet *flag.FlagSet, env toolconfig.EnvReader, args []string) 
 		PreserveUUID:                     *preserveUUID,
 	}
 	storageBindings.Apply(&cfg.StorageOptions)
+	cfg.StorageBackend = *storageBackend
 	cfg.RestoreSourceOptions = RestoreSourceOptions{ObjectName: *objectName, Dir: *dir}
 	cfg.UpdateOptions = UpdateOptions{Updates: *updates, UpdatesFile: *updatesFile}
 	cfg.Keep = *keep
@@ -178,6 +192,12 @@ func parseFlags(flagSet *flag.FlagSet, env toolconfig.EnvReader, args []string) 
 	if showVersion != nil && *showVersion {
 		return cfg, true, nil
 	}
+
+	runtimeOptions, err := parseRuntimeOptions(env)
+	if err != nil {
+		return nil, false, err
+	}
+	cfg.RuntimeOptions = runtimeOptions
 
 	if err := cfg.Validate(); err != nil {
 		return nil, false, err
@@ -250,8 +270,8 @@ func (c *Config) GetMongounarchiveOptions(destPath string) []string {
 	return options
 }
 
-func (c *Config) GetStorages(ctx context.Context) ([]storage.Storage, error) {
-	return c.StorageOptions.GetStorages(ctx, 0)
+func (c *Config) GetStorages(ctx context.Context) ([]storage.RestoreBackend, error) {
+	return c.StorageOptions.GetRestoreStorages(ctx, 0)
 }
 
 func (c *Config) GetObjectName() string {
@@ -277,9 +297,9 @@ func (c *Config) GetMongoClient(ctx context.Context) (*mongo.Client, *mongo.Data
 }
 
 func (c *Config) GetUpdates() ([]byte, error) {
-	maxBytes, err := readPositiveInt64Env(envPrefix+"UPDATE_MAX_BYTES", defaultUpdateMaxBytes)
-	if err != nil {
-		return nil, err
+	maxBytes := c.UpdateMaxBytes
+	if maxBytes == 0 {
+		maxBytes = defaultUpdateMaxBytes
 	}
 
 	if c.Updates != "" {
@@ -303,6 +323,12 @@ func (c *Config) HasKeep() bool {
 }
 
 func (c *Config) Validate() error {
+	if err := c.RuntimeOptions.Validate(); err != nil {
+		return err
+	}
+	if err := c.StorageOptions.Validate(); err != nil {
+		return err
+	}
 	if c.DryRun && c.HasUpdates() {
 		return errors.New("--dry-run cannot be combined with --updates or --updates-file")
 	}
@@ -311,6 +337,83 @@ func (c *Config) Validate() error {
 	}
 	_, err := c.GetUpdates()
 	return err
+}
+
+func parseRuntimeOptions(env toolconfig.EnvReader) (RuntimeOptions, error) {
+	storageOperationTimeout, err := toolconfig.ReadOptionalDuration(env, "STORAGE_OPERATION_TIMEOUT")
+	if err != nil {
+		return RuntimeOptions{}, err
+	}
+	updateTimeout, err := toolconfig.ReadOptionalDuration(env, "UPDATE_TIMEOUT")
+	if err != nil {
+		return RuntimeOptions{}, err
+	}
+	extractionLimits, err := parseArchiveExtractionLimits(env)
+	if err != nil {
+		return RuntimeOptions{}, err
+	}
+	updateMaxBytes, err := toolconfig.ReadPositiveInt64(env, "UPDATE_MAX_BYTES", defaultUpdateMaxBytes)
+	if err != nil {
+		return RuntimeOptions{}, err
+	}
+
+	return RuntimeOptions{
+		WorkspaceBasePath:       toolconfig.ReadWorkspaceBase(env, "RESTORE_PATH", filepath.Join(os.TempDir(), defaultWorkspaceDir)),
+		StorageOperationTimeout: storageOperationTimeout,
+		UpdateTimeout:           updateTimeout,
+		ArchiveExtractionLimits: extractionLimits,
+		UpdateMaxBytes:          updateMaxBytes,
+	}, nil
+}
+
+func parseArchiveExtractionLimits(env toolconfig.EnvReader) (utils.ArchiveExtractionLimits, error) {
+	limits := utils.DefaultArchiveExtractionLimits()
+
+	maxEntries, err := toolconfig.ReadPositiveInt(env, "ARCHIVE_MAX_ENTRIES", limits.MaxEntries)
+	if err != nil {
+		return utils.ArchiveExtractionLimits{}, err
+	}
+	maxEntryBytes, err := toolconfig.ReadPositiveInt64(env, "ARCHIVE_MAX_ENTRY_BYTES", limits.MaxEntryBytes)
+	if err != nil {
+		return utils.ArchiveExtractionLimits{}, err
+	}
+	maxTotalBytes, err := toolconfig.ReadPositiveInt64(env, "ARCHIVE_MAX_TOTAL_BYTES", limits.MaxTotalBytes)
+	if err != nil {
+		return utils.ArchiveExtractionLimits{}, err
+	}
+
+	limits.MaxEntries = maxEntries
+	limits.MaxEntryBytes = maxEntryBytes
+	limits.MaxTotalBytes = maxTotalBytes
+
+	if err := limits.Validate(); err != nil {
+		return utils.ArchiveExtractionLimits{}, err
+	}
+
+	return limits, nil
+}
+
+func (r RuntimeOptions) Validate() error {
+	if r.StorageOperationTimeout < 0 {
+		return errors.New("STORAGE_OPERATION_TIMEOUT must be greater than zero")
+	}
+	if r.UpdateTimeout < 0 {
+		return errors.New("UPDATE_TIMEOUT must be greater than zero")
+	}
+	if r.UpdateMaxBytes < 0 {
+		return errors.New("UPDATE_MAX_BYTES must be a positive integer")
+	}
+	if r.ArchiveExtractionLimits != (utils.ArchiveExtractionLimits{}) {
+		return r.ArchiveExtractionLimits.Validate()
+	}
+	return nil
+}
+
+func (c *Config) GetArchiveExtractionLimits() utils.ArchiveExtractionLimits {
+	if c.ArchiveExtractionLimits == (utils.ArchiveExtractionLimits{}) {
+		return utils.DefaultArchiveExtractionLimits()
+	}
+	return c.ArchiveExtractionLimits
 }
 
 func FlagDocumentation() toolconfig.CommandDoc {
@@ -335,6 +438,7 @@ func FlagDocumentation() toolconfig.CommandDoc {
 	)
 	flags = append(flags, toolconfig.StorageFlagDocs(envPrefix)...)
 	flags = append(flags,
+		toolconfig.RestoreStorageBackendFlagDoc(envPrefix),
 		restoreFlagDefs.objectName.Doc(envPrefix),
 		restoreFlagDefs.dir.Doc(envPrefix),
 		restoreFlagDefs.updates.Doc(envPrefix),
@@ -348,25 +452,14 @@ func FlagDocumentation() toolconfig.CommandDoc {
 		Flags: flags,
 		EnvVars: []toolconfig.EnvDoc{
 			{EnvVar: envPrefix + "RESTORE_PATH", Description: "Base directory for per-run restore workspaces before extraction"},
+			{EnvVar: envPrefix + "ARCHIVE_MAX_ENTRIES", DefaultValue: strconv.Itoa(utils.DefaultArchiveExtractionLimits().MaxEntries), Description: "Maximum number of entries allowed while extracting an archive"},
+			{EnvVar: envPrefix + "ARCHIVE_MAX_ENTRY_BYTES", DefaultValue: strconv.FormatInt(utils.DefaultArchiveExtractionLimits().MaxEntryBytes, 10), Description: "Maximum size in bytes allowed for a single extracted archive entry"},
+			{EnvVar: envPrefix + "ARCHIVE_MAX_TOTAL_BYTES", DefaultValue: strconv.FormatInt(utils.DefaultArchiveExtractionLimits().MaxTotalBytes, 10), Description: "Maximum combined size in bytes allowed across all extracted archive entries"},
 			{EnvVar: envPrefix + "UPDATE_MAX_BYTES", DefaultValue: strconv.FormatInt(defaultUpdateMaxBytes, 10), Description: "Maximum size in bytes allowed for inline or file-based update specifications"},
 			{EnvVar: envPrefix + "STORAGE_OPERATION_TIMEOUT", Description: "Optional timeout applied to storage lookup and download operations"},
 			{EnvVar: envPrefix + "UPDATE_TIMEOUT", Description: "Optional timeout applied to MongoDB update connections and update operations"},
 		},
 	}
-}
-
-func readPositiveInt64Env(key string, fallback int64) (int64, error) {
-	raw := os.Getenv(key)
-	if raw == "" {
-		return fallback, nil
-	}
-
-	value, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || value <= 0 {
-		return 0, fmt.Errorf("%s must be a positive integer", key)
-	}
-
-	return value, nil
 }
 
 func readLimitedFile(path string, maxBytes int64) ([]byte, error) {

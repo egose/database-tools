@@ -1,0 +1,25 @@
+---
+sidebar_label: Release Policy
+sidebar_position: 1
+---
+
+# Release Policy
+
+Tagged releases publish only after the exact tagged commit passes the release verification gate.
+
+The release gate includes:
+
+- Supply-chain consistency checks.
+- `pnpm install --frozen-lockfile`.
+- Go tests, race tests, and vet checks.
+- `go mod verify`.
+- `govulncheck` through the repository release script.
+- Docker build checks.
+- Cross-platform binary builds.
+- Reproducible archive checks.
+
+Published binary releases include SHA-256 checksums, an SPDX JSON SBOM, and GitHub artifact provenance attestations.
+
+Container publication is scan-before-push: the workflow builds and scans a local image before authenticating to GHCR or publishing tags.
+
+For the detailed policy, see [`docs/release-artifact-policy.md`](https://github.com/egose/database-tools/blob/main/docs/release-artifact-policy.md).

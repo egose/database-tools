@@ -8,6 +8,7 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     permissions:
       contents: read
       attestations: write
@@ -15,6 +16,36 @@ jobs:
 
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ github.sha }}
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Report release SHA
+      run: |
+        set -euo pipefail
+        checkout_sha="$(git rev-parse HEAD)"
+        event_commit_sha="$(git rev-parse "$GITHUB_SHA^{commit}")"
+        tag_target_sha="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+        printf 'GitHub event SHA: %s\n' "$GITHUB_SHA"
+        printf 'GitHub event commit SHA: %s\n' "$event_commit_sha"
+        printf 'Checked out SHA: %s\n' "$checkout_sha"
+        printf 'Tag target SHA: %s\n' "$tag_target_sha"
+        {
+          printf "### Release checkout evidence\n"
+          printf -- "- GitHub event SHA: \`%s\`\n" "$GITHUB_SHA"
+          printf -- "- GitHub event commit SHA: \`%s\`\n" "$event_commit_sha"
+          printf -- "- Checked out SHA: \`%s\`\n" "$checkout_sha"
+          printf -- "- Tag target SHA: \`%s\`\n" "$tag_target_sha"
+        } >> "$GITHUB_STEP_SUMMARY"
+        if [ "$checkout_sha" != "$event_commit_sha" ]; then
+          printf 'Checked out SHA %s does not match GitHub event commit SHA %s\n' "$checkout_sha" "$event_commit_sha" >&2
+          exit 1
+        fi
+        if [ "$tag_target_sha" != "$event_commit_sha" ]; then
+          printf 'Tag target SHA %s does not match GitHub event commit SHA %s\n' "$tag_target_sha" "$event_commit_sha" >&2
+          exit 1
+        fi
 
     - name: Setup Tools
       uses: ./.github/actions/setup-tools
@@ -32,7 +63,7 @@ jobs:
       run: |
         docker run --rm \
           -v "$PWD:/workspace" \
-          anchore/syft:v1.38.0 \
+          anchore/syft:v1.38.0@sha256:825cad3a952c87676a6d07e9a3bb05ac9c401d598360070e970aa46d54c1727e \
           dir:/workspace/dist \
           -o spdx-json=/workspace/dist/database-tools-${{ github.ref_name }}-sbom.spdx.json
 
@@ -53,9 +84,19 @@ jobs:
           dist/*.txt
           dist/*.spdx.json
 
+  integration:
+    uses: ./.github/workflows/integration.yml
+    permissions:
+      contents: read
+    with:
+      ref: ${{ github.sha }}
+
   release:
-    needs: verify
+    needs:
+    - verify
+    - integration
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
 
@@ -76,7 +117,9 @@ jobs:
           dist/*.spdx.json
 
   publish-image:
-    needs: verify
+    needs:
+    - verify
+    - integration
     uses: ./.github/workflows/publish.yaml
     with:
       ref: ${{ github.sha }}

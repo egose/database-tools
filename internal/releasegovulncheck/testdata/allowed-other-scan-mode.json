@@ -1,0 +1,2 @@
+{"config":{"scan_mode":"binary"}}
+{"finding":{"osv":"GO-2024-2698","trace":[{"module":"github.com/mholt/archiver","package":"github.com/mholt/archiver","function":"Archive"},{"module":"github.com/egose/database-tools","package":"github.com/egose/database-tools/utils","function":"Tar"}]}}

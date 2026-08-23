@@ -23,12 +23,17 @@ import (
 )
 
 type GcpStorage struct {
-	Bucket        string
-	StorageClient *storage.Client
-	ExpiryDays    int
-	BackupPrefix  string
-	closeOnce     sync.Once
-	closeErr      error
+	Bucket          string
+	StorageClient   *storage.Client
+	ExpiryDays      int
+	BackupPrefix    string
+	closeOnce       sync.Once
+	closeErr        error
+	uploadObject    func(context.Context, string, string) (string, error)
+	downloadObject  func(context.Context, string, *os.File) error
+	objectExists    func(context.Context, string) (bool, error)
+	listObjectPages func(context.Context, func([]objectTimestamp) bool) error
+	deleteObject    func(context.Context, string) error
 }
 
 type GcpServiceAccountCreds struct {
@@ -152,14 +157,7 @@ func (this *GcpStorage) GetTargetObjectName(ctx context.Context, objectName stri
 	}
 
 	resolved, found, err := resolveExplicitObjectName(this.BackupPrefix, objectName, func(candidate string) (bool, error) {
-		if _, err := this.getMetadata(ctx, candidate); err != nil {
-			if errors.Is(err, storage.ErrObjectNotExist) {
-				return false, nil
-			}
-			return false, fmt.Errorf("failed to retrieve metadata: %w", err)
-		}
-
-		return true, nil
+		return this.gcpObjectExists(ctx, candidate)
 	})
 	if err != nil {
 		return "", err
@@ -172,26 +170,15 @@ func (this *GcpStorage) GetTargetObjectName(ctx context.Context, objectName stri
 }
 
 func (this *GcpStorage) getLastUpdatedObjectName(ctx context.Context) (string, error) {
-	bucket := this.StorageClient.Bucket(this.Bucket)
-
-	listOptions := newGCPListObjectsOptions(this.BackupPrefix)
-	it := bucket.Objects(ctx, listOptions.Query)
-	it.PageInfo().MaxSize = listOptions.PageSize
-
 	var latest *objectTimestamp
-	for {
-		objAttrs, err := it.Next()
-		if err == iterator.Done {
-			break
+	if err := this.gcpListObjectPages(ctx, func(candidates []objectTimestamp) bool {
+		pageLatest, ok := latestEligibleObject(candidates, this.BackupPrefix)
+		if ok {
+			latest = chooseLaterObject(latest, pageLatest)
 		}
-		if err != nil {
-			return "", err
-		}
-
-		if !isEligibleBackupObject(objAttrs.Name, this.BackupPrefix) {
-			continue
-		}
-		latest = chooseLaterObject(latest, objectTimestamp{Name: objAttrs.Name, ModifiedAt: objAttrs.Updated})
+		return true
+	}); err != nil {
+		return "", err
 	}
 
 	if latest == nil {
@@ -231,6 +218,9 @@ func generateServiceAccountKey(ctx context.Context, projectID, serviceAccountEma
 // See https://cloud.google.com/storage/docs/uploading-objects-from-memory#storage-upload-object-from-memory-go
 func (this *GcpStorage) Upload(ctx context.Context, objectName string, filePath string) (string, error) {
 	ctx = contextOrBackground(ctx)
+	if this.uploadObject != nil {
+		return this.uploadObject(ctx, objectName, filePath)
+	}
 
 	reader, err := os.Open(filePath)
 	if err != nil {
@@ -274,16 +264,19 @@ func (this *GcpStorage) getMetadata(ctx context.Context, objectName string) (*st
 func (this *GcpStorage) Download(ctx context.Context, objectName string, filePath string) error {
 	ctx = contextOrBackground(ctx)
 
-	obj := this.StorageClient.Bucket(this.Bucket).Object(objectName)
-
-	reader, err := obj.NewReader(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to create object reader: %w", err)
-	}
-	defer reader.Close()
-
 	return utils.WriteFileAtomically(filePath, func(dest *os.File) error {
-		_, err := io.Copy(dest, reader)
+		if this.downloadObject != nil {
+			return this.downloadObject(ctx, objectName, dest)
+		}
+
+		obj := this.StorageClient.Bucket(this.Bucket).Object(objectName)
+
+		reader, err := obj.NewReader(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create object reader: %w", err)
+		}
+		defer reader.Close()
+		_, err = io.Copy(dest, reader)
 		if err != nil {
 			return fmt.Errorf("failed to download object: %w", err)
 		}
@@ -298,36 +291,77 @@ func (this *GcpStorage) DeleteOldObjects(ctx context.Context, currentObjectName 
 		return nil
 	}
 
+	now := time.Now()
+	var pageErr error
+
+	if err := this.gcpListObjectPages(ctx, func(candidates []objectTimestamp) bool {
+		for _, obj := range candidates {
+			daysOld := now.Sub(obj.ModifiedAt).Hours() / 24
+			mlog.Logvf(mlog.Info, "Checking object: %s (%.1f days old)", obj.Name, daysOld)
+		}
+
+		pageErr = deleteExpiredObjects(candidates, this.BackupPrefix, this.ExpiryDays, now, currentObjectName, func(name string) error {
+			err := this.gcpDeleteObject(ctx, name)
+			if err == nil {
+				mlog.Logvf(mlog.Info, "Deleted object: %s", name)
+			}
+			return err
+		})
+		return pageErr == nil
+	}); err != nil {
+		return fmt.Errorf("failed to list objects: %w", err)
+	}
+	if pageErr != nil {
+		return pageErr
+	}
+
+	return nil
+}
+
+func (this *GcpStorage) gcpObjectExists(ctx context.Context, name string) (bool, error) {
+	if this.objectExists != nil {
+		return this.objectExists(ctx, name)
+	}
+
+	if _, err := this.getMetadata(ctx, name); err != nil {
+		if errors.Is(err, storage.ErrObjectNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to retrieve metadata: %w", err)
+	}
+	return true, nil
+}
+
+func (this *GcpStorage) gcpListObjectPages(ctx context.Context, handle func([]objectTimestamp) bool) error {
+	if this.listObjectPages != nil {
+		return this.listObjectPages(ctx, handle)
+	}
+
 	bucket := this.StorageClient.Bucket(this.Bucket)
 	listOptions := newGCPListObjectsOptions(this.BackupPrefix)
 	it := bucket.Objects(ctx, listOptions.Query)
 	it.PageInfo().MaxSize = listOptions.PageSize
-	now := time.Now()
 
 	for {
-		candidates := make([]objectTimestamp, 0, 1)
 		objAttrs, err := it.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("failed to list objects: %w", err)
+			return err
 		}
 
-		daysOld := now.Sub(objAttrs.Updated).Hours() / 24
-		mlog.Logvf(mlog.Info, "Checking object: %s (%.1f days old)", objAttrs.Name, daysOld)
-		candidates = append(candidates, objectTimestamp{Name: objAttrs.Name, ModifiedAt: objAttrs.Updated})
-
-		if err := deleteExpiredObjects(candidates, this.BackupPrefix, this.ExpiryDays, now, currentObjectName, func(name string) error {
-			err := bucket.Object(name).Delete(ctx)
-			if err == nil {
-				mlog.Logvf(mlog.Info, "Deleted object: %s", name)
-			}
-			return err
-		}); err != nil {
-			return err
+		if !handle([]objectTimestamp{{Name: objAttrs.Name, ModifiedAt: objAttrs.Updated}}) {
+			break
 		}
 	}
-
 	return nil
+}
+
+func (this *GcpStorage) gcpDeleteObject(ctx context.Context, name string) error {
+	if this.deleteObject != nil {
+		return this.deleteObject(ctx, name)
+	}
+
+	return this.StorageClient.Bucket(this.Bucket).Object(name).Delete(ctx)
 }

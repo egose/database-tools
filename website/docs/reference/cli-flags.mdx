@@ -1,0 +1,36 @@
+---
+sidebar_label: CLI Flags
+sidebar_position: 0
+---
+
+# CLI Flags
+
+The authoritative CLI flag reference is generated from the codebase and stored in [`flags.md`](https://github.com/egose/database-tools/blob/main/flags.md).
+
+Use that file for the complete, tested table of flags and environment variables for both tools.
+
+## Common Configuration Areas
+
+`mongo-archive` and `mongo-unarchive` both include MongoDB connection options such as `--host`, `--port`, `--uri`, `--username`, `--password`, `--authentication-database`, and SSL-related options.
+
+`mongo-archive` adds archive targets, retention, cron, and notification options.
+
+`mongo-unarchive` adds restore target selection, archive extraction limits, and post-restore update options.
+
+## Environment Variables
+
+Most flags map to environment variables with a tool-specific prefix:
+
+- `MONGOARCHIVE__*` for `mongo-archive`.
+- `MONGOUNARCHIVE__*` for `mongo-unarchive`.
+
+Examples:
+
+| Flag                  | Environment Variable                         |
+| --------------------- | -------------------------------------------- |
+| `--uri`               | `MONGOARCHIVE__URI` or `MONGOUNARCHIVE__URI` |
+| `--backup-prefix`     | `MONGOARCHIVE__BACKUP_PREFIX`                |
+| `--object-name`       | `MONGOUNARCHIVE__OBJECT_NAME`                |
+| `--slack-webhook-url` | `MONGOARCHIVE__SLACK_WEBHOOK_URL`            |
+
+The root `flags.md` file is verified by tests against the current flag definitions so documentation drift is caught during CI.

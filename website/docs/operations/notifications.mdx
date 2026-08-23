@@ -1,0 +1,43 @@
+---
+sidebar_label: Notifications
+sidebar_position: 3
+---
+
+# Notifications
+
+`mongo-archive` can notify one or more destinations after each run.
+
+Supported notification backends are:
+
+- Rocket.Chat webhook
+- Slack webhook
+- SMTP email
+- AWS SES email
+
+Each backend can be enabled independently, and multiple backends can be enabled at the same time.
+
+## Failure-Only Notifications
+
+Each backend supports its own `*-notify-on-failure-only` flag and environment variable. When enabled, success notifications are skipped for that backend while failure notifications are still sent.
+
+```bash
+mongo-archive \
+  --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+  --db=<dbname> \
+  --az-account-name=<az_account_name> \
+  --az-account-key=<az_account_key> \
+  --az-container-name=<az_container_name> \
+  --slack-webhook-url="https://hooks.slack.com/services/<path>" \
+  --slack-webhook-prefix="[prod-backups]" \
+  --slack-notify-on-failure-only
+```
+
+## Suggested Setup
+
+A practical production pattern is:
+
+- Slack or Rocket.Chat for fast operational visibility.
+- SMTP email for broader failure distribution.
+- AWS SES when you want provider-backed email delivery instead of raw SMTP.
+
+Notification webhook and endpoint override options reject insecure HTTP unless explicitly allowed for development use.

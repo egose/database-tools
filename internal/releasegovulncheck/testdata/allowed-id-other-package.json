@@ -1,0 +1,2 @@
+{"config":{"scan_mode":"source"}}
+{"finding":{"osv":"GO-2024-2698","trace":[{"module":"github.com/example/other","package":"github.com/example/other/archive","function":"Archive"},{"module":"github.com/egose/database-tools","package":"github.com/egose/database-tools/utils","function":"Tar"}]}}

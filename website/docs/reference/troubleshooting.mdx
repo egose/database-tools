@@ -1,0 +1,35 @@
+---
+sidebar_label: Troubleshooting
+sidebar_position: 2
+---
+
+# Troubleshooting
+
+## GOROOT is not set when Go is installed via asdf
+
+If Go was installed through asdf and `GOROOT` is missing, add a shell helper that derives it from the active asdf Go installation:
+
+```bash
+set_asdf_go_root() {
+  asdf current golang 2>&1 > /dev/null
+  if [[ "$?" -eq 0 ]]
+  then
+    export GOBASE=$(asdf where golang)
+    export GOROOT="$GOBASE/go"
+  fi
+}
+
+set_asdf_go_root
+```
+
+Reload your shell after updating the file.
+
+## GOPROXY list contains no entries
+
+Verify `GOROOT` first:
+
+```bash
+go env GOROOT
+```
+
+If needed, recreate the default Go environment file under `GOROOT` with the standard proxy and checksum database settings.

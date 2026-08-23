@@ -17,6 +17,7 @@ env:
 jobs:
   build-push:
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -35,15 +36,12 @@ jobs:
       env:
         TAG_NAME: ${{ inputs.tag_name }}
 
+    - name: Derive release revision
+      id: revision
+      run: printf 'value=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
-
-    - name: Log in to GHCR
-      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
-      with:
-        registry: ${{ env.DOCKER_REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Extract image metadata
       id: meta
@@ -55,29 +53,155 @@ jobs:
           type=semver,pattern={{version}},value=${{ inputs.tag_name }}
           type=semver,pattern={{major}}.{{minor}},value=${{ inputs.tag_name }}
           type=semver,pattern={{major}},value=${{ inputs.tag_name }}
+        labels: |
+          org.opencontainers.image.version=${{ inputs.tag_name }}
+          org.opencontainers.image.revision=${{ steps.revision.outputs.value }}
 
-    - name: Build and push image
+    - name: Build local image for scan
+      id: build-scan
       uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
       with:
         context: .
-        push: true
-        sbom: true
-        provenance: mode=max
+        load: true
+        push: false
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
+        build-args: |
+          VERSION=${{ inputs.tag_name }}
+          REVISION=${{ steps.revision.outputs.value }}
+          SOURCE=${{ github.server_url }}/${{ github.repository }}
 
-    - name: Scan published image
+    - name: Smoke-test image identity
+      id: scanned
+      run: |
+        set -euo pipefail
+
+        image_ref="${DOCKER_REGISTRY}/${IMAGE_NAME}:${IMAGE_VERSION}"
+        scanned_digest="$(docker image inspect "$image_ref" --format '{{.Id}}')"
+        version_label="$(docker image inspect "$image_ref" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}')"
+        revision_label="$(docker image inspect "$image_ref" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
+
+        archive_version="$(docker run --rm "$image_ref" mongo-archive --version)"
+        unarchive_version="$(docker run --rm "$image_ref" mongo-unarchive --version)"
+
+        if [ "$version_label" != "$TAG_NAME" ]; then
+          printf 'OCI version label mismatch: expected %s, got %s\n' "$TAG_NAME" "$version_label" >&2
+          exit 1
+        fi
+        if [ "$revision_label" != "$REVISION" ]; then
+          printf 'OCI revision label mismatch: expected %s, got %s\n' "$REVISION" "$revision_label" >&2
+          exit 1
+        fi
+
+        expected_normalized="${TAG_NAME#v}"
+        case "$archive_version" in
+          *"$TAG_NAME"*|*"$expected_normalized"*) ;;
+          *) printf 'mongo-archive version mismatch: %s\n' "$archive_version" >&2; exit 1 ;;
+        esac
+        case "$unarchive_version" in
+          *"$TAG_NAME"*|*"$expected_normalized"*) ;;
+          *) printf 'mongo-unarchive version mismatch: %s\n' "$unarchive_version" >&2; exit 1 ;;
+        esac
+
+        printf 'digest=%s\n' "$scanned_digest" >> "$GITHUB_OUTPUT"
+        printf 'image-ref=%s\n' "$image_ref" >> "$GITHUB_OUTPUT"
+        {
+          printf "### Container pre-publish evidence\n"
+          printf -- "- Scanned local image: \`%s\`\n" "$image_ref"
+          printf -- "- Scanned image config digest: \`%s\`\n" "$scanned_digest"
+          printf -- "- \`mongo-archive --version\`: \`%s\`\n" "$archive_version"
+          printf -- "- \`mongo-unarchive --version\`: \`%s\`\n" "$unarchive_version"
+          printf -- "- OCI version label: \`%s\`\n" "$version_label"
+          printf -- "- OCI revision label: \`%s\`\n" "$revision_label"
+        } >> "$GITHUB_STEP_SUMMARY"
+      env:
+        IMAGE_VERSION: ${{ steps.version.outputs.value }}
+        REVISION: ${{ steps.revision.outputs.value }}
+        TAG_NAME: ${{ inputs.tag_name }}
+
+    - name: Scan local image before publish
       uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
       with:
-        image-ref: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.value }}
+        image-ref: ${{ steps.scanned.outputs.image-ref }}
         format: sarif
         output: trivy-results.sarif
         exit-code: 1
         ignore-unfixed: true
         severity: HIGH,CRITICAL
 
+    - name: Generate image SBOM
+      uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+      with:
+        image-ref: ${{ steps.scanned.outputs.image-ref }}
+        format: spdx-json
+        output: image-sbom.spdx.json
+        exit-code: 0
+
     - name: Upload image scan results
       if: always()
       uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd
       with:
         sarif_file: trivy-results.sarif
+
+    - name: Log in to GHCR
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+      with:
+        registry: ${{ env.DOCKER_REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Push scanned image tags
+      run: |
+        set -euo pipefail
+        while IFS= read -r tag; do
+          [ -n "$tag" ] || continue
+          docker image push "$tag"
+        done <<'TAGS'
+        ${{ steps.meta.outputs.tags }}
+        TAGS
+
+    - name: Verify published digest evidence
+      id: published
+      run: |
+        set -euo pipefail
+
+        primary_ref="$IMAGE_REF"
+        manifest_digest="$(docker buildx imagetools inspect "$primary_ref" --format '{{.Manifest.Digest}}')"
+        {
+          printf "### Container publish evidence\n"
+          printf -- "- Published primary image: \`%s@%s\`\n" "$IMAGE_NAME_ONLY" "$manifest_digest"
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        while IFS= read -r tag; do
+          [ -n "$tag" ] || continue
+          published_config_digest="$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Config.Digest}}')"
+          published_manifest_digest="$(docker buildx imagetools inspect "$tag" --format '{{.Manifest.Digest}}')"
+          if [ "$published_config_digest" != "$SCANNED_DIGEST" ]; then
+            printf 'Published digest mismatch for %s: scanned %s, published %s\n' "$tag" "$SCANNED_DIGEST" "$published_config_digest" >&2
+            exit 1
+          fi
+          printf -- "- \`%s\`: manifest \`%s\`, config digest matches scanned \`%s\`\n" "$tag" "$published_manifest_digest" "$published_config_digest" >> "$GITHUB_STEP_SUMMARY"
+        done <<'TAGS'
+        ${{ steps.meta.outputs.tags }}
+        TAGS
+
+        printf 'manifest-digest=%s\n' "$manifest_digest" >> "$GITHUB_OUTPUT"
+      env:
+        IMAGE_REF: ${{ steps.scanned.outputs.image-ref }}
+        IMAGE_NAME_ONLY: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+        SCANNED_DIGEST: ${{ steps.scanned.outputs.digest }}
+
+    - name: Attest image provenance
+      uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+      with:
+        subject-name: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+        subject-digest: ${{ steps.published.outputs.manifest-digest }}
+        push-to-registry: true
+
+    - name: Attest image SBOM
+      uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e
+      with:
+        subject-name: ${{ env.DOCKER_REGISTRY }}/${{ env.IMAGE_NAME }}
+        subject-digest: ${{ steps.published.outputs.manifest-digest }}
+        sbom-path: image-sbom.spdx.json
+        push-to-registry: true

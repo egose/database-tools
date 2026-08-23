@@ -9,19 +9,33 @@ spec:
       restartPolicy: Never
       containers:
       - name: backup-job
-        image: ghcr.io/egose/database-tools:0.3
+        image: ghcr.io/egose/database-tools:<latest-version>
         imagePullPolicy: IfNotPresent
         command: [/bin/sh, -c]
         args:
         - |
-          mkdir -p /tmp/backup
+          set -eu
+          backup_path="${MONGO_COPY_WORKDIR:-/tmp/backup}"
+          mkdir -p "${backup_path}"
           mongo-archive --db=olddb --force-table-scan
-          mongo-unarchive --db=newdb --dir=olddb
+          set -- "${backup_path}"/mongo-archive/*.tar.gz
+          if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
+            printf '%s\n' 'expected exactly one new archive object' >&2
+            exit 1
+          fi
+          archive_object="${1#${backup_path}/}"
+          mongo-unarchive --db=newdb --dir=olddb --object-name="${archive_object}"
         env:
         - name: MONGOARCHIVE__URI
-          value: mongodb://<user>:<password>@db1.example.net:27017/?authSource=admin
+          valueFrom:
+            secretKeyRef:
+              name: mongo-copy-secrets
+              key: archive-uri
         - name: MONGOUNARCHIVE__URI
-          value: mongodb://<user>:<password>@db2.example.net:27017/?authSource=admin
+          valueFrom:
+            secretKeyRef:
+              name: mongo-copy-secrets
+              key: restore-uri
         - name: MONGOARCHIVE__LOCAL_PATH
           value: /tmp/backup
         - name: MONGOUNARCHIVE__LOCAL_PATH

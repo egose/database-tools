@@ -228,8 +228,8 @@ storage_count() {
 
   run ./dist/mongo-archive --uri="$DATABASE_URL" --db="$DATABASE_NAME" --local-path=./dist/backup --aws-endpoint="$MINIO_URL" --aws-access-key-id="$MINIO_ACCESS_KEY" --aws-secret-access-key="$MINIO_SECRET_KEY" --aws-bucket="$MINIO_BUCKET" --aws-s3-force-path-style=true
   assert_success
-  assert_output_contains "*storage.LocalStorage"
-  assert_output_contains "*storage.AwsS3"
+  assert_output_contains "Successfully uploaded backup to backend #1 (local)"
+  assert_output_contains "Successfully uploaded backup to backend #2 (aws)"
 
   local_after_count="$(storage_count --provider=local --local-path=./dist/backup)"
   s3_after_count="$(storage_count --provider=s3)"
@@ -259,4 +259,20 @@ storage_count() {
   run bash -lc 'go run ./test/testdb-check.go | tail -n1'
   assert_success
   [ "$output" = "found" ]
+}
+
+@test "[local disk + S3 bucket] second upload failure reports partial state and skips retention" {
+  prefix="mixed-failure"
+  old_object="$prefix/1000000000000-2026-08-01T010203.456Z.tar.gz"
+  old_path="./dist/backup/$old_object"
+  mkdir -p "$(dirname "$old_path")"
+  printf 'old backup sentinel' >"$old_path"
+  touch -d '1970-01-01 UTC' "$old_path"
+
+  missing_bucket="missing-${MINIO_BUCKET}"
+  run ./dist/mongo-archive --uri="$DATABASE_URL" --db="$DATABASE_NAME" --local-path=./dist/backup --aws-endpoint="$MINIO_URL" --aws-access-key-id="$MINIO_ACCESS_KEY" --aws-secret-access-key="$MINIO_SECRET_KEY" --aws-bucket="$missing_bucket" --aws-s3-force-path-style=true --backup-prefix="$prefix" --expiry-days=1
+  assert_failure
+  assert_output_contains "archive upload failed after successful uploads to backend #1 (local)"
+  assert_output_contains "retention was not run on any backend"
+  [ -f "$old_path" ]
 }

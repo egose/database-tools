@@ -1,0 +1,32 @@
+---
+sidebar_label: Archive
+sidebar_position: 0
+---
+
+# Archive Operations
+
+`mongo-archive` creates MongoDB dumps and uploads the resulting archive to every configured storage backend.
+
+## Managed Backup Prefix
+
+Managed backup objects are stored under a dedicated prefix. The default prefix is `mongo-archive/`, and it can be changed with `--backup-prefix` or `MONGOARCHIVE__BACKUP_PREFIX`.
+
+- Managed object names use `<backup-prefix><generated-name>.tar.gz`.
+- Automatic latest-object selection and retention only consider objects inside the prefix whose filename matches the generated backup format.
+- Objects outside the prefix, or malformed objects inside the prefix, are ignored by automatic selection and retention.
+- Legacy backups outside the managed prefix are not selected automatically; restore them by passing `--object-name` to `mongo-unarchive`.
+
+## Multi-Backend Contract
+
+When multiple archive backends are configured, `mongo-archive` runs in two phases:
+
+1. Upload the new archive to every configured backend.
+2. Run retention on each backend only after every upload succeeds.
+
+In one-shot mode, upload or retention failures return a nonzero exit status. In cron mode, the scheduled run is logged as failed and failure notifications are sent while the scheduler keeps running.
+
+Error output names which backends already received the new archive or completed retention, so operators can identify partial state. A later backend failure can leave the newly uploaded archive on an earlier backend, but retention does not start until all uploads succeed.
+
+## Retention
+
+Use `--expiry-days` or `MONGOARCHIVE__EXPIRY_DAYS` to remove managed backups older than the configured maximum age. New uploads are verified before retention runs, so a failed upload does not trigger deletions.

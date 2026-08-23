@@ -10,11 +10,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/egose/database-tools/internal/toolruntime"
 	"github.com/egose/database-tools/mongounarchive"
 	projectstorage "github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
@@ -41,6 +41,15 @@ type restoreExecutionResult struct {
 	Err       error
 }
 
+type restorePartialResultError struct {
+	Successes int64
+	Failures  int64
+}
+
+func (e restorePartialResultError) Error() string {
+	return fmt.Sprintf("restore completed with partial failures: %d document(s) restored successfully, %d document(s) failed to restore", e.Successes, e.Failures)
+}
+
 type restoreRunner interface {
 	HandleInterrupt()
 	Restore() restoreExecutionResult
@@ -49,26 +58,18 @@ type restoreRunner interface {
 }
 
 type restorePipeline struct {
-	createWorkspace    func() (string, error)
-	getStorages        func(context.Context, *mongounarchive.Config) ([]projectstorage.Storage, error)
-	selectStorage      func([]projectstorage.Storage, string) (projectstorage.Storage, error)
-	getExtractionLimit func() (utils.ArchiveExtractionLimits, error)
-	download           func(context.Context, projectstorage.Storage, string, string) error
+	createWorkspace    func(string) (string, error)
+	getStorages        func(context.Context, *mongounarchive.Config) ([]projectstorage.RestoreBackend, error)
+	selectStorage      func([]projectstorage.RestoreBackend, string) (projectstorage.RestoreBackend, error)
+	getExtractionLimit func(*mongounarchive.Config) (utils.ArchiveExtractionLimits, error)
+	download           func(context.Context, projectstorage.RestoreStorage, string, string) error
 	extract            func(string, string, utils.ArchiveExtractionLimits) error
 	newRestore         func([]string) (restoreRunner, error)
 	applyUpdates       func(context.Context, *mongounarchive.Config, []update) error
 	deleteDirectory    func(string) error
 	deleteFile         func(string) error
 	handleInterrupt    func(func()) chan struct{}
-}
-
-type cleanupEntry struct {
-	path   string
-	remove func(string) error
-}
-
-type cleanupStack struct {
-	entries []cleanupEntry
+	logAlways          func(string, ...any)
 }
 
 type mongoRestoreRunner struct {
@@ -124,12 +125,18 @@ func runTask(ctx context.Context, cfg *mongounarchive.Config) error {
 func newRestorePipeline() restorePipeline {
 	return restorePipeline{
 		createWorkspace: createRestoreWorkspace,
-		getStorages: func(ctx context.Context, cfg *mongounarchive.Config) ([]projectstorage.Storage, error) {
+		getStorages: func(ctx context.Context, cfg *mongounarchive.Config) ([]projectstorage.RestoreBackend, error) {
 			return cfg.GetStorages(ctx)
 		},
-		selectStorage:      projectstorage.SelectRestoreStorage,
-		getExtractionLimit: getArchiveExtractionLimits,
-		download: func(ctx context.Context, storage projectstorage.Storage, objectName string, destination string) error {
+		selectStorage: projectstorage.SelectRestoreStorage,
+		getExtractionLimit: func(cfg *mongounarchive.Config) (utils.ArchiveExtractionLimits, error) {
+			limits := cfg.GetArchiveExtractionLimits()
+			if err := limits.Validate(); err != nil {
+				return utils.ArchiveExtractionLimits{}, err
+			}
+			return limits, nil
+		},
+		download: func(ctx context.Context, storage projectstorage.RestoreStorage, objectName string, destination string) error {
 			return storage.Download(ctx, objectName, destination)
 		},
 		extract:         utils.UnTar,
@@ -138,25 +145,43 @@ func newRestorePipeline() restorePipeline {
 		deleteDirectory: utils.DeleteDirectory,
 		deleteFile:      utils.DeleteFile,
 		handleInterrupt: signals.HandleWithInterrupt,
+		logAlways: func(format string, args ...any) {
+			mlog.Logvf(mlog.Always, format, args...)
+		},
 	}
 }
 
+func (p restorePipeline) logf(format string, args ...any) {
+	if p.logAlways != nil {
+		p.logAlways(format, args...)
+		return
+	}
+	mlog.Logvf(mlog.Always, format, args...)
+}
+
 func (p restorePipeline) run(ctx context.Context, cfg *mongounarchive.Config) (retErr error) {
+	if err := cfg.StorageOptions.Validate(); err != nil {
+		return err
+	}
+	if err := cfg.RuntimeOptions.Validate(); err != nil {
+		return err
+	}
+
 	validatedUpdates, err := parseUpdates(cfg)
 	if err != nil {
 		return err
 	}
 
-	workspace, err := p.createWorkspace()
+	workspace, err := p.createWorkspace(cfg.WorkspaceBasePath)
 	if err != nil {
 		return err
 	}
 
-	cleanup := cleanupStack{}
-	cleanup.addDirectory(workspace, p.deleteDirectory)
+	cleanup := toolruntime.CleanupStack{}
+	cleanup.AddDirectory(workspace, p.deleteDirectory)
 	defer func() {
-		if cleanupErr := cleanup.run(cfg.HasKeep()); cleanupErr != nil {
-			retErr = joinPrimaryAndCleanupErrors(retErr, cleanupErr)
+		if cleanupErr := cleanup.Run(cfg.HasKeep()); cleanupErr != nil {
+			retErr = toolruntime.JoinPrimaryAndCleanupErrors(retErr, cleanupErr)
 		}
 	}()
 
@@ -165,8 +190,8 @@ func (p restorePipeline) run(ctx context.Context, cfg *mongounarchive.Config) (r
 		return err
 	}
 	defer func() {
-		if closeErr := closeStorages(storages); closeErr != nil {
-			retErr = joinPrimaryAndCleanupErrors(retErr, closeErr)
+		if closeErr := toolruntime.CloseAll(storages); closeErr != nil {
+			retErr = toolruntime.JoinPrimaryAndCleanupErrors(retErr, closeErr)
 		}
 	}()
 
@@ -175,15 +200,12 @@ func (p restorePipeline) run(ctx context.Context, cfg *mongounarchive.Config) (r
 		return err
 	}
 
-	extractionLimits, err := p.getExtractionLimit()
+	extractionLimits, err := p.getExtractionLimit(cfg)
 	if err != nil {
 		return err
 	}
 
-	lookupCtx, cancel, err := operationContext(ctx, envPrefix+"STORAGE_OPERATION_TIMEOUT")
-	if err != nil {
-		return err
-	}
+	lookupCtx, cancel := toolruntime.OperationContext(ctx, cfg.StorageOperationTimeout)
 	objectName, err := storage.GetTargetObjectName(lookupCtx, cfg.GetObjectName())
 	cancel()
 	if err != nil {
@@ -197,24 +219,21 @@ func (p restorePipeline) run(ctx context.Context, cfg *mongounarchive.Config) (r
 
 	destPath := filepath.Join(workspace, utils.GetFileNameWithoutExtension(objectName))
 
-	mlog.Logvf(mlog.Always, "Downloading archive...")
-	downloadCtx, cancel, err := operationContext(ctx, envPrefix+"STORAGE_OPERATION_TIMEOUT")
-	if err != nil {
-		return err
-	}
+	p.logf("Downloading archive...")
+	downloadCtx, cancel := toolruntime.OperationContext(ctx, cfg.StorageOperationTimeout)
 	err = p.download(downloadCtx, storage, objectName, tarfilePath)
 	cancel()
 	if err != nil {
 		return err
 	}
-	cleanup.addFile(tarfilePath, p.deleteFile)
+	cleanup.AddFile(tarfilePath, p.deleteFile)
 
-	mlog.Logvf(mlog.Always, "Extracting files...")
+	p.logf("Extracting files...")
 	err = p.extract(tarfilePath, destPath, extractionLimits)
 	if err != nil {
 		return err
 	}
-	cleanup.addDirectory(destPath, p.deleteDirectory)
+	cleanup.AddDirectory(destPath, p.deleteDirectory)
 
 	options := cfg.GetMongounarchiveOptions(destPath)
 	restore, err := p.newRestore(options)
@@ -224,7 +243,7 @@ func (p restorePipeline) run(ctx context.Context, cfg *mongounarchive.Config) (r
 
 	defer func() {
 		if closeErr := restore.Close(); closeErr != nil {
-			retErr = joinPrimaryAndCleanupErrors(retErr, closeErr)
+			retErr = toolruntime.JoinPrimaryAndCleanupErrors(retErr, closeErr)
 		}
 	}()
 
@@ -235,31 +254,33 @@ func (p restorePipeline) run(ctx context.Context, cfg *mongounarchive.Config) (r
 		}
 	}()
 
-	mlog.Logvf(mlog.Always, "Restoring database...")
+	p.logf("Restoring database...")
 	result := restore.Restore()
 	if result.Err != nil {
 		return result.Err
 	}
+	if result.Failures > 0 {
+		return restorePartialResultError{Successes: result.Successes, Failures: result.Failures}
+	}
 
 	if restore.Acknowledged() {
-		mlog.Logvf(mlog.Always, "%v document(s) restored successfully. %v document(s) failed to restore.", result.Successes, result.Failures)
+		p.logf("%v document(s) restored successfully. %v document(s) failed to restore.", result.Successes, result.Failures)
 	} else {
-		mlog.Logvf(mlog.Always, "done")
+		p.logf("done")
 	}
 
 	if len(validatedUpdates) > 0 {
-		mlog.Logvf(mlog.Always, "Applying updates...")
+		p.logf("Applying updates...")
 		if err := p.applyUpdates(ctx, cfg, validatedUpdates); err != nil {
 			return err
 		}
 	}
 
-	mlog.Logvf(mlog.Always, "Unarchive completed successfully")
+	p.logf("Unarchive completed successfully")
 	return nil
 }
 
-func createRestoreWorkspace() (string, error) {
-	basePath := os.Getenv(envPrefix + "RESTORE_PATH")
+func createRestoreWorkspace(basePath string) (string, error) {
 	if basePath == "" {
 		basePath = filepath.Join(os.TempDir(), defaultWorkspaceDir)
 	}
@@ -269,61 +290,6 @@ func createRestoreWorkspace() (string, error) {
 	}
 
 	return os.MkdirTemp(basePath, "run-")
-}
-
-func getArchiveExtractionLimits() (utils.ArchiveExtractionLimits, error) {
-	limits := utils.DefaultArchiveExtractionLimits()
-
-	maxEntries, err := readPositiveIntEnv(envPrefix+"ARCHIVE_MAX_ENTRIES", limits.MaxEntries)
-	if err != nil {
-		return utils.ArchiveExtractionLimits{}, err
-	}
-	maxEntryBytes, err := readPositiveInt64Env(envPrefix+"ARCHIVE_MAX_ENTRY_BYTES", limits.MaxEntryBytes)
-	if err != nil {
-		return utils.ArchiveExtractionLimits{}, err
-	}
-	maxTotalBytes, err := readPositiveInt64Env(envPrefix+"ARCHIVE_MAX_TOTAL_BYTES", limits.MaxTotalBytes)
-	if err != nil {
-		return utils.ArchiveExtractionLimits{}, err
-	}
-
-	limits.MaxEntries = maxEntries
-	limits.MaxEntryBytes = maxEntryBytes
-	limits.MaxTotalBytes = maxTotalBytes
-
-	if err := limits.Validate(); err != nil {
-		return utils.ArchiveExtractionLimits{}, err
-	}
-
-	return limits, nil
-}
-
-func readPositiveIntEnv(key string, fallback int) (int, error) {
-	raw := os.Getenv(key)
-	if raw == "" {
-		return fallback, nil
-	}
-
-	value, err := strconv.Atoi(raw)
-	if err != nil || value <= 0 {
-		return 0, fmt.Errorf("%s must be a positive integer", key)
-	}
-
-	return value, nil
-}
-
-func readPositiveInt64Env(key string, fallback int64) (int64, error) {
-	raw := os.Getenv(key)
-	if raw == "" {
-		return fallback, nil
-	}
-
-	value, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || value <= 0 {
-		return 0, fmt.Errorf("%s must be a positive integer", key)
-	}
-
-	return value, nil
 }
 
 func newMongoRestoreRunner(options []string) (restoreRunner, error) {
@@ -362,56 +328,8 @@ func (r *mongoRestoreRunner) Acknowledged() bool {
 	return r.restore.ToolOptions.WriteConcern.Acknowledged()
 }
 
-func (c *cleanupStack) addFile(path string, remove func(string) error) {
-	c.entries = append(c.entries, cleanupEntry{path: path, remove: remove})
-}
-
-func (c *cleanupStack) addDirectory(path string, remove func(string) error) {
-	c.entries = append(c.entries, cleanupEntry{path: path, remove: remove})
-}
-
-func (c *cleanupStack) run(keep bool) error {
-	if keep {
-		return nil
-	}
-
-	var cleanupErrors []error
-	for i := len(c.entries) - 1; i >= 0; i-- {
-		entry := c.entries[i]
-		if err := entry.remove(entry.path); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("cleanup %q: %w", entry.path, err))
-		}
-	}
-
-	return errors.Join(cleanupErrors...)
-}
-
-func closeStorages(storages []projectstorage.Storage) error {
-	var closeErrors []error
-	for _, storageBackend := range storages {
-		if err := storageBackend.Close(); err != nil {
-			closeErrors = append(closeErrors, fmt.Errorf("close %T: %w", storageBackend, err))
-		}
-	}
-
-	return errors.Join(closeErrors...)
-}
-
-func joinPrimaryAndCleanupErrors(primary error, cleanup error) error {
-	if primary == nil {
-		return fmt.Errorf("cleanup failed: %w", cleanup)
-	}
-	if cleanup == nil {
-		return primary
-	}
-	return errors.Join(primary, fmt.Errorf("cleanup failed: %w", cleanup))
-}
-
 func applyUpdates(ctx context.Context, cfg *mongounarchive.Config, updates []update) error {
-	connectCtx, cancel, err := operationContext(ctx, envPrefix+"UPDATE_TIMEOUT")
-	if err != nil {
-		return err
-	}
+	connectCtx, cancel := toolruntime.OperationContext(ctx, cfg.UpdateTimeout)
 	client, dbClient, err := cfg.GetMongoClient(connectCtx)
 	cancel()
 	if err != nil {
@@ -419,23 +337,18 @@ func applyUpdates(ctx context.Context, cfg *mongounarchive.Config, updates []upd
 	}
 
 	defer func() {
-		disconnectCtx, cancel, err := operationContext(ctx, envPrefix+"UPDATE_TIMEOUT")
-		if err == nil {
-			_ = client.Disconnect(disconnectCtx)
-			cancel()
-		}
+		disconnectCtx, cancel := toolruntime.OperationContext(ctx, cfg.UpdateTimeout)
+		_ = client.Disconnect(disconnectCtx)
+		cancel()
 	}()
 
-	return applyValidatedUpdates(ctx, mongoUpdateDatabase{database: dbClient}, updates)
+	return applyValidatedUpdates(ctx, mongoUpdateDatabase{database: dbClient}, updates, cfg.UpdateTimeout)
 }
 
-func applyValidatedUpdates(ctx context.Context, db updateDatabase, updates []update) error {
+func applyValidatedUpdates(ctx context.Context, db updateDatabase, updates []update, operationTimeout time.Duration) error {
 	for i, u := range updates {
 		coll := db.Collection(u.Collection)
-		updateCtx, cancel, err := operationContext(ctx, envPrefix+"UPDATE_TIMEOUT")
-		if err != nil {
-			return err
-		}
+		updateCtx, cancel := toolruntime.OperationContext(ctx, operationTimeout)
 		result, err := coll.UpdateMany(updateCtx, u.Filter, u.Update)
 		cancel()
 		if err != nil {
@@ -498,26 +411,4 @@ func ensureOnlyJSONValue(decoder *json.Decoder) error {
 		return fmt.Errorf("decode updates: %w", err)
 	}
 	return nil
-}
-
-func operationContext(ctx context.Context, envKey string) (context.Context, context.CancelFunc, error) {
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	raw := os.Getenv(envKey)
-	if raw == "" {
-		opCtx, cancel := context.WithCancel(ctx)
-		return opCtx, cancel, nil
-	}
-
-	timeout, err := time.ParseDuration(raw)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%s must be a valid duration: %w", envKey, err)
-	}
-	if timeout <= 0 {
-		return nil, nil, fmt.Errorf("%s must be greater than zero", envKey)
-	}
-
-	opCtx, cancel := context.WithTimeout(ctx, timeout)
-	return opCtx, cancel, nil
 }

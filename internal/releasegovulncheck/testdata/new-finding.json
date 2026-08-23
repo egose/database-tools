@@ -1,0 +1,2 @@
+{"config":{"scan_mode":"source"}}
+{"finding":{"osv":"GO-2099-0001","trace":[{"module":"github.com/example/vulnerable","package":"github.com/example/vulnerable","receiver":"*Parser","function":"Parse"},{"module":"github.com/egose/database-tools","package":"github.com/egose/database-tools/utils","function":"Tar"}]}}

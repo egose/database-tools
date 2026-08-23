@@ -2,6 +2,8 @@ SHELL := /usr/bin/env bash
 DIST_DIR := dist
 TOOLS_DIR := tmp/bin
 GOVULNCHECK := $(TOOLS_DIR)/govulncheck
+GO_BUILD_FLAGS := -trimpath -buildvcs=false
+SOURCE_DATE_EPOCH ?= 0
 
 PREFIX := database-tools
 VERSION := localdev
@@ -25,7 +27,7 @@ OS_ARCH_PAIRS := \
 
 # See https://www.digitalocean.com/community/tutorials/how-to-build-go-executables-for-multiple-platforms-on-ubuntu-16-04#step-4-building-executables-for-different-architectures
 
-.PHONY: build-all build-single build-archive release-verify
+.PHONY: build-all build-single build-archive check-toolchain check-reproducible-archives release-verify
 
 build-all:
 	@set -euo pipefail; \
@@ -46,31 +48,35 @@ build-single:
 	OS=$$(echo $$OS_ARCH | cut -d: -f1); \
 	ARCH=$$(echo $$OS_ARCH | cut -d: -f2); \
 	echo "Building for OS=$$OS and ARCH=$$ARCH" &&\
-	DIR="dist/$$OS-$$ARCH"; \
-	mkdir -p $$DIR; \
-	EXT=$$(if [ "$$OS" = "windows" ]; then echo ".exe"; else echo ""; fi); \
-	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -ldflags "-X \"main.version=$(VERSION) $${OS}-$${ARCH}\"" -o $$DIR/mongo-archive$$EXT ./mongoarchive/main/mongoarchive.go &&\
-	CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build -ldflags "-X \"main.version=$(VERSION) $${OS}-$${ARCH}\"" -o $$DIR/mongo-unarchive$$EXT ./mongounarchive/main/mongounarchive.go
+		DIR="$(DIST_DIR)/$$OS-$$ARCH"; \
+		mkdir -p $$DIR; \
+		EXT=$$(if [ "$$OS" = "windows" ]; then echo ".exe"; else echo ""; fi); \
+		CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X \"main.version=$(VERSION) $${OS}-$${ARCH}\"" -o $$DIR/mongo-archive$$EXT ./mongoarchive/main/mongoarchive.go &&\
+		CGO_ENABLED=0 GOOS=$$OS GOARCH=$$ARCH go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X \"main.version=$(VERSION) $${OS}-$${ARCH}\"" -o $$DIR/mongo-unarchive$$EXT ./mongounarchive/main/mongounarchive.go
 	echo complete
 $(GOVULNCHECK):
 	@mkdir -p "$(TOOLS_DIR)"
 	GOBIN="$(CURDIR)/$(TOOLS_DIR)" go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
 
-release-verify: $(GOVULNCHECK)
+check-toolchain:
+	bash ./scripts/check-supply-chain.sh
+
+release-verify: check-toolchain $(GOVULNCHECK)
 	pnpm install --frozen-lockfile
 	go test -shuffle=on ./...
 	go test -race -shuffle=on ./...
 	go vet ./...
 	go mod verify
-	./scripts/release-govulncheck.sh "$(CURDIR)/$(GOVULNCHECK)" ./...
+	bash ./scripts/release-govulncheck.sh "$(CURDIR)/$(GOVULNCHECK)" ./...
 	docker buildx build --check .
 	$(MAKE) --no-print-directory build-all VERSION=$(VERSION)
 	$(MAKE) --no-print-directory build-archive VERSION=$(VERSION)
+	$(MAKE) --no-print-directory check-reproducible-archives VERSION=$(VERSION) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH)
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o dist/mongo-archive ./mongoarchive/main/mongoarchive.go
-	CGO_ENABLED=0 go build -ldflags "-X main.version=$(VERSION)" -o dist/mongo-unarchive ./mongounarchive/main/mongounarchive.go
+	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o dist/mongo-archive ./mongoarchive/main/mongoarchive.go
+	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o dist/mongo-unarchive ./mongounarchive/main/mongounarchive.go
 	echo complete
 
 build-archive:
@@ -81,10 +87,20 @@ build-archive:
 		dir="$(DIST_DIR)/$$os-$$arch"; \
 		archive="$(DIST_DIR)/$(PREFIX)-$$os-$$arch.tar.gz"; \
 		test -d "$$dir"; \
-		tar -czvf "$$archive" -C "$$dir" .; \
+		tar --sort=name --mtime="@$(SOURCE_DATE_EPOCH)" --owner=0 --group=0 --numeric-owner -cf - -C "$$dir" . | gzip -n > "$$archive"; \
 		test -s "$$archive"; \
 	done; \
 	echo complete
+
+check-reproducible-archives:
+	@set -euo pipefail; \
+	tmp=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp"' EXIT; \
+	$(MAKE) --no-print-directory build-all build-archive DIST_DIR="$$tmp/one" VERSION=$(VERSION) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH); \
+	$(MAKE) --no-print-directory build-all build-archive DIST_DIR="$$tmp/two" VERSION=$(VERSION) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH); \
+	sha256sum "$$tmp"/one/*.tar.gz | sed "s#$$tmp/one/##" | sort -k2 > "$$tmp/one.sha256"; \
+	sha256sum "$$tmp"/two/*.tar.gz | sed "s#$$tmp/two/##" | sort -k2 > "$$tmp/two.sha256"; \
+	diff -u "$$tmp/one.sha256" "$$tmp/two.sha256"
 
 
 .PHONY: format

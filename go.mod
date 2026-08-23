@@ -1,6 +1,6 @@
 module github.com/egose/database-tools
 
-go 1.26.5
+go 1.26.6
 
 require (
 	cloud.google.com/go/storage v1.62.1

@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+failures=0
+
+require_equal() {
+  local label="$1"
+  local expected="$2"
+  local actual="$3"
+  if [ "$expected" != "$actual" ]; then
+    printf '%s drift: expected %s, got %s\n' "$label" "$expected" "$actual" >&2
+    failures=$((failures + 1))
+  fi
+}
+
+require_match() {
+  local label="$1"
+  local value="$2"
+  local pattern="$3"
+  if [[ ! "$value" =~ $pattern ]]; then
+    printf '%s is not pinned as required: %s\n' "$label" "$value" >&2
+    failures=$((failures + 1))
+  fi
+}
+
+go_mod_version=$(awk '$1 == "go" { print $2; exit }' go.mod)
+tool_versions_go=$(awk '$1 == "golang" { print $2; exit }' .tool-versions)
+docker_go_version=$(awk '/^FROM golang:/ { sub(/^FROM golang:/, ""); sub(/@.*/, ""); print; exit }' Dockerfile)
+policy_go_version=$(sed -n 's/.*Go `\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)`.*/\1/p' docs/release-artifact-policy.md | head -n 1)
+
+require_equal "Go version in .tool-versions" "$go_mod_version" "$tool_versions_go"
+require_equal "Go version in Dockerfile" "$go_mod_version" "$docker_go_version"
+require_equal "Go version in release policy" "$go_mod_version" "$policy_go_version"
+
+package_manager=$(python3 - <<'PY'
+import json
+from pathlib import Path
+package = json.loads(Path("package.json").read_text())
+print(package.get("packageManager", ""))
+if package.get("private") is not True:
+    raise SystemExit("package.json must set private=true")
+PY
+)
+package_pnpm_version=${package_manager#pnpm@}
+tool_versions_pnpm=$(awk '$1 == "pnpm" { print $2; exit }' .tool-versions)
+require_equal "pnpm version in package.json" "$tool_versions_pnpm" "$package_pnpm_version"
+
+while IFS= read -r from_line; do
+  require_match "Dockerfile base image" "$from_line" '^FROM [^ ]+@sha256:[0-9a-f]{64}([[:space:]]|$)'
+done < <(awk '/^FROM / { print }' Dockerfile)
+
+while IFS= read -r image_ref; do
+  require_match "release workflow container image" "$image_ref" '^[^[:space:]]+@sha256:[0-9a-f]{64}$'
+done < <(awk '/anchore\/syft:/ { print $1 }' .github/workflows/release.yml)
+
+while IFS= read -r plugin_pin; do
+  require_match "asdf plugin pin" "$plugin_pin" '^[a-z0-9_-]+:[0-9a-f]{40}$'
+done < <(awk '/add_pinned_plugin / { print $2 ":" $4 }' .github/actions/setup-tools/action.yml)
+
+if ! awk '/^    --hash=sha256:/ { found=1 } END { exit(found ? 0 : 1) }' requirements-lock.txt; then
+  printf 'requirements-lock.txt does not contain package hashes\n' >&2
+  failures=$((failures + 1))
+fi
+
+if [ "$failures" -ne 0 ]; then
+  exit 1
+fi
+
+printf 'supply-chain declarations are consistent\n'

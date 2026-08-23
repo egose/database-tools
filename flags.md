@@ -52,7 +52,6 @@ This file is generated from the CLI flag definitions. Update the definitions and
 | `--gcp-client-id` | `MONGOARCHIVE__GCP_CLIENT_ID` | string | GCP service account's client id |
 | `--local-path` | `MONGOARCHIVE__LOCAL_PATH` | string | Local directory path to store backups |
 | `--backup-prefix` | `MONGOARCHIVE__BACKUP_PREFIX` | string | Prefix/namespace used for managed backup objects |
-| `--storage-backend` | `MONGOARCHIVE__STORAGE_BACKEND` | string | Storage backend to use for restore when multiple backends are configured (azure, aws, gcp, local) |
 | `--expiry-days` | `MONGOARCHIVE__EXPIRY_DAYS` | string | The maximum age, in days, for archives to be retained |
 | `--rocketchat-webhook-url` | `MONGOARCHIVE__ROCKETCHAT_WEBHOOK_URL` | string | Rocket Chat Webhook URL |
 | `--rocketchat-webhook-prefix` | `MONGOARCHIVE__ROCKETCHAT_WEBHOOK_PREFIX` | string | Rocket Chat Webhook Prefix |
@@ -168,6 +167,9 @@ This file is generated from the CLI flag definitions. Update the definitions and
 | Environment Variable | Default | Description |
 | -------------------- | ------- | ----------- |
 | `MONGOUNARCHIVE__RESTORE_PATH` | _(none)_ | Base directory for per-run restore workspaces before extraction |
+| `MONGOUNARCHIVE__ARCHIVE_MAX_ENTRIES` | 100000 | Maximum number of entries allowed while extracting an archive |
+| `MONGOUNARCHIVE__ARCHIVE_MAX_ENTRY_BYTES` | 34359738368 | Maximum size in bytes allowed for a single extracted archive entry |
+| `MONGOUNARCHIVE__ARCHIVE_MAX_TOTAL_BYTES` | 274877906944 | Maximum combined size in bytes allowed across all extracted archive entries |
 | `MONGOUNARCHIVE__UPDATE_MAX_BYTES` | 1048576 | Maximum size in bytes allowed for inline or file-based update specifications |
 | `MONGOUNARCHIVE__STORAGE_OPERATION_TIMEOUT` | _(none)_ | Optional timeout applied to storage lookup and download operations |
 | `MONGOUNARCHIVE__UPDATE_TIMEOUT` | _(none)_ | Optional timeout applied to MongoDB update connections and update operations |

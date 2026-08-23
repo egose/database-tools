@@ -20,15 +20,15 @@ import (
 func TestGetStoragesReturnsConfiguredLocalBackend(t *testing.T) {
 	options := StorageOptions{LocalPath: t.TempDir()}
 
-	storages, err := options.GetStorages(context.Background(), 0)
+	storages, err := options.GetArchiveStorages(context.Background(), 0)
 	if err != nil {
-		t.Fatalf("GetStorages() error = %v", err)
+		t.Fatalf("GetArchiveStorages() error = %v", err)
 	}
 	if len(storages) != 1 {
-		t.Fatalf("GetStorages() len = %d, want 1", len(storages))
+		t.Fatalf("GetArchiveStorages() len = %d, want 1", len(storages))
 	}
 	if _, ok := storages[0].(*storage.LocalStorage); !ok {
-		t.Fatalf("GetStorages()[0] = %T, want *storage.LocalStorage", storages[0])
+		t.Fatalf("GetArchiveStorages()[0] = %T, want *storage.LocalStorage", storages[0])
 	}
 }
 
@@ -40,15 +40,167 @@ func TestGetStoragesFailsClosedOnMixedValidAndInvalidBackends(t *testing.T) {
 		BackupPrefix: storage.DefaultBackupPrefix,
 	}
 
-	storages, err := options.GetStorages(context.Background(), 0)
+	storages, err := options.GetArchiveStorages(context.Background(), 0)
 	if err == nil {
-		t.Fatal("GetStorages() expected error")
+		t.Fatal("GetArchiveStorages() expected error")
 	}
 	if len(storages) != 0 {
-		t.Fatalf("GetStorages() len = %d, want 0 on fail-closed init", len(storages))
+		t.Fatalf("GetArchiveStorages() len = %d, want 0 on fail-closed init", len(storages))
 	}
 	if !strings.Contains(err.Error(), "GCP storage initialization failed") {
-		t.Fatalf("GetStorages() error = %q, want GCP init failure", err)
+		t.Fatalf("GetArchiveStorages() error = %q, want GCP init failure", err)
+	}
+}
+
+func TestStorageOptionsValidateRejectsPartialAWSAndAzureRequiredSettings(t *testing.T) {
+	tests := []struct {
+		name   string
+		fields []storageOptionField
+	}{
+		{
+			name: "AWS",
+			fields: []storageOptionField{
+				{identifier: "AWS_ACCESS_KEY_ID", value: "aws-value-0", set: func(options *StorageOptions, value string) { options.AWSAccessKeyID = value }},
+				{identifier: "AWS_SECRET_ACCESS_KEY", value: "aws-value-1", set: func(options *StorageOptions, value string) { options.AWSSecretAccessKey = value }},
+				{identifier: "AWS_BUCKET", value: "aws-value-2", set: func(options *StorageOptions, value string) { options.AWSBucket = value }},
+			},
+		},
+		{
+			name: "Azure",
+			fields: []storageOptionField{
+				{identifier: "AZ_ACCOUNT_NAME", value: "azure-value-0", set: func(options *StorageOptions, value string) { options.AZAccountName = value }},
+				{identifier: "AZ_ACCOUNT_KEY", value: "azure-value-1", set: func(options *StorageOptions, value string) { options.AZAccountKey = value }},
+				{identifier: "AZ_CONTAINER_NAME", value: "azure-value-2", set: func(options *StorageOptions, value string) { options.AZContainerName = value }},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		for mask := 1; mask < (1<<len(tt.fields))-1; mask++ {
+			t.Run(tt.name, func(t *testing.T) {
+				options := StorageOptions{}
+				missing := make([]string, 0)
+				suppliedValues := make([]string, 0)
+				for i, field := range tt.fields {
+					if mask&(1<<i) != 0 {
+						field.set(&options, field.value)
+						suppliedValues = append(suppliedValues, field.value)
+					} else {
+						missing = append(missing, field.identifier)
+					}
+				}
+
+				err := options.Validate()
+				if err == nil {
+					t.Fatal("Validate() expected error")
+				}
+				assertErrorContainsAll(t, err, missing)
+				assertErrorOmitsAll(t, err, suppliedValues)
+			})
+		}
+	}
+}
+
+func TestStorageOptionsValidateKeepsAbsentAndCompleteProvidersEnabled(t *testing.T) {
+	tests := []struct {
+		name    string
+		options StorageOptions
+	}{
+		{name: "absent"},
+		{name: "local", options: StorageOptions{LocalPath: t.TempDir()}},
+		{name: "AWS", options: StorageOptions{AWSAccessKeyID: "aws-id", AWSSecretAccessKey: "aws-key", AWSBucket: "aws-bucket"}},
+		{name: "Azure", options: StorageOptions{AZAccountName: "az-account", AZAccountKey: "az-key", AZContainerName: "az-container"}},
+		{name: "GCP emulator", options: StorageOptions{GCPEndpoint: "http://127.0.0.1:8080", GCPBucket: "gcp-bucket"}},
+		{name: "GCP credentials file", options: StorageOptions{GCPBucket: "gcp-bucket", GCPCredsFile: "/tmp/credentials.json"}},
+		{name: "GCP inline service account", options: StorageOptions{GCPBucket: "gcp-bucket", GCPProjectID: "project", GCPPrivateKeyID: "key-id", GCPPrivateKey: "key", GCPClientEmail: "client@example.com", GCPClientID: "client-id"}},
+		{name: "GCP application default credentials", options: StorageOptions{GCPBucket: "gcp-bucket"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.options.Validate(); err != nil {
+				t.Fatalf("Validate() error = %v", err)
+			}
+		})
+	}
+}
+
+func TestStorageOptionsValidateRejectsPartialGCPCredentialModes(t *testing.T) {
+	t.Run("missing bucket", func(t *testing.T) {
+		options := StorageOptions{GCPCredsFile: "gcp-value-file"}
+
+		err := options.Validate()
+		if err == nil {
+			t.Fatal("Validate() expected error")
+		}
+		assertErrorContainsAll(t, err, []string{"GCP_BUCKET"})
+		assertErrorOmitsAll(t, err, []string{"gcp-value-file"})
+	})
+
+	inlineFields := []storageOptionField{
+		{identifier: "GCP_PROJECT_ID", value: "gcp-value-0", set: func(options *StorageOptions, value string) { options.GCPProjectID = value }},
+		{identifier: "GCP_PRIVATE_KEY_ID", value: "gcp-value-1", set: func(options *StorageOptions, value string) { options.GCPPrivateKeyID = value }},
+		{identifier: "GCP_PRIVATE_KEY", value: "gcp-value-2", set: func(options *StorageOptions, value string) { options.GCPPrivateKey = value }},
+		{identifier: "GCP_CLIENT_EMAIL", value: "gcp-value-3", set: func(options *StorageOptions, value string) { options.GCPClientEmail = value }},
+		{identifier: "GCP_CLIENT_ID", value: "gcp-value-4", set: func(options *StorageOptions, value string) { options.GCPClientID = value }},
+	}
+
+	for mask := 1; mask < (1<<len(inlineFields))-1; mask++ {
+		t.Run("partial inline service account", func(t *testing.T) {
+			options := StorageOptions{GCPBucket: "gcp-bucket"}
+			missing := make([]string, 0)
+			suppliedValues := []string{options.GCPBucket}
+			for i, field := range inlineFields {
+				if mask&(1<<i) != 0 {
+					field.set(&options, field.value)
+					suppliedValues = append(suppliedValues, field.value)
+				} else {
+					missing = append(missing, field.identifier)
+				}
+			}
+
+			err := options.Validate()
+			if err == nil {
+				t.Fatal("Validate() expected error")
+			}
+			assertErrorContainsAll(t, err, missing)
+			assertErrorOmitsAll(t, err, suppliedValues)
+		})
+	}
+
+	t.Run("mixed credential modes", func(t *testing.T) {
+		options := StorageOptions{GCPBucket: "gcp-bucket", GCPEndpoint: "http://127.0.0.1:8080", GCPCredsFile: "gcp-value-file"}
+
+		err := options.Validate()
+		if err == nil {
+			t.Fatal("Validate() expected error")
+		}
+		assertErrorContainsAll(t, err, []string{"GCP_ENDPOINT", "GCP_CREDS_FILE"})
+		assertErrorOmitsAll(t, err, []string{options.GCPBucket, options.GCPEndpoint, options.GCPCredsFile})
+	})
+}
+
+type storageOptionField struct {
+	identifier string
+	value      string
+	set        func(*StorageOptions, string)
+}
+
+func assertErrorContainsAll(t *testing.T, err error, values []string) {
+	t.Helper()
+	for _, value := range values {
+		if !strings.Contains(err.Error(), value) {
+			t.Fatalf("Validate() error = %q, missing %q", err, value)
+		}
+	}
+}
+
+func assertErrorOmitsAll(t *testing.T, err error, values []string) {
+	t.Helper()
+	for _, value := range values {
+		if strings.Contains(err.Error(), value) {
+			t.Fatalf("Validate() error = %q, leaked supplied value %q", err, value)
+		}
 	}
 }
 

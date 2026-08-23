@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -16,9 +17,10 @@ import (
 )
 
 const (
-	envPrefix         = "MONGOARCHIVE__"
-	fallbackEnvPrefix = "MONGO__"
-	defaultCronExpr   = "0 2 * * *"
+	envPrefix           = "MONGOARCHIVE__"
+	fallbackEnvPrefix   = "MONGO__"
+	defaultCronExpr     = "0 2 * * *"
+	defaultWorkspaceDir = "mongoarchive"
 )
 
 type Config struct {
@@ -28,6 +30,7 @@ type Config struct {
 	RetentionOptions
 	NotificationOptions
 	ScheduleOptions
+	RuntimeOptions
 	Keep bool
 }
 
@@ -73,6 +76,12 @@ type ScheduleOptions struct {
 	Cron           bool
 	CronExpression string
 	Location       *time.Location
+}
+
+type RuntimeOptions struct {
+	WorkspaceBasePath       string
+	StorageOperationTimeout time.Duration
+	NotificationTimeout     time.Duration
 }
 
 var archiveFlagDefs = struct {
@@ -250,6 +259,12 @@ func parseFlags(flagSet *flag.FlagSet, env toolconfig.EnvReader, args []string) 
 		return cfg, true, nil
 	}
 
+	runtimeOptions, err := parseRuntimeOptions(env)
+	if err != nil {
+		return nil, false, err
+	}
+	cfg.RuntimeOptions = runtimeOptions
+
 	if err := cfg.Validate(); err != nil {
 		return nil, false, err
 	}
@@ -295,6 +310,23 @@ func parseCronExpression(raw string) string {
 	return defaultCronExpr
 }
 
+func parseRuntimeOptions(env toolconfig.EnvReader) (RuntimeOptions, error) {
+	storageOperationTimeout, err := toolconfig.ReadOptionalDuration(env, "STORAGE_OPERATION_TIMEOUT")
+	if err != nil {
+		return RuntimeOptions{}, err
+	}
+	notificationTimeout, err := toolconfig.ReadOptionalDuration(env, "NOTIFICATION_TIMEOUT")
+	if err != nil {
+		return RuntimeOptions{}, err
+	}
+
+	return RuntimeOptions{
+		WorkspaceBasePath:       toolconfig.ReadWorkspaceBase(env, "DUMP_PATH", filepath.Join(os.TempDir(), defaultWorkspaceDir)),
+		StorageOperationTimeout: storageOperationTimeout,
+		NotificationTimeout:     notificationTimeout,
+	}, nil
+}
+
 func (c *Config) GetTZ() *time.Location {
 	return c.Location
 }
@@ -317,13 +349,53 @@ func (c *Config) GetMongodumpOptions() []string {
 	return options
 }
 
-func (c *Config) GetStorages(ctx context.Context) ([]storage.Storage, error) {
-	return c.StorageOptions.GetStorages(ctx, c.ExpiryDays)
+func (c *Config) GetStorages(ctx context.Context) ([]storage.ArchiveBackend, error) {
+	return c.StorageOptions.GetArchiveStorages(ctx, c.ExpiryDays)
 }
 
 func (c *Config) Validate() error {
-	_, err := c.GetNotifications()
-	return err
+	if err := c.RuntimeOptions.Validate(); err != nil {
+		return err
+	}
+	if err := c.StorageOptions.Validate(); err != nil {
+		return err
+	}
+	return c.NotificationOptions.Validate()
+}
+
+func (r RuntimeOptions) Validate() error {
+	if r.StorageOperationTimeout < 0 {
+		return errors.New("STORAGE_OPERATION_TIMEOUT must be greater than zero")
+	}
+	if r.NotificationTimeout < 0 {
+		return errors.New("NOTIFICATION_TIMEOUT must be greater than zero")
+	}
+	return nil
+}
+
+func (o NotificationOptions) Validate() error {
+	if o.useRocketChat() {
+		if err := notification.ValidateWebhookURL(o.RocketChatWebhookURL, o.NotificationAllowInsecureHTTPInDevelopment, "Rocket.Chat webhook URL"); err != nil {
+			return err
+		}
+	}
+	if o.useSlack() {
+		if err := notification.ValidateWebhookURL(o.SlackWebhookURL, o.NotificationAllowInsecureHTTPInDevelopment, "Slack webhook URL"); err != nil {
+			return err
+		}
+	}
+	if o.useSMTP() {
+		if _, err := notification.ValidateSMTPOptions(o.SMTPHost, o.SMTPPort, o.SMTPUsername, o.SMTPPassword, o.SMTPFrom, o.SMTPTo, o.SMTPSubjectPrefix); err != nil {
+			return err
+		}
+	}
+	if o.useSES() {
+		if _, err := notification.ValidateSESOptions(o.SESEndpoint, o.SESRegion, o.SESAccessKeyID, o.SESSecretAccessKey, o.SESFrom, o.SESTo, o.NotificationAllowInsecureHTTPInDevelopment); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (c *Config) getRocketChat() (*notification.RocketChat, error) {
@@ -350,10 +422,12 @@ func (c *Config) getSES() (*notification.SES, error) {
 	return sesNotification, err
 }
 
+// GetNotifications constructs concrete notifier transports and SDK clients.
+// Startup validation must use NotificationOptions.Validate instead.
 func (c *Config) GetNotifications() ([]notification.Notification, error) {
 	notifications := make([]notification.Notification, 0)
 
-	if c.useRocketChat() {
+	if c.NotificationOptions.useRocketChat() {
 		rc, err := c.getRocketChat()
 		if err != nil {
 			return nil, err
@@ -363,7 +437,7 @@ func (c *Config) GetNotifications() ([]notification.Notification, error) {
 		}
 	}
 
-	if c.useSlack() {
+	if c.NotificationOptions.useSlack() {
 		slack, err := c.getSlack()
 		if err != nil {
 			return nil, err
@@ -373,7 +447,7 @@ func (c *Config) GetNotifications() ([]notification.Notification, error) {
 		}
 	}
 
-	if c.useSMTP() {
+	if c.NotificationOptions.useSMTP() {
 		smtpNotification, err := c.getSMTP()
 		if err != nil {
 			return nil, err
@@ -383,7 +457,7 @@ func (c *Config) GetNotifications() ([]notification.Notification, error) {
 		}
 	}
 
-	if c.useSES() {
+	if c.NotificationOptions.useSES() {
 		sesNotification, err := c.getSES()
 		if err != nil {
 			return nil, err
@@ -469,18 +543,18 @@ func FlagDocumentation() toolconfig.CommandDoc {
 	}
 }
 
-func (c *Config) useRocketChat() bool {
-	return c.RocketChatWebhookURL != ""
+func (o NotificationOptions) useRocketChat() bool {
+	return o.RocketChatWebhookURL != ""
 }
 
-func (c *Config) useSlack() bool {
-	return c.SlackWebhookURL != ""
+func (o NotificationOptions) useSlack() bool {
+	return o.SlackWebhookURL != ""
 }
 
-func (c *Config) useSMTP() bool {
-	return c.SMTPHost != "" || c.SMTPFrom != "" || c.SMTPTo != ""
+func (o NotificationOptions) useSMTP() bool {
+	return o.SMTPHost != "" || o.SMTPFrom != "" || o.SMTPTo != ""
 }
 
-func (c *Config) useSES() bool {
-	return c.SESFrom != "" || c.SESTo != ""
+func (o NotificationOptions) useSES() bool {
+	return o.SESFrom != "" || o.SESTo != ""
 }

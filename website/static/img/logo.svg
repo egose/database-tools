@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Database Tools logo">
+  <defs>
+    <linearGradient id="g" x1="12" x2="116" y1="10" y2="118" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#14b8a6" />
+      <stop offset="1" stop-color="#0f766e" />
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#020617" />
+  <path fill="url(#g)" d="M24 35c0-12 18-21 40-21s40 9 40 21v58c0 12-18 21-40 21s-40-9-40-21V35Z" />
+  <path fill="#ccfbf1" d="M64 50c22 0 40-9 40-21v15c0 12-18 21-40 21s-40-9-40-21V29c0 12 18 21 40 21Z" opacity=".9" />
+  <path fill="#fff7ed" d="M40 80h36l-10-10 8-8 24 24-24 24-8-8 10-10H40V80Z" />
+</svg>

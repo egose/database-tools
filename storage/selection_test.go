@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"reflect"
 	"testing"
@@ -132,7 +133,7 @@ func TestResolveExplicitObjectNamePropagatesLookupErrors(t *testing.T) {
 }
 
 func TestSelectRestoreStorageRequiresExplicitBackendForMultipleStorages(t *testing.T) {
-	_, err := SelectRestoreStorage([]Storage{&LocalStorage{}, &AwsS3{}}, "")
+	_, err := SelectRestoreStorage([]RestoreBackend{&LocalStorage{}, &AwsS3{}}, "")
 	if err == nil {
 		t.Fatal("SelectRestoreStorage() expected error")
 	}
@@ -142,7 +143,7 @@ func TestSelectRestoreStorageRequiresExplicitBackendForMultipleStorages(t *testi
 }
 
 func TestSelectRestoreStorageUsesRequestedBackend(t *testing.T) {
-	storages := []Storage{&LocalStorage{}, &AwsS3{}}
+	storages := []RestoreBackend{&LocalStorage{}, &AwsS3{}}
 
 	got, err := SelectRestoreStorage(storages, "aws")
 	if err != nil {
@@ -154,11 +155,54 @@ func TestSelectRestoreStorageUsesRequestedBackend(t *testing.T) {
 }
 
 func TestSelectRestoreStorageRejectsUnknownBackend(t *testing.T) {
-	_, err := SelectRestoreStorage([]Storage{&LocalStorage{}}, "gcp")
+	_, err := SelectRestoreStorage([]RestoreBackend{&LocalStorage{}}, "gcp")
 	if err == nil {
 		t.Fatal("SelectRestoreStorage() expected error")
 	}
 	if err.Error() != "storage backend \"gcp\" is not configured; available backends: local" {
+		t.Fatalf("SelectRestoreStorage() error = %q", err)
+	}
+}
+
+type namedRestoreStorage struct {
+	name string
+}
+
+func (s namedRestoreStorage) BackendName() string { return s.name }
+
+func (s namedRestoreStorage) Download(context.Context, string, string) error { return nil }
+
+func (s namedRestoreStorage) GetTargetObjectName(context.Context, string) (string, error) {
+	return "", nil
+}
+
+func (s namedRestoreStorage) Close() error { return nil }
+
+type restoreStorageWrapper struct {
+	RestoreBackend
+}
+
+func TestSelectRestoreStorageUsesExplicitBackendIdentityFromWrapper(t *testing.T) {
+	wrapped := restoreStorageWrapper{RestoreBackend: namedRestoreStorage{name: "custom"}}
+
+	got, err := SelectRestoreStorage([]RestoreBackend{wrapped}, "custom")
+	if err != nil {
+		t.Fatalf("SelectRestoreStorage() error = %v", err)
+	}
+	if got != wrapped {
+		t.Fatalf("SelectRestoreStorage() = %T, want wrapper", got)
+	}
+}
+
+func TestSelectRestoreStorageRejectsDuplicateBackendNames(t *testing.T) {
+	_, err := SelectRestoreStorage([]RestoreBackend{
+		namedRestoreStorage{name: "local"},
+		namedRestoreStorage{name: " LOCAL "},
+	}, "local")
+	if err == nil {
+		t.Fatal("SelectRestoreStorage() expected error")
+	}
+	if err.Error() != "duplicate storage backend name \"local\"" {
 		t.Fatalf("SelectRestoreStorage() error = %q", err)
 	}
 }
