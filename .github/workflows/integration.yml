@@ -68,7 +68,7 @@ jobs:
 
         node_modules/.bin/wait-on tcp:127.0.0.1:27017 tcp:127.0.0.1:9000 http://localhost:9001 tcp:127.0.0.1:10000 tcp:127.0.0.1:"$FAKE_GCP_PORT" --timeout 120000
         for attempt in $(seq 1 120); do
-          minio_init_container=$(docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml ps -q minio-init)
+          minio_init_container=$(docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml ps -aq minio-init)
           if [ -z "$minio_init_container" ]; then
             printf 'minio-init container was not created\n' >&2
             docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml logs --no-color minio-init >&2 || true
