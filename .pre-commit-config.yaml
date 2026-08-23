@@ -59,6 +59,7 @@ repos:
 exclude: |
   (?x)^(
     CHANGELOG\.md |
+    internal/releasegovulncheck/testdata/.* |
     (.*/)?package-lock\.json |
     (.*/)?yarn\.lock |
     (.*/)?pnpm-lock\.yaml
