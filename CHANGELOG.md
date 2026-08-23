@@ -1,3 +1,15 @@
+## [0.16.0](https://github.com/egose/database-tools/compare/v0.15.0...v0.16.0) (2026-08-23)
+
+### Features
+
+* **database-tools-website:** add a Docusaurus documentation site and workspace scripts ([47da7b5](https://github.com/egose/database-tools/commit/47da7b5ee9e432fc072fbe0408b56045098c3495))
+* harden release workflows and supply chain checks ([fb867d3](https://github.com/egose/database-tools/commit/fb867d384b9c1a2521006c1e10befaf61dc93d2a))
+
+### Bug Fixes
+
+* accept alternate svcacct already-exists errors ([e621173](https://github.com/egose/database-tools/commit/e621173c3748c95dac2b3ae8dfbbba5cf5e52f0a))
+* broaden minio init container matching in integration checks ([33c1951](https://github.com/egose/database-tools/commit/33c19516f3542c4027c0d664bdbc8f6ff6996811))
+
 ## [0.15.0](https://github.com/egose/database-tools/compare/v0.14.0...v0.15.0) (2026-08-13)
 
 ### Features
