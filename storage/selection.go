@@ -80,6 +80,22 @@ func latestGCPObject(objects []*gcs.ObjectAttrs) (objectTimestamp, bool) {
 	return latestObject(candidates)
 }
 
+func (this *AzBlob) BackendName() string {
+	return BackendAzure
+}
+
+func (this *AwsS3) BackendName() string {
+	return BackendAWS
+}
+
+func (this *GcpStorage) BackendName() string {
+	return BackendGCP
+}
+
+func (this *LocalStorage) BackendName() string {
+	return BackendLocal
+}
+
 func resolveExplicitObjectName(prefix string, objectName string, exists func(string) (bool, error)) (string, bool, error) {
 	for _, candidate := range lookupObjectCandidates(prefix, objectName) {
 		found, err := exists(candidate)
@@ -94,22 +110,15 @@ func resolveExplicitObjectName(prefix string, objectName string, exists func(str
 	return "", false, nil
 }
 
-func BackendName(storageBackend Storage) (string, error) {
-	switch storageBackend.(type) {
-	case *AzBlob:
-		return BackendAzure, nil
-	case *AwsS3:
-		return BackendAWS, nil
-	case *GcpStorage:
-		return BackendGCP, nil
-	case *LocalStorage:
-		return BackendLocal, nil
-	default:
-		return "", fmt.Errorf("unsupported storage backend type %T", storageBackend)
+func BackendName(storageBackend BackendIdentifier) (string, error) {
+	name := normalizeBackendName(storageBackend.BackendName())
+	if name == "" {
+		return "", fmt.Errorf("storage backend %T has empty backend name", storageBackend)
 	}
+	return name, nil
 }
 
-func SelectRestoreStorage(storages []Storage, requestedBackend string) (Storage, error) {
+func SelectRestoreStorage(storages []RestoreBackend, requestedBackend string) (RestoreBackend, error) {
 	if len(storages) == 0 {
 		return nil, fmt.Errorf("no storage backends configured")
 	}
@@ -140,7 +149,7 @@ func SelectRestoreStorage(storages []Storage, requestedBackend string) (Storage,
 	return nil, fmt.Errorf("storage backend %q is not configured; available backends: %s", requestedBackend, strings.Join(availableBackends, ", "))
 }
 
-func configuredBackendNames(storages []Storage) ([]string, error) {
+func configuredBackendNames(storages []RestoreBackend) ([]string, error) {
 	names := make([]string, 0, len(storages))
 	seen := make(map[string]struct{}, len(storages))
 	for _, storageBackend := range storages {
@@ -149,7 +158,7 @@ func configuredBackendNames(storages []Storage) ([]string, error) {
 			return nil, err
 		}
 		if _, ok := seen[name]; ok {
-			continue
+			return nil, fmt.Errorf("duplicate storage backend name %q", name)
 		}
 		seen[name] = struct{}{}
 		names = append(names, name)

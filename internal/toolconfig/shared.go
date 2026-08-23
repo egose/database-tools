@@ -186,7 +186,6 @@ type StorageFlagBindings struct {
 	GCPClientID         *string
 	LocalPath           *string
 	BackupPrefix        *string
-	StorageBackend      *string
 }
 
 var storageFlagDefs = struct {
@@ -210,7 +209,6 @@ var storageFlagDefs = struct {
 	gcpClientID         StringFlagDef
 	localPath           StringFlagDef
 	backupPrefix        StringFlagDef
-	storageBackend      StringFlagDef
 }{
 	azEndpoint:          StringFlagDef{Name: "az-endpoint", EnvKey: "AZ_ENDPOINT", Usage: "specify the emulator hostname and Azure Blob Storage port"},
 	azAccountName:       StringFlagDef{Name: "az-account-name", EnvKey: "AZ_ACCOUNT_NAME", Usage: "Azure Blob Storage Account Name"},
@@ -232,8 +230,9 @@ var storageFlagDefs = struct {
 	gcpClientID:         StringFlagDef{Name: "gcp-client-id", EnvKey: "GCP_CLIENT_ID", Usage: "GCP service account's client id"},
 	localPath:           StringFlagDef{Name: "local-path", EnvKey: "LOCAL_PATH", Usage: "Local directory path to store backups"},
 	backupPrefix:        StringFlagDef{Name: "backup-prefix", EnvKey: "BACKUP_PREFIX", Usage: "Prefix/namespace used for managed backup objects", Defaults: []string{storage.DefaultBackupPrefix}},
-	storageBackend:      StringFlagDef{Name: "storage-backend", EnvKey: "STORAGE_BACKEND", Usage: "Storage backend to use for restore when multiple backends are configured (azure, aws, gcp, local)"},
 }
+
+var restoreStorageBackendFlagDef = StringFlagDef{Name: "storage-backend", EnvKey: "STORAGE_BACKEND", Usage: "Storage backend to use for restore when multiple backends are configured (azure, aws, gcp, local)"}
 
 func BindStorageFlags(fs FlagBinder, env EnvReader) StorageFlagBindings {
 	return StorageFlagBindings{
@@ -257,8 +256,11 @@ func BindStorageFlags(fs FlagBinder, env EnvReader) StorageFlagBindings {
 		GCPClientID:         storageFlagDefs.gcpClientID.Bind(fs, env),
 		LocalPath:           storageFlagDefs.localPath.Bind(fs, env),
 		BackupPrefix:        storageFlagDefs.backupPrefix.Bind(fs, env),
-		StorageBackend:      storageFlagDefs.storageBackend.Bind(fs, env),
 	}
+}
+
+func BindRestoreStorageBackendFlag(fs FlagBinder, env EnvReader) *string {
+	return restoreStorageBackendFlagDef.Bind(fs, env)
 }
 
 func StorageFlagDocs(envPrefix string) []FlagDoc {
@@ -283,8 +285,11 @@ func StorageFlagDocs(envPrefix string) []FlagDoc {
 		storageFlagDefs.gcpClientID.Doc(envPrefix),
 		storageFlagDefs.localPath.Doc(envPrefix),
 		storageFlagDefs.backupPrefix.Doc(envPrefix),
-		storageFlagDefs.storageBackend.Doc(envPrefix),
 	}
+}
+
+func RestoreStorageBackendFlagDoc(envPrefix string) FlagDoc {
+	return restoreStorageBackendFlagDef.Doc(envPrefix)
 }
 
 func (b StorageFlagBindings) Apply(target *StorageOptions) {
@@ -308,7 +313,6 @@ func (b StorageFlagBindings) Apply(target *StorageOptions) {
 	target.GCPClientID = *b.GCPClientID
 	target.LocalPath = *b.LocalPath
 	target.BackupPrefix = *b.BackupPrefix
-	target.StorageBackend = *b.StorageBackend
 }
 
 type MongoOptions struct {
@@ -534,21 +538,25 @@ type StorageOptions struct {
 	StorageBackend      string
 }
 
-func (s StorageOptions) GetStorages(ctx context.Context, expiryDays int) ([]storage.Storage, error) {
-	type option struct {
-		name    string
-		enabled func() bool
-		getter  func() (storage.Storage, error)
+type storageSetting struct {
+	identifier string
+	value      string
+}
+
+type storageBackendOption[T storage.Lifecycle] struct {
+	name    string
+	enabled func() bool
+	getter  func() (T, error)
+}
+
+func getConfiguredBackends[T storage.Lifecycle](options []storageBackendOption[T], validate func() error) ([]T, error) {
+	var zero T
+
+	if err := validate(); err != nil {
+		return nil, err
 	}
 
-	options := []option{
-		{"Local", s.useLocal, func() (storage.Storage, error) { return s.getLocalStorage(expiryDays) }},
-		{"Azure", s.useAzure, func() (storage.Storage, error) { return s.getAzBlobStorage(expiryDays) }},
-		{"AWS", s.useAWS, func() (storage.Storage, error) { return s.getAwsS3Storage(expiryDays) }},
-		{"GCP", s.useGCP, func() (storage.Storage, error) { return s.getGcpStorage(ctx, expiryDays) }},
-	}
-
-	storages := make([]storage.Storage, 0)
+	storages := make([]T, 0)
 	foundNames := make([]string, 0)
 	initErrors := make([]error, 0)
 	for _, opt := range options {
@@ -558,7 +566,7 @@ func (s StorageOptions) GetStorages(ctx context.Context, expiryDays int) ([]stor
 				initErrors = append(initErrors, fmt.Errorf("%s storage initialization failed: %w", opt.name, err))
 				continue
 			}
-			if storageBackend != nil {
+			if any(storageBackend) != any(zero) {
 				storages = append(storages, storageBackend)
 				foundNames = append(foundNames, opt.name)
 			}
@@ -579,7 +587,134 @@ func (s StorageOptions) GetStorages(ctx context.Context, expiryDays int) ([]stor
 	return storages, nil
 }
 
-func (s StorageOptions) getAzBlobStorage(expiryDays int) (storage.Storage, error) {
+func (s StorageOptions) GetArchiveStorages(ctx context.Context, expiryDays int) ([]storage.ArchiveBackend, error) {
+	options := []storageBackendOption[storage.ArchiveBackend]{
+		{"Local", s.useLocal, func() (storage.ArchiveBackend, error) { return s.getLocalStorage(expiryDays) }},
+		{"Azure", s.useAzure, func() (storage.ArchiveBackend, error) { return s.getAzBlobStorage(expiryDays) }},
+		{"AWS", s.useAWS, func() (storage.ArchiveBackend, error) { return s.getAwsS3Storage(expiryDays) }},
+		{"GCP", s.useGCP, func() (storage.ArchiveBackend, error) { return s.getGcpStorage(ctx, expiryDays) }},
+	}
+
+	return getConfiguredBackends(options, s.Validate)
+}
+
+func (s StorageOptions) GetRestoreStorages(ctx context.Context, expiryDays int) ([]storage.RestoreBackend, error) {
+	options := []storageBackendOption[storage.RestoreBackend]{
+		{"Local", s.useLocal, func() (storage.RestoreBackend, error) { return s.getLocalStorage(expiryDays) }},
+		{"Azure", s.useAzure, func() (storage.RestoreBackend, error) { return s.getAzBlobStorage(expiryDays) }},
+		{"AWS", s.useAWS, func() (storage.RestoreBackend, error) { return s.getAwsS3Storage(expiryDays) }},
+		{"GCP", s.useGCP, func() (storage.RestoreBackend, error) { return s.getGcpStorage(ctx, expiryDays) }},
+	}
+
+	return getConfiguredBackends(options, s.Validate)
+}
+
+func (s StorageOptions) Validate() error {
+	return errors.Join(
+		s.validateAzure(),
+		s.validateAWS(),
+		s.validateGCP(),
+	)
+}
+
+func (s StorageOptions) validateAzure() error {
+	settings := []storageSetting{
+		{"AZ_ACCOUNT_NAME", s.AZAccountName},
+		{"AZ_ACCOUNT_KEY", s.AZAccountKey},
+		{"AZ_CONTAINER_NAME", s.AZContainerName},
+	}
+	if !anySettingPresent(append(settings, storageSetting{"AZ_ENDPOINT", s.AZEndpoint})) {
+		return nil
+	}
+
+	return missingRequiredSettingsError("Azure", settings)
+}
+
+func (s StorageOptions) validateAWS() error {
+	settings := []storageSetting{
+		{"AWS_ACCESS_KEY_ID", s.AWSAccessKeyID},
+		{"AWS_SECRET_ACCESS_KEY", s.AWSSecretAccessKey},
+		{"AWS_BUCKET", s.AWSBucket},
+	}
+	intentSettings := append(settings, storageSetting{"AWS_ENDPOINT", s.AWSEndpoint})
+	if s.AWSS3ForcePathStyle {
+		intentSettings = append(intentSettings, storageSetting{"AWS_S3_FORCE_PATH_STYLE", "true"})
+	}
+	if !anySettingPresent(intentSettings) {
+		return nil
+	}
+
+	return missingRequiredSettingsError("AWS", settings)
+}
+
+func (s StorageOptions) validateGCP() error {
+	inlineSettings := []storageSetting{
+		{"GCP_PROJECT_ID", s.GCPProjectID},
+		{"GCP_PRIVATE_KEY_ID", s.GCPPrivateKeyID},
+		{"GCP_PRIVATE_KEY", s.GCPPrivateKey},
+		{"GCP_CLIENT_EMAIL", s.GCPClientEmail},
+		{"GCP_CLIENT_ID", s.GCPClientID},
+	}
+	gcpSettings := []storageSetting{
+		{"GCP_ENDPOINT", s.GCPEndpoint},
+		{"GCP_BUCKET", s.GCPBucket},
+		{"GCP_CREDS_FILE", s.GCPCredsFile},
+	}
+	gcpSettings = append(gcpSettings, inlineSettings...)
+	if !anySettingPresent(gcpSettings) {
+		return nil
+	}
+	if s.GCPBucket == "" {
+		return missingRequiredSettingsError("GCP", []storageSetting{{"GCP_BUCKET", s.GCPBucket}})
+	}
+
+	hasEmulator := s.GCPEndpoint != ""
+	hasCredsFile := s.GCPCredsFile != ""
+	hasInline := anySettingPresent(inlineSettings)
+	modeCount := 0
+	if hasEmulator {
+		modeCount++
+	}
+	if hasCredsFile {
+		modeCount++
+	}
+	if hasInline {
+		modeCount++
+	}
+	if modeCount > 1 {
+		return errors.New("GCP storage configuration must use exactly one credential mode: GCP_ENDPOINT, GCP_CREDS_FILE, inline service account settings, or application default credentials")
+	}
+	if hasInline {
+		return missingRequiredSettingsError("GCP", inlineSettings)
+	}
+
+	return nil
+}
+
+func anySettingPresent(settings []storageSetting) bool {
+	for _, setting := range settings {
+		if setting.value != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func missingRequiredSettingsError(provider string, settings []storageSetting) error {
+	missing := make([]string, 0)
+	for _, setting := range settings {
+		if setting.value == "" {
+			missing = append(missing, setting.identifier)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("%s storage configuration missing required settings: %s", provider, strings.Join(missing, ", "))
+}
+
+func (s StorageOptions) getAzBlobStorage(expiryDays int) (*storage.AzBlob, error) {
 	az := new(storage.AzBlob)
 	if err := az.Init(s.AZAccountName, s.AZAccountKey, s.AZContainerName, s.AZEndpoint, expiryDays, s.BackupPrefix); err != nil {
 		return nil, err
@@ -587,7 +722,7 @@ func (s StorageOptions) getAzBlobStorage(expiryDays int) (storage.Storage, error
 	return az, nil
 }
 
-func (s StorageOptions) getAwsS3Storage(expiryDays int) (storage.Storage, error) {
+func (s StorageOptions) getAwsS3Storage(expiryDays int) (*storage.AwsS3, error) {
 	s3 := new(storage.AwsS3)
 	if err := s3.Init(s.AWSEndpoint, s.AWSAccessKeyID, s.AWSSecretAccessKey, s.AWSRegion, s.AWSBucket, s.AWSS3ForcePathStyle, expiryDays, s.BackupPrefix); err != nil {
 		return nil, err
@@ -595,7 +730,7 @@ func (s StorageOptions) getAwsS3Storage(expiryDays int) (storage.Storage, error)
 	return s3, nil
 }
 
-func (s StorageOptions) getGcpStorage(ctx context.Context, expiryDays int) (storage.Storage, error) {
+func (s StorageOptions) getGcpStorage(ctx context.Context, expiryDays int) (*storage.GcpStorage, error) {
 	gcpStorage := new(storage.GcpStorage)
 	if err := gcpStorage.Init(ctx, s.GCPEndpoint, s.GCPBucket, s.GCPCredsFile, s.GCPProjectID, s.GCPPrivateKeyID, s.GCPPrivateKey, s.GCPClientEmail, s.GCPClientID, expiryDays, s.BackupPrefix); err != nil {
 		return nil, err
@@ -603,7 +738,7 @@ func (s StorageOptions) getGcpStorage(ctx context.Context, expiryDays int) (stor
 	return gcpStorage, nil
 }
 
-func (s StorageOptions) getLocalStorage(expiryDays int) (storage.Storage, error) {
+func (s StorageOptions) getLocalStorage(expiryDays int) (*storage.LocalStorage, error) {
 	localStorage := new(storage.LocalStorage)
 	if err := localStorage.Init(s.LocalPath, expiryDays, s.BackupPrefix); err != nil {
 		return nil, err

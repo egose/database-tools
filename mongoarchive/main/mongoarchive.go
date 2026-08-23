@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -11,7 +10,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/egose/database-tools/internal/toolruntime"
 	"github.com/egose/database-tools/mongoarchive"
+	"github.com/egose/database-tools/notification"
 	"github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
 	"github.com/go-co-op/gocron/v2"
@@ -37,26 +38,17 @@ type archiveDump interface {
 }
 
 type archivePipeline struct {
-	createWorkspace func() (string, error)
+	createWorkspace func(string) (string, error)
 	newFilename     func() (string, string)
 	newDump         func([]string) (archiveDump, func(), error)
-	getStorages     func(context.Context, *mongoarchive.Config) ([]storage.Storage, error)
+	getStorages     func(context.Context, *mongoarchive.Config) ([]storage.ArchiveBackend, error)
 	tar             func(string, string) error
 	buildObjectName func(string, string) (string, error)
-	upload          func(context.Context, []storage.Storage, string, string) error
+	upload          func(context.Context, []storage.ArchiveBackend, string, string, time.Duration) error
 	deleteDirectory func(string) error
 	deleteFile      func(string) error
 	handleInterrupt func(func()) chan struct{}
-	notify          func(context.Context, *mongoarchive.Config, bool, string)
-}
-
-type cleanupEntry struct {
-	path   string
-	remove func(string) error
-}
-
-type cleanupStack struct {
-	entries []cleanupEntry
+	notify          notificationSender
 }
 
 type multiBackendArchiveError struct {
@@ -75,11 +67,32 @@ type cronScheduler interface {
 }
 
 type cronRuntime struct {
-	newScheduler    func(*time.Location) (cronScheduler, error)
-	runTask         func(context.Context, *mongoarchive.Config) error
-	notify          func(context.Context, *mongoarchive.Config, bool, string)
-	waitForShutdown func()
-	now             func() time.Time
+	newScheduler func(*time.Location) (cronScheduler, error)
+	runTask      func(context.Context, *mongoarchive.Config, notificationSender) error
+	notify       notificationSender
+	now          func() time.Time
+}
+
+type archiveRuntime struct {
+	newNotifications func(*mongoarchive.Config) (notificationSender, error)
+	runTask          func(context.Context, *mongoarchive.Config, notificationSender) error
+	runCronJob       func(context.Context, *mongoarchive.Config, notificationSender) error
+}
+
+type notificationSender interface {
+	Send(context.Context, bool, string)
+}
+
+type notificationSenderFunc func(context.Context, bool, string)
+
+func (f notificationSenderFunc) Send(ctx context.Context, success bool, filenameOrError string) {
+	f(ctx, success, filenameOrError)
+}
+
+type notificationGroup struct {
+	notifications []notification.Notification
+	timeout       time.Duration
+	location      *time.Location
 }
 
 type gocronScheduler struct {
@@ -100,14 +113,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if cfg.HasCron() {
-		err = runCronJob(ctx, cfg)
-	} else {
-		err = runTask(ctx, cfg)
-		if err != nil {
-			sendNotification(ctx, cfg, false, err.Error())
-		}
-	}
+	err = newArchiveRuntime().run(ctx, cfg)
 
 	if err != nil {
 		mlog.Logvf(mlog.Always, "Failed: %v", err.Error())
@@ -117,19 +123,70 @@ func main() {
 
 // See https://github.com/go-co-op/gocron
 func runCronJob(ctx context.Context, cfg *mongoarchive.Config) error {
-	return newCronRuntime().run(ctx, cfg)
+	notifications, err := newNotificationGroup(cfg)
+	if err != nil {
+		return err
+	}
+	defer notifications.Close()
+	return runCronJobWithNotifications(ctx, cfg, notifications)
 }
 
 func runTask(ctx context.Context, cfg *mongoarchive.Config) error {
-	return newArchivePipeline().run(ctx, cfg)
+	notifications, err := newNotificationGroup(cfg)
+	if err != nil {
+		return err
+	}
+	defer notifications.Close()
+	return runTaskWithNotifications(ctx, cfg, notifications)
 }
 
-func newArchivePipeline() archivePipeline {
+func newArchiveRuntime() archiveRuntime {
+	return archiveRuntime{
+		newNotifications: func(cfg *mongoarchive.Config) (notificationSender, error) {
+			return newNotificationGroup(cfg)
+		},
+		runTask:    runTaskWithNotifications,
+		runCronJob: runCronJobWithNotifications,
+	}
+}
+
+func (r archiveRuntime) run(ctx context.Context, cfg *mongoarchive.Config) error {
+	// Notification clients are process-lifecycle resources: one-shot runs use one
+	// group, and cron mode reuses the same group for every scheduled execution.
+	notifications, err := r.newNotifications(cfg)
+	if err != nil {
+		return err
+	}
+	if notifications == nil {
+		notifications = notificationSenderFunc(func(context.Context, bool, string) {})
+	}
+	defer closeNotificationSender(notifications)
+
+	if cfg.HasCron() {
+		return r.runCronJob(ctx, cfg, notifications)
+	}
+
+	err = r.runTask(ctx, cfg, notifications)
+	if err != nil {
+		notifications.Send(ctx, false, err.Error())
+	}
+	return err
+}
+
+func runCronJobWithNotifications(ctx context.Context, cfg *mongoarchive.Config, notifications notificationSender) error {
+	return newCronRuntime(notifications).run(ctx, cfg)
+}
+
+func runTaskWithNotifications(ctx context.Context, cfg *mongoarchive.Config, notifications notificationSender) error {
+	return newArchivePipeline(notifications).run(ctx, cfg)
+}
+
+func newArchivePipeline(notifications notificationSender) archivePipeline {
 	return archivePipeline{
 		createWorkspace: createArchiveWorkspace,
 		newFilename:     utils.GetNewFilename,
 		newDump:         newMongoDumpRunner,
-		getStorages: func(ctx context.Context, cfg *mongoarchive.Config) ([]storage.Storage, error) {
+		getStorages: func(ctx context.Context, cfg *mongoarchive.Config) ([]storage.ArchiveBackend, error) {
 			return cfg.GetStorages(ctx)
 		},
 		tar:             utils.Tar,
@@ -138,22 +195,16 @@ func newArchivePipeline() archivePipeline {
 		deleteDirectory: utils.DeleteDirectory,
 		deleteFile:      utils.DeleteFile,
 		handleInterrupt: signals.HandleWithInterrupt,
-		notify:          sendNotification,
+		notify:          notifications,
 	}
 }
 
-func newCronRuntime() cronRuntime {
+func newCronRuntime(notifications notificationSender) cronRuntime {
 	return cronRuntime{
 		newScheduler: newGocronScheduler,
-		runTask:      runTask,
-		notify:       sendNotification,
-		waitForShutdown: func() {
-			sigChan := make(chan os.Signal, 1)
-			signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-			defer signal.Stop(sigChan)
-			<-sigChan
-		},
-		now: time.Now,
+		runTask:      runTaskWithNotifications,
+		notify:       notifications,
+		now:          time.Now,
 	}
 }
 
@@ -162,9 +213,16 @@ func (p archivePipeline) run(ctx context.Context, cfg *mongoarchive.Config) (ret
 	dumpDirName := ""
 	defer func() {
 		if retErr == nil && filename != "" {
-			p.notify(ctx, cfg, true, filename)
+			sendWithNotificationSender(p.notify, ctx, true, filename)
 		}
 	}()
+
+	if err := cfg.StorageOptions.Validate(); err != nil {
+		return err
+	}
+	if err := cfg.RuntimeOptions.Validate(); err != nil {
+		return err
+	}
 
 	storageBackends, err := p.getStorages(ctx, cfg)
 	if err != nil {
@@ -174,21 +232,21 @@ func (p archivePipeline) run(ctx context.Context, cfg *mongoarchive.Config) (ret
 		return fmt.Errorf("no storage backends configured")
 	}
 	defer func() {
-		if closeErr := closeStorages(storageBackends); closeErr != nil {
-			retErr = joinPrimaryAndCleanupErrors(retErr, closeErr)
+		if closeErr := toolruntime.CloseAll(storageBackends); closeErr != nil {
+			retErr = toolruntime.JoinPrimaryAndCleanupErrors(retErr, closeErr)
 		}
 	}()
 
-	workspace, err := p.createWorkspace()
+	workspace, err := p.createWorkspace(cfg.WorkspaceBasePath)
 	if err != nil {
 		return err
 	}
 
-	cleanup := cleanupStack{}
-	cleanup.addDirectory(workspace, p.deleteDirectory)
+	cleanup := toolruntime.CleanupStack{}
+	cleanup.AddDirectory(workspace, p.deleteDirectory)
 	defer func() {
-		if cleanupErr := cleanup.run(cfg.HasKeep()); cleanupErr != nil {
-			retErr = joinPrimaryAndCleanupErrors(retErr, cleanupErr)
+		if cleanupErr := cleanup.Run(cfg.HasKeep()); cleanupErr != nil {
+			retErr = toolruntime.JoinPrimaryAndCleanupErrors(retErr, cleanupErr)
 		}
 	}()
 
@@ -219,19 +277,19 @@ func (p archivePipeline) run(ctx context.Context, cfg *mongoarchive.Config) (ret
 	if err := dump.Dump(); err != nil {
 		return err
 	}
-	cleanup.addDirectory(destPath, p.deleteDirectory)
+	cleanup.AddDirectory(destPath, p.deleteDirectory)
 
 	if err := p.tar(destPath, tarfilePath); err != nil {
 		return err
 	}
-	cleanup.addFile(tarfilePath, p.deleteFile)
+	cleanup.AddFile(tarfilePath, p.deleteFile)
 
 	objectName, err := p.buildObjectName(cfg.BackupPrefix, filename)
 	if err != nil {
 		return err
 	}
 
-	if err := p.upload(ctx, storageBackends, objectName, tarfilePath); err != nil {
+	if err := p.upload(ctx, storageBackends, objectName, tarfilePath, cfg.StorageOperationTimeout); err != nil {
 		return err
 	}
 
@@ -265,9 +323,9 @@ func (r cronRuntime) run(ctx context.Context, cfg *mongoarchive.Config) error {
 		startTime := r.now()
 		mlog.Logvf(mlog.Always, "Task started at: %v", startTime)
 
-		if err := r.runTask(ctx, cfg); err != nil {
+		if err := r.runTask(ctx, cfg, r.notify); err != nil {
 			mlog.Logvf(mlog.Always, "Task failed: %v", err)
-			r.notify(ctx, cfg, false, err.Error())
+			sendWithNotificationSender(r.notify, ctx, false, err.Error())
 		} else {
 			mlog.Logvf(mlog.Always, "Task completed successfully at: %v (Duration: %v)", r.now(), r.now().Sub(startTime))
 		}
@@ -280,13 +338,12 @@ func (r cronRuntime) run(ctx context.Context, cfg *mongoarchive.Config) error {
 	mlog.Logvf(mlog.Always, "Scheduler started.")
 	mlog.Logvf(mlog.Always, "Scheduler overlap policy: skip overlapping runs for the same job.")
 
-	r.waitForShutdown()
+	<-ctx.Done()
 	mlog.Logvf(mlog.Always, "Shutting down scheduler...")
 	return nil
 }
 
-func createArchiveWorkspace() (string, error) {
-	basePath := os.Getenv(envPrefix + "DUMP_PATH")
+func createArchiveWorkspace(basePath string) (string, error) {
 	if basePath == "" {
 		basePath = filepath.Join(os.TempDir(), defaultWorkspaceDir)
 	}
@@ -347,30 +404,6 @@ func (s *gocronScheduler) Shutdown() error {
 	return s.scheduler.Shutdown()
 }
 
-func (c *cleanupStack) addFile(path string, remove func(string) error) {
-	c.entries = append(c.entries, cleanupEntry{path: path, remove: remove})
-}
-
-func (c *cleanupStack) addDirectory(path string, remove func(string) error) {
-	c.entries = append(c.entries, cleanupEntry{path: path, remove: remove})
-}
-
-func (c *cleanupStack) run(keep bool) error {
-	if keep {
-		return nil
-	}
-
-	var cleanupErrors []error
-	for i := len(c.entries) - 1; i >= 0; i-- {
-		entry := c.entries[i]
-		if err := entry.remove(entry.path); err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("cleanup %q: %w", entry.path, err))
-		}
-	}
-
-	return errors.Join(cleanupErrors...)
-}
-
 func (e *multiBackendArchiveError) Error() string {
 	return e.message
 }
@@ -379,39 +412,15 @@ func (e *multiBackendArchiveError) Unwrap() error {
 	return e.cause
 }
 
-func closeStorages(storages []storage.Storage) error {
-	var closeErrors []error
-	for _, storageBackend := range storages {
-		if err := storageBackend.Close(); err != nil {
-			closeErrors = append(closeErrors, fmt.Errorf("close %T: %w", storageBackend, err))
-		}
-	}
-
-	return errors.Join(closeErrors...)
-}
-
-func joinPrimaryAndCleanupErrors(primary error, cleanup error) error {
-	if primary == nil {
-		return fmt.Errorf("cleanup failed: %w", cleanup)
-	}
-	if cleanup == nil {
-		return primary
-	}
-	return errors.Join(primary, fmt.Errorf("cleanup failed: %w", cleanup))
-}
-
-func uploadBackupToStorages(ctx context.Context, storages []storage.Storage, objectName string, tarfilePath string) error {
+func uploadBackupToStorages(ctx context.Context, storages []storage.ArchiveBackend, objectName string, tarfilePath string, operationTimeout time.Duration) error {
 	if len(storages) <= 1 {
-		return uploadBackupToSingleStorage(ctx, storages, objectName, tarfilePath)
+		return uploadBackupToSingleStorage(ctx, storages, objectName, tarfilePath, operationTimeout)
 	}
 
 	uploadedBackends := make([]string, 0, len(storages))
 	for i, s := range storages {
 		backendName := describeStorageBackend(i, s)
-		uploadCtx, cancel, err := operationContext(ctx, envPrefix+"STORAGE_OPERATION_TIMEOUT")
-		if err != nil {
-			return err
-		}
+		uploadCtx, cancel := toolruntime.OperationContext(ctx, operationTimeout)
 		result, err := s.Upload(uploadCtx, objectName, tarfilePath)
 		cancel()
 		if err != nil {
@@ -438,11 +447,8 @@ func uploadBackupToStorages(ctx context.Context, storages []storage.Storage, obj
 	retainedBackends := make([]string, 0, len(storages))
 	for i, s := range storages {
 		backendName := describeStorageBackend(i, s)
-		deleteCtx, cancel, err := operationContext(ctx, envPrefix+"STORAGE_OPERATION_TIMEOUT")
-		if err != nil {
-			return err
-		}
-		err = s.DeleteOldObjects(deleteCtx, objectName)
+		deleteCtx, cancel := toolruntime.OperationContext(ctx, operationTimeout)
+		err := s.DeleteOldObjects(deleteCtx, objectName)
 		cancel()
 		if err != nil {
 			return &multiBackendArchiveError{
@@ -461,12 +467,9 @@ func uploadBackupToStorages(ctx context.Context, storages []storage.Storage, obj
 	return nil
 }
 
-func uploadBackupToSingleStorage(ctx context.Context, storages []storage.Storage, objectName string, tarfilePath string) error {
+func uploadBackupToSingleStorage(ctx context.Context, storages []storage.ArchiveBackend, objectName string, tarfilePath string, operationTimeout time.Duration) error {
 	for _, s := range storages {
-		uploadCtx, cancel, err := operationContext(ctx, envPrefix+"STORAGE_OPERATION_TIMEOUT")
-		if err != nil {
-			return err
-		}
+		uploadCtx, cancel := toolruntime.OperationContext(ctx, operationTimeout)
 		result, err := s.Upload(uploadCtx, objectName, tarfilePath)
 		cancel()
 		if err != nil {
@@ -474,10 +477,7 @@ func uploadBackupToSingleStorage(ctx context.Context, storages []storage.Storage
 		}
 		mlog.Logvf(mlog.Always, "Successfully uploaded backup to %T: %v", s, result)
 
-		deleteCtx, cancel, err := operationContext(ctx, envPrefix+"STORAGE_OPERATION_TIMEOUT")
-		if err != nil {
-			return err
-		}
+		deleteCtx, cancel := toolruntime.OperationContext(ctx, operationTimeout)
 		err = s.DeleteOldObjects(deleteCtx, objectName)
 		cancel()
 		if err != nil {
@@ -488,7 +488,12 @@ func uploadBackupToSingleStorage(ctx context.Context, storages []storage.Storage
 	return nil
 }
 
-func describeStorageBackend(index int, storageBackend storage.Storage) string {
+func describeStorageBackend(index int, storageBackend storage.ArchiveBackend) string {
+	if named, ok := storageBackend.(storage.BackendIdentifier); ok {
+		if name, err := storage.BackendName(named); err == nil {
+			return fmt.Sprintf("backend #%d (%s)", index+1, name)
+		}
+	}
 	return fmt.Sprintf("backend #%d (%T)", index+1, storageBackend)
 }
 
@@ -500,49 +505,55 @@ func formatCompletedBackends(backends []string, empty string) string {
 	return strings.Join(backends, ", ")
 }
 
-func sendNotification(ctx context.Context, cfg *mongoarchive.Config, success bool, filenameOrError string) {
+func newNotificationGroup(cfg *mongoarchive.Config) (*notificationGroup, error) {
 	notifications, err := cfg.GetNotifications()
 	if err != nil {
-		mlog.Logvf(mlog.Always, "Failed to initialize notifications: %v", err)
+		return nil, fmt.Errorf("failed to initialize notifications: %w", err)
+	}
+	return &notificationGroup{
+		notifications: notifications,
+		timeout:       cfg.NotificationTimeout,
+		location:      cfg.GetTZ(),
+	}, nil
+}
+
+func (g *notificationGroup) Send(ctx context.Context, success bool, filenameOrError string) {
+	if g == nil {
 		return
 	}
-	for _, notification := range notifications {
-		notificationCtx, cancel, err := operationContext(ctx, envPrefix+"NOTIFICATION_TIMEOUT")
-		if err != nil {
-			mlog.Logvf(mlog.Always, "Failed to prepare notification context for %T: %v", notification, err)
-			continue
-		}
-		if err := notification.Send(notificationCtx, success, cfg.GetTZ(), filenameOrError); err != nil {
+	for _, notification := range g.notifications {
+		notificationCtx, cancel := toolruntime.OperationContext(ctx, g.timeout)
+		if err := notification.Send(notificationCtx, success, g.location, filenameOrError); err != nil {
 			mlog.Logvf(mlog.Always, "Failed to send notification via %T: %v", notification, err)
 		}
 		cancel()
 	}
 }
 
-func operationContext(ctx context.Context, envKey string) (context.Context, context.CancelFunc, error) {
-	ctx = storageContextOrBackground(ctx)
-	raw := os.Getenv(envKey)
-	if raw == "" {
-		opCtx, cancel := context.WithCancel(ctx)
-		return opCtx, cancel, nil
+func (g *notificationGroup) Close() {
+	if g == nil {
+		return
 	}
-
-	timeout, err := time.ParseDuration(raw)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%s must be a valid duration: %w", envKey, err)
+	for _, notification := range g.notifications {
+		closer, ok := notification.(interface{ Close() error })
+		if !ok {
+			continue
+		}
+		if err := closer.Close(); err != nil {
+			mlog.Logvf(mlog.Always, "Failed to close notification %T: %v", notification, err)
+		}
 	}
-	if timeout <= 0 {
-		return nil, nil, fmt.Errorf("%s must be greater than zero", envKey)
-	}
-
-	opCtx, cancel := context.WithTimeout(ctx, timeout)
-	return opCtx, cancel, nil
 }
 
-func storageContextOrBackground(ctx context.Context) context.Context {
-	if ctx != nil {
-		return ctx
+func closeNotificationSender(sender notificationSender) {
+	if closer, ok := sender.(interface{ Close() }); ok {
+		closer.Close()
 	}
+}
 
-	return context.Background()
+func sendWithNotificationSender(sender notificationSender, ctx context.Context, success bool, filenameOrError string) {
+	if sender == nil {
+		return
+	}
+	sender.Send(ctx, success, filenameOrError)
 }

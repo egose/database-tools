@@ -1,6 +1,12 @@
 name: Test codebase
 
-on: push
+on:
+  push:
+  pull_request:
+  merge_group:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -9,6 +15,7 @@ concurrency:
 jobs:
   go-test-cover:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
@@ -21,9 +28,19 @@ jobs:
     - name: Enforce coverage floor
       run: |
         total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/, "", $3); print $3}')
-        minimum=17.5
+        # Current total coverage is about 59.6%; keep a small tolerance for toolchain-only drift.
+        minimum=55.0
         printf 'total coverage: %s%%\n' "$total"
         awk -v total="$total" -v minimum="$minimum" 'BEGIN { if (total + 0 < minimum + 0) { exit 1 } }'
+
+    - name: Enforce storage coverage floor
+      run: |
+        go test -shuffle=on -coverprofile=storage-coverage.out ./storage
+        storage=$(go tool cover -func=storage-coverage.out | awk '/^total:/ {gsub(/%/, "", $3); print $3}')
+        # Current storage coverage is about 55.2%; this protects the provider contract suite.
+        minimum=50.0
+        printf 'storage coverage: %s%%\n' "$storage"
+        awk -v total="$storage" -v minimum="$minimum" 'BEGIN { if (total + 0 < minimum + 0) { exit 1 } }'
 
     - name: Upload coverage artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
@@ -33,6 +50,7 @@ jobs:
 
   go-test-race:
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
@@ -44,6 +62,7 @@ jobs:
 
   go-vet:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
@@ -54,64 +73,6 @@ jobs:
       run: go vet ./...
 
   integration-bats:
-    runs-on: ubuntu-24.04
-    steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-
-    - name: Setup Tools
-      uses: ./.github/actions/setup-tools
-
-    - name: Setup NPM Packages
-      uses: ./.github/actions/setup-npm
-
-    - name: Start integration services
-      run: |
-        mkdir -p ./sandbox/mnt/mongodb
-        mkdir -p ./sandbox/mnt/minio
-        mkdir -p ./sandbox/mnt/azurite
-        mkdir -p ./sandbox/mnt/fake-gcs-server
-
-        cp .env.example .env.test
-        set -a
-        source .env.test
-        set +a
-
-        export MACHINE_HOST_IP=$(hostname -I | awk '{print $1}')
-        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml up -d
-
-        node_modules/.bin/wait-on tcp:127.0.0.1:27017 tcp:127.0.0.1:9000 http://localhost:9001 tcp:127.0.0.1:10000 tcp:127.0.0.1:$FAKE_GCP_PORT --timeout 120000
-        for attempt in $(seq 1 60); do
-          if output=$(mongosh "$DATABASE_URL" --quiet --eval 'db.adminCommand({ ping: 1 }).ok' 2>/dev/null) && [ "$output" = "1" ]; then
-            break
-          fi
-          if [ "$attempt" -eq 60 ]; then
-            mongosh "$DATABASE_URL" --eval 'db.adminCommand({ ping: 1 })'
-            exit 1
-          fi
-          sleep 2
-        done
-        curl -fsS http://localhost:9000/minio/health/live >/dev/null
-
-    - name: Run Bats suite
-      run: |
-        bats test
-
-    - name: Capture service logs
-      if: always()
-      run: |
-        mkdir -p ./sandbox/test-logs
-        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml ps > ./sandbox/test-logs/compose-ps.txt || true
-        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml logs --no-color > ./sandbox/test-logs/compose.log || true
-
-    - name: Upload integration logs
-      if: always()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-      with:
-        name: integration-service-logs
-        path: ./sandbox/test-logs
-
-    - name: Cleanup integration services
-      if: always()
-      run: |
-        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml down -v --remove-orphans || true
-        sudo rm -rf ./sandbox/mnt
+    uses: ./.github/workflows/integration.yml
+    with:
+      ref: ${{ github.sha }}

@@ -14,9 +14,13 @@ import (
 )
 
 type LocalStorage struct {
-	LocalPath    string
-	ExpiryDays   int
-	BackupPrefix string
+	LocalPath      string
+	ExpiryDays     int
+	BackupPrefix   string
+	copyFile       func(context.Context, string, string) error
+	downloadObject func(context.Context, string, *os.File) error
+	statFile       func(string) (os.FileInfo, error)
+	deleteObject   func(string) error
 }
 
 func (this *LocalStorage) Init(localPath string, expiryDays int, backupPrefix string) error {
@@ -64,16 +68,16 @@ func (this *LocalStorage) Upload(ctx context.Context, objectName string, filePat
 	if err != nil {
 		return "", err
 	}
-	err = copyFile(ctx, filePath, targetPath)
+	err = this.localCopyFile(ctx, filePath, targetPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to upload object: %w", err)
 	}
 
-	sourceInfo, err := os.Stat(filePath)
+	sourceInfo, err := this.localStat(filePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to verify source file: %w", err)
 	}
-	targetInfo, err := os.Stat(targetPath)
+	targetInfo, err := this.localStat(targetPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to verify uploaded object: %w", err)
 	}
@@ -89,8 +93,13 @@ func (this *LocalStorage) Download(ctx context.Context, objectName string, fileP
 	if err != nil {
 		return err
 	}
+	if this.downloadObject != nil {
+		return utils.WriteFileAtomically(filePath, func(dest *os.File) error {
+			return this.downloadObject(contextOrBackground(ctx), sourceFile, dest)
+		})
+	}
 
-	err = copyFile(ctx, sourceFile, filePath)
+	err = this.localCopyFile(ctx, sourceFile, filePath)
 	if err != nil {
 		return fmt.Errorf("failed to download object: %w", err)
 	}
@@ -129,7 +138,7 @@ func (this *LocalStorage) DeleteOldObjects(ctx context.Context, currentObjectNam
 		if err != nil {
 			return err
 		}
-		if err := os.Remove(targetPath); err != nil {
+		if err := this.localDeleteObject(targetPath); err != nil {
 			return err
 		}
 		mlog.Logvf(mlog.Info, "Deleted file: %s", filepath.Base(targetPath))
@@ -197,6 +206,27 @@ func (this *LocalStorage) listScopedObjects() ([]objectTimestamp, error) {
 func (this *LocalStorage) getScopeRoot() (string, error) {
 	prefixPath := strings.TrimSuffix(this.BackupPrefix, "/")
 	return utils.ResolvePathWithinRoot(this.LocalPath, filepath.FromSlash(prefixPath))
+}
+
+func (this *LocalStorage) localCopyFile(ctx context.Context, sourceFile string, destFile string) error {
+	if this.copyFile != nil {
+		return this.copyFile(ctx, sourceFile, destFile)
+	}
+	return copyFile(ctx, sourceFile, destFile)
+}
+
+func (this *LocalStorage) localStat(path string) (os.FileInfo, error) {
+	if this.statFile != nil {
+		return this.statFile(path)
+	}
+	return os.Stat(path)
+}
+
+func (this *LocalStorage) localDeleteObject(path string) error {
+	if this.deleteObject != nil {
+		return this.deleteObject(path)
+	}
+	return os.Remove(path)
 }
 
 func copyFile(ctx context.Context, sourceFile string, destFile string) (retErr error) {

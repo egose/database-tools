@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/egose/database-tools/internal/toolconfig"
 	"github.com/egose/database-tools/mongoarchive"
 	"github.com/egose/database-tools/storage"
 	"github.com/egose/database-tools/utils"
@@ -34,14 +36,6 @@ func (s *recordingStorage) Upload(_ context.Context, name string, _ string) (str
 		return "", s.uploadErr
 	}
 	return "verified", nil
-}
-
-func (s *recordingStorage) Download(context.Context, string, string) error {
-	return errors.New("not implemented")
-}
-
-func (s *recordingStorage) GetTargetObjectName(context.Context, string) (string, error) {
-	return "", errors.New("not implemented")
 }
 
 func (s *recordingStorage) DeleteOldObjects(_ context.Context, name string) error {
@@ -68,19 +62,70 @@ func (s *blockingArchiveStorage) Upload(ctx context.Context, _ string, _ string)
 	return "", ctx.Err()
 }
 
-func (s *blockingArchiveStorage) Download(context.Context, string, string) error {
-	return errors.New("not implemented")
-}
-
-func (s *blockingArchiveStorage) GetTargetObjectName(context.Context, string) (string, error) {
-	return "", errors.New("not implemented")
-}
-
 func (s *blockingArchiveStorage) DeleteOldObjects(context.Context, string) error {
 	return errors.New("not implemented")
 }
 
 func (s *blockingArchiveStorage) Close() error { return nil }
+
+func TestArchivePipelineRejectsIncompleteStorageBeforeSideEffects(t *testing.T) {
+	workspaceCreated := false
+	storagesConstructed := false
+	pipeline := archivePipeline{
+		createWorkspace: func(string) (string, error) {
+			workspaceCreated = true
+			return t.TempDir(), nil
+		},
+		getStorages: func(context.Context, *mongoarchive.Config) ([]storage.ArchiveBackend, error) {
+			storagesConstructed = true
+			return []storage.ArchiveBackend{&recordingStorage{}}, nil
+		},
+	}
+
+	err := pipeline.run(context.Background(), &mongoarchive.Config{
+		StorageOptions: toolconfig.StorageOptions{AWSBucket: "archive-bucket"},
+	})
+	if err == nil {
+		t.Fatal("run() expected error")
+	}
+	if !strings.Contains(err.Error(), "AWS_ACCESS_KEY_ID") || strings.Contains(err.Error(), "archive-bucket") {
+		t.Fatalf("run() error = %q, want missing identifiers without supplied value", err)
+	}
+	if workspaceCreated {
+		t.Fatal("run() created workspace before rejecting incomplete storage config")
+	}
+	if storagesConstructed {
+		t.Fatal("run() constructed storage before rejecting incomplete storage config")
+	}
+}
+
+func TestArchivePipelineRejectsInvalidRuntimeBeforeSideEffects(t *testing.T) {
+	workspaceCreated := false
+	storagesConstructed := false
+	pipeline := archivePipeline{
+		createWorkspace: func(string) (string, error) {
+			workspaceCreated = true
+			return t.TempDir(), nil
+		},
+		getStorages: func(context.Context, *mongoarchive.Config) ([]storage.ArchiveBackend, error) {
+			storagesConstructed = true
+			return []storage.ArchiveBackend{&recordingStorage{}}, nil
+		},
+	}
+
+	err := pipeline.run(context.Background(), &mongoarchive.Config{
+		RuntimeOptions: mongoarchive.RuntimeOptions{StorageOperationTimeout: -time.Second},
+	})
+	if err == nil || !strings.Contains(err.Error(), "STORAGE_OPERATION_TIMEOUT") {
+		t.Fatalf("run() error = %v, want runtime validation error", err)
+	}
+	if workspaceCreated {
+		t.Fatal("run() created workspace before rejecting invalid runtime config")
+	}
+	if storagesConstructed {
+		t.Fatal("run() constructed storage before rejecting invalid runtime config")
+	}
+}
 
 type fakeArchiveDump struct {
 	initErr error
@@ -102,48 +147,138 @@ func (d *fakeArchiveDump) Dump() error {
 func (d *fakeArchiveDump) HandleInterrupt() {}
 
 type fakeCronScheduler struct {
+	mu          sync.Mutex
 	expression  string
 	overlap     cronOverlapPolicy
 	task        func()
 	running     atomic.Bool
 	scheduleErr error
+	shutdowns   atomic.Int32
+	started     chan struct{}
+	startOnce   sync.Once
+}
+
+type countingNotificationSender struct {
+	sends atomic.Int32
+}
+
+func (s *countingNotificationSender) Send(context.Context, bool, string) {
+	s.sends.Add(1)
 }
 
 func (s *fakeCronScheduler) Schedule(expression string, task func(), overlap cronOverlapPolicy) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.expression = expression
 	s.task = task
 	s.overlap = overlap
 	return s.scheduleErr
 }
 
-func (s *fakeCronScheduler) Start() {}
+func (s *fakeCronScheduler) Start() {
+	if s.started != nil {
+		s.startOnce.Do(func() { close(s.started) })
+	}
+}
 
 func (s *fakeCronScheduler) Shutdown() error {
+	s.shutdowns.Add(1)
 	return nil
 }
 
 func (s *fakeCronScheduler) trigger() {
-	if s.task == nil {
+	s.mu.Lock()
+	task := s.task
+	overlap := s.overlap
+	s.mu.Unlock()
+
+	if task == nil {
 		return
 	}
-	if s.overlap == cronSkipOverlappingRuns {
+	if overlap == cronSkipOverlappingRuns {
 		if !s.running.CompareAndSwap(false, true) {
 			return
 		}
 		go func() {
 			defer s.running.Store(false)
-			s.task()
+			task()
 		}()
 		return
 	}
-	go s.task()
+	go task()
+}
+
+func TestArchiveRuntimeConstructsNotificationsOnceForOneShotRun(t *testing.T) {
+	sender := &countingNotificationSender{}
+	var constructions atomic.Int32
+	runtime := archiveRuntime{
+		newNotifications: func(*mongoarchive.Config) (notificationSender, error) {
+			constructions.Add(1)
+			return sender, nil
+		},
+		runTask: func(ctx context.Context, _ *mongoarchive.Config, got notificationSender) error {
+			if got != sender {
+				t.Fatalf("runTask() notification sender = %T, want constructed sender", got)
+			}
+			got.Send(ctx, true, "backup.tar.gz")
+			return nil
+		},
+		runCronJob: func(context.Context, *mongoarchive.Config, notificationSender) error {
+			t.Fatal("runCronJob() called for one-shot run")
+			return nil
+		},
+	}
+
+	if err := runtime.run(context.Background(), &mongoarchive.Config{}); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if got := constructions.Load(); got != 1 {
+		t.Fatalf("notification constructions = %d, want 1", got)
+	}
+	if got := sender.sends.Load(); got != 1 {
+		t.Fatalf("notification sends = %d, want 1", got)
+	}
+}
+
+func TestArchiveRuntimeConstructsNotificationsOnceForRepeatedCronRuns(t *testing.T) {
+	sender := &countingNotificationSender{}
+	var constructions atomic.Int32
+	runtime := archiveRuntime{
+		newNotifications: func(*mongoarchive.Config) (notificationSender, error) {
+			constructions.Add(1)
+			return sender, nil
+		},
+		runTask: func(context.Context, *mongoarchive.Config, notificationSender) error {
+			t.Fatal("runTask() called directly for cron run")
+			return nil
+		},
+		runCronJob: func(ctx context.Context, _ *mongoarchive.Config, got notificationSender) error {
+			if got != sender {
+				t.Fatalf("runCronJob() notification sender = %T, want constructed sender", got)
+			}
+			got.Send(ctx, false, "first failure")
+			got.Send(ctx, false, "second failure")
+			return nil
+		},
+	}
+	cfg := &mongoarchive.Config{ScheduleOptions: mongoarchive.ScheduleOptions{Cron: true}}
+
+	if err := runtime.run(context.Background(), cfg); err != nil {
+		t.Fatalf("run() error = %v", err)
+	}
+	if got := constructions.Load(); got != 1 {
+		t.Fatalf("notification constructions = %d, want 1", got)
+	}
+	if got := sender.sends.Load(); got != 2 {
+		t.Fatalf("notification sends = %d, want 2", got)
+	}
 }
 
 func TestUploadBackupToStoragesUploadsBeforeRetention(t *testing.T) {
 	backend := &recordingStorage{}
 	objectName := "mongo-archive/9987654320999-2026-08-12T010203.456Z.tar.gz"
 
-	if err := uploadBackupToStorages(context.Background(), []storage.Storage{backend}, objectName, "/tmp/archive.tar.gz"); err != nil {
+	if err := uploadBackupToStorages(context.Background(), []storage.ArchiveBackend{backend}, objectName, "/tmp/archive.tar.gz", 0); err != nil {
 		t.Fatalf("uploadBackupToStorages() error = %v", err)
 	}
 
@@ -157,7 +292,7 @@ func TestUploadBackupToStoragesSkipsRetentionAfterUploadFailure(t *testing.T) {
 	backend := &recordingStorage{uploadErr: errors.New("upload failed")}
 	objectName := "mongo-archive/9987654320999-2026-08-12T010203.456Z.tar.gz"
 
-	err := uploadBackupToStorages(context.Background(), []storage.Storage{backend}, objectName, "/tmp/archive.tar.gz")
+	err := uploadBackupToStorages(context.Background(), []storage.ArchiveBackend{backend}, objectName, "/tmp/archive.tar.gz", 0)
 	if err == nil {
 		t.Fatal("uploadBackupToStorages() expected error")
 	}
@@ -174,7 +309,7 @@ func TestUploadBackupToStoragesMultiBackendRunsRetentionAfterAllUploads(t *testi
 	second := &recordingStorage{name: "second", callLog: &callLog}
 	objectName := "mongo-archive/9987654320999-2026-08-12T010203.456Z.tar.gz"
 
-	if err := uploadBackupToStorages(context.Background(), []storage.Storage{first, second}, objectName, "/tmp/archive.tar.gz"); err != nil {
+	if err := uploadBackupToStorages(context.Background(), []storage.ArchiveBackend{first, second}, objectName, "/tmp/archive.tar.gz", 0); err != nil {
 		t.Fatalf("uploadBackupToStorages() error = %v", err)
 	}
 
@@ -196,7 +331,7 @@ func TestUploadBackupToStoragesMultiBackendReturnsExplicitPartialUploadFailure(t
 	second := &recordingStorage{name: "second", callLog: &callLog, uploadErr: uploadErr}
 	objectName := "mongo-archive/9987654320999-2026-08-12T010203.456Z.tar.gz"
 
-	err := uploadBackupToStorages(context.Background(), []storage.Storage{first, second}, objectName, "/tmp/archive.tar.gz")
+	err := uploadBackupToStorages(context.Background(), []storage.ArchiveBackend{first, second}, objectName, "/tmp/archive.tar.gz", 0)
 	if !errors.Is(err, uploadErr) {
 		t.Fatalf("uploadBackupToStorages() error = %v, want wrapped %v", err, uploadErr)
 	}
@@ -223,7 +358,7 @@ func TestUploadBackupToStoragesMultiBackendStopsBeforeLaterMutationWhenFirstUplo
 	second := &recordingStorage{name: "second", callLog: &callLog}
 	objectName := "mongo-archive/9987654320999-2026-08-12T010203.456Z.tar.gz"
 
-	err := uploadBackupToStorages(context.Background(), []storage.Storage{first, second}, objectName, "/tmp/archive.tar.gz")
+	err := uploadBackupToStorages(context.Background(), []storage.ArchiveBackend{first, second}, objectName, "/tmp/archive.tar.gz", 0)
 	if !errors.Is(err, uploadErr) {
 		t.Fatalf("uploadBackupToStorages() error = %v, want wrapped %v", err, uploadErr)
 	}
@@ -242,22 +377,29 @@ func TestUploadBackupToStoragesReturnsDeletionFailure(t *testing.T) {
 	backend := &recordingStorage{deleteErr: deleteErr}
 	objectName := "mongo-archive/9987654320999-2026-08-12T010203.456Z.tar.gz"
 
-	err := uploadBackupToStorages(context.Background(), []storage.Storage{backend}, objectName, "/tmp/archive.tar.gz")
+	err := uploadBackupToStorages(context.Background(), []storage.ArchiveBackend{backend}, objectName, "/tmp/archive.tar.gz", 0)
 	if !errors.Is(err, deleteErr) {
 		t.Fatalf("uploadBackupToStorages() error = %v, want wrapped %v", err, deleteErr)
 	}
 }
 
 func TestUploadBackupToStoragesHonorsConfiguredDeadline(t *testing.T) {
-	t.Setenv(envPrefix+"STORAGE_OPERATION_TIMEOUT", "20ms")
-
 	start := time.Now()
-	err := uploadBackupToStorages(context.Background(), []storage.Storage{&blockingArchiveStorage{}}, "backup.tar.gz", "/tmp/archive.tar.gz")
+	err := uploadBackupToStorages(context.Background(), []storage.ArchiveBackend{&blockingArchiveStorage{}}, "backup.tar.gz", "/tmp/archive.tar.gz", 20*time.Millisecond)
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("uploadBackupToStorages() error = %v, want deadline exceeded", err)
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("uploadBackupToStorages() elapsed = %v, want prompt timeout", elapsed)
+	}
+}
+
+func TestUploadBackupToStoragesUsesParsedTimeoutInsteadOfEnvironment(t *testing.T) {
+	t.Setenv(envPrefix+"STORAGE_OPERATION_TIMEOUT", "not-a-duration")
+
+	err := uploadBackupToStorages(context.Background(), []storage.ArchiveBackend{&blockingArchiveStorage{}}, "backup.tar.gz", "/tmp/archive.tar.gz", time.Nanosecond)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("uploadBackupToStorages() error = %v, want parsed timeout deadline", err)
 	}
 }
 
@@ -267,17 +409,17 @@ func TestArchivePipelinePropagatesCancellationToUpload(t *testing.T) {
 
 	started := make(chan struct{}, 1)
 	pipeline := archivePipeline{
-		createWorkspace: func() (string, error) { return t.TempDir(), nil },
+		createWorkspace: func(string) (string, error) { return t.TempDir(), nil },
 		newFilename:     func() (string, string) { return "backup.tar.gz", "dumpdir" },
 		newDump: func([]string) (archiveDump, func(), error) {
 			return &fakeArchiveDump{}, func() {}, nil
 		},
-		getStorages: func(context.Context, *mongoarchive.Config) ([]storage.Storage, error) {
-			return []storage.Storage{&recordingStorage{}}, nil
+		getStorages: func(context.Context, *mongoarchive.Config) ([]storage.ArchiveBackend, error) {
+			return []storage.ArchiveBackend{&recordingStorage{}}, nil
 		},
 		tar:             func(string, string) error { return nil },
 		buildObjectName: func(string, string) (string, error) { return "backup.tar.gz", nil },
-		upload: func(ctx context.Context, _ []storage.Storage, _ string, _ string) error {
+		upload: func(ctx context.Context, _ []storage.ArchiveBackend, _ string, _ string, _ time.Duration) error {
 			started <- struct{}{}
 			<-ctx.Done()
 			return ctx.Err()
@@ -285,7 +427,6 @@ func TestArchivePipelinePropagatesCancellationToUpload(t *testing.T) {
 		deleteDirectory: utils.DeleteDirectory,
 		deleteFile:      utils.DeleteFile,
 		handleInterrupt: func(func()) chan struct{} { return nil },
-		notify:          func(context.Context, *mongoarchive.Config, bool, string) {},
 	}
 
 	errCh := make(chan error, 1)
@@ -359,7 +500,7 @@ func TestArchivePipelineCleanupByStage(t *testing.T) {
 			var tarFile string
 
 			pipeline := archivePipeline{
-				createWorkspace: func() (string, error) {
+				createWorkspace: func(string) (string, error) {
 					var err error
 					workspace, err = os.MkdirTemp(root, "run-")
 					return workspace, err
@@ -382,8 +523,8 @@ func TestArchivePipelineCleanupByStage(t *testing.T) {
 						},
 					}, func() {}, nil
 				},
-				getStorages: func(context.Context, *mongoarchive.Config) ([]storage.Storage, error) {
-					return []storage.Storage{&recordingStorage{}}, nil
+				getStorages: func(context.Context, *mongoarchive.Config) ([]storage.ArchiveBackend, error) {
+					return []storage.ArchiveBackend{&recordingStorage{}}, nil
 				},
 				tar: func(rootPath string, destination string) error {
 					tarFile = destination
@@ -398,13 +539,12 @@ func TestArchivePipelineCleanupByStage(t *testing.T) {
 				buildObjectName: func(string, string) (string, error) {
 					return "backup.tar.gz", nil
 				},
-				upload: func(context.Context, []storage.Storage, string, string) error {
+				upload: func(context.Context, []storage.ArchiveBackend, string, string, time.Duration) error {
 					return tt.uploadErr
 				},
 				deleteDirectory: utils.DeleteDirectory,
 				deleteFile:      utils.DeleteFile,
 				handleInterrupt: func(func()) chan struct{} { return nil },
-				notify:          func(context.Context, *mongoarchive.Config, bool, string) {},
 			}
 
 			cfg := &mongoarchive.Config{Keep: tt.keep}
@@ -430,7 +570,7 @@ func TestArchivePipelineAggregatesCleanupFailure(t *testing.T) {
 	var tarFile string
 
 	pipeline := archivePipeline{
-		createWorkspace: func() (string, error) {
+		createWorkspace: func(string) (string, error) {
 			return os.MkdirTemp(root, "run-")
 		},
 		newFilename: func() (string, string) {
@@ -444,8 +584,8 @@ func TestArchivePipelineAggregatesCleanupFailure(t *testing.T) {
 				}
 			}}, func() {}, nil
 		},
-		getStorages: func(context.Context, *mongoarchive.Config) ([]storage.Storage, error) {
-			return []storage.Storage{&recordingStorage{}}, nil
+		getStorages: func(context.Context, *mongoarchive.Config) ([]storage.ArchiveBackend, error) {
+			return []storage.ArchiveBackend{&recordingStorage{}}, nil
 		},
 		tar: func(_ string, destination string) error {
 			tarFile = destination
@@ -454,7 +594,7 @@ func TestArchivePipelineAggregatesCleanupFailure(t *testing.T) {
 		buildObjectName: func(string, string) (string, error) {
 			return "backup.tar.gz", nil
 		},
-		upload: func(context.Context, []storage.Storage, string, string) error {
+		upload: func(context.Context, []storage.ArchiveBackend, string, string, time.Duration) error {
 			return primaryErr
 		},
 		deleteDirectory: utils.DeleteDirectory,
@@ -465,7 +605,6 @@ func TestArchivePipelineAggregatesCleanupFailure(t *testing.T) {
 			return utils.DeleteFile(path)
 		},
 		handleInterrupt: func(func()) chan struct{} { return nil },
-		notify:          func(context.Context, *mongoarchive.Config, bool, string) {},
 	}
 
 	err := pipeline.run(context.Background(), &mongoarchive.Config{})
@@ -487,7 +626,7 @@ func TestArchivePipelineSkipsSuccessNotificationAfterCloseFailure(t *testing.T) 
 	var notifications []string
 
 	pipeline := archivePipeline{
-		createWorkspace: func() (string, error) {
+		createWorkspace: func(string) (string, error) {
 			return os.MkdirTemp(root, "run-")
 		},
 		newFilename: func() (string, string) {
@@ -501,8 +640,8 @@ func TestArchivePipelineSkipsSuccessNotificationAfterCloseFailure(t *testing.T) 
 				}
 			}}, func() {}, nil
 		},
-		getStorages: func(context.Context, *mongoarchive.Config) ([]storage.Storage, error) {
-			return []storage.Storage{backend}, nil
+		getStorages: func(context.Context, *mongoarchive.Config) ([]storage.ArchiveBackend, error) {
+			return []storage.ArchiveBackend{backend}, nil
 		},
 		tar: func(_ string, destination string) error {
 			return os.WriteFile(destination, []byte("tar"), 0o600)
@@ -510,15 +649,15 @@ func TestArchivePipelineSkipsSuccessNotificationAfterCloseFailure(t *testing.T) 
 		buildObjectName: func(string, string) (string, error) {
 			return "backup.tar.gz", nil
 		},
-		upload: func(context.Context, []storage.Storage, string, string) error {
+		upload: func(context.Context, []storage.ArchiveBackend, string, string, time.Duration) error {
 			return nil
 		},
 		deleteDirectory: utils.DeleteDirectory,
 		deleteFile:      utils.DeleteFile,
 		handleInterrupt: func(func()) chan struct{} { return nil },
-		notify: func(_ context.Context, _ *mongoarchive.Config, success bool, filenameOrError string) {
+		notify: notificationSenderFunc(func(_ context.Context, success bool, filenameOrError string) {
 			notifications = append(notifications, fmt.Sprintf("%t:%s", success, filenameOrError))
-		},
+		}),
 	}
 
 	err := pipeline.run(context.Background(), &mongoarchive.Config{})
@@ -532,7 +671,7 @@ func TestArchivePipelineSkipsSuccessNotificationAfterCloseFailure(t *testing.T) 
 
 func TestCreateArchiveWorkspaceUsesPortablePrivateDefaults(t *testing.T) {
 	t.Setenv(envPrefix+"DUMP_PATH", "")
-	workspace, err := createArchiveWorkspace()
+	workspace, err := createArchiveWorkspace("")
 	if err != nil {
 		t.Fatalf("createArchiveWorkspace() error = %v", err)
 	}
@@ -558,7 +697,7 @@ func TestCreateArchiveWorkspaceUsesOverrideBasePath(t *testing.T) {
 	basePath := t.TempDir()
 	t.Setenv(envPrefix+"DUMP_PATH", basePath)
 
-	workspace, err := createArchiveWorkspace()
+	workspace, err := createArchiveWorkspace(basePath)
 	if err != nil {
 		t.Fatalf("createArchiveWorkspace() error = %v", err)
 	}
@@ -572,16 +711,36 @@ func TestCreateArchiveWorkspaceUsesOverrideBasePath(t *testing.T) {
 	}
 }
 
+func TestCreateArchiveWorkspaceUsesParsedBasePathInsteadOfEnvironment(t *testing.T) {
+	parsedBasePath := t.TempDir()
+	envBasePath := t.TempDir()
+	t.Setenv(envPrefix+"DUMP_PATH", envBasePath)
+
+	workspace, err := createArchiveWorkspace(parsedBasePath)
+	if err != nil {
+		t.Fatalf("createArchiveWorkspace() error = %v", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(workspace)
+	}()
+
+	if !strings.HasPrefix(workspace, parsedBasePath+string(os.PathSeparator)) {
+		t.Fatalf("createArchiveWorkspace() = %q, want parsed base path %q", workspace, parsedBasePath)
+	}
+	if strings.HasPrefix(workspace, envBasePath+string(os.PathSeparator)) {
+		t.Fatalf("createArchiveWorkspace() = %q, unexpectedly used process environment", workspace)
+	}
+}
+
 func TestCronRuntimeReturnsSetupErrors(t *testing.T) {
 	t.Run("invalid timezone", func(t *testing.T) {
 		runtime := cronRuntime{
 			newScheduler: func(*time.Location) (cronScheduler, error) {
 				return &fakeCronScheduler{}, nil
 			},
-			runTask:         func(context.Context, *mongoarchive.Config) error { return nil },
-			notify:          func(context.Context, *mongoarchive.Config, bool, string) {},
-			waitForShutdown: func() {},
-			now:             time.Now,
+			runTask: func(context.Context, *mongoarchive.Config, notificationSender) error { return nil },
+			notify:  notificationSenderFunc(func(context.Context, bool, string) {}),
+			now:     time.Now,
 		}
 
 		err := runtime.run(context.Background(), &mongoarchive.Config{ScheduleOptions: mongoarchive.ScheduleOptions{Location: nil, CronExpression: "* * * * *"}})
@@ -596,10 +755,9 @@ func TestCronRuntimeReturnsSetupErrors(t *testing.T) {
 			newScheduler: func(*time.Location) (cronScheduler, error) {
 				return &fakeCronScheduler{scheduleErr: cronErr}, nil
 			},
-			runTask:         func(context.Context, *mongoarchive.Config) error { return nil },
-			notify:          func(context.Context, *mongoarchive.Config, bool, string) {},
-			waitForShutdown: func() {},
-			now:             time.Now,
+			runTask: func(context.Context, *mongoarchive.Config, notificationSender) error { return nil },
+			notify:  notificationSenderFunc(func(context.Context, bool, string) {}),
+			now:     time.Now,
 		}
 
 		err := runtime.run(context.Background(), &mongoarchive.Config{ScheduleOptions: mongoarchive.ScheduleOptions{Location: time.UTC, CronExpression: "bad cron"}})
@@ -609,8 +767,73 @@ func TestCronRuntimeReturnsSetupErrors(t *testing.T) {
 	})
 }
 
+func TestCronRuntimeContextCancellationStopsSchedulerAndCancelsActiveTask(t *testing.T) {
+	scheduler := &fakeCronScheduler{started: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	activeStarted := make(chan struct{})
+	activeCanceled := make(chan error, 1)
+
+	runtime := cronRuntime{
+		newScheduler: func(*time.Location) (cronScheduler, error) {
+			return scheduler, nil
+		},
+		runTask: func(ctx context.Context, _ *mongoarchive.Config, _ notificationSender) error {
+			close(activeStarted)
+			<-ctx.Done()
+			activeCanceled <- ctx.Err()
+			return ctx.Err()
+		},
+		notify: notificationSenderFunc(func(context.Context, bool, string) {}),
+		now:    time.Now,
+	}
+
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- runtime.run(ctx, &mongoarchive.Config{ScheduleOptions: mongoarchive.ScheduleOptions{Location: time.UTC, CronExpression: "* * * * *"}})
+	}()
+
+	select {
+	case <-scheduler.started:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler did not start")
+	}
+	scheduler.trigger()
+	select {
+	case <-activeStarted:
+	case <-time.After(time.Second):
+		t.Fatal("scheduled task did not start")
+	}
+
+	cancel()
+
+	select {
+	case err := <-activeCanceled:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("active task context error = %v, want %v", err, context.Canceled)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("active task did not observe cancellation")
+	}
+
+	select {
+	case err := <-runDone:
+		if err != nil {
+			t.Fatalf("run() error = %v, want nil for ordinary cancellation shutdown", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("run() did not return after context cancellation")
+	}
+
+	if got := scheduler.shutdowns.Load(); got != 1 {
+		t.Fatalf("scheduler shutdowns = %d, want 1", got)
+	}
+}
+
 func TestCronRuntimeSkipsOverlappingRuns(t *testing.T) {
-	scheduler := &fakeCronScheduler{}
+	scheduler := &fakeCronScheduler{started: make(chan struct{})}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	started := make(chan struct{}, 1)
 	finished := make(chan struct{}, 1)
 	release := make(chan struct{})
@@ -622,7 +845,7 @@ func TestCronRuntimeSkipsOverlappingRuns(t *testing.T) {
 		newScheduler: func(*time.Location) (cronScheduler, error) {
 			return scheduler, nil
 		},
-		runTask: func(context.Context, *mongoarchive.Config) error {
+		runTask: func(context.Context, *mongoarchive.Config, notificationSender) error {
 			runs.Add(1)
 			current := concurrent.Add(1)
 			if current > maxConcurrent.Load() {
@@ -634,25 +857,50 @@ func TestCronRuntimeSkipsOverlappingRuns(t *testing.T) {
 			finished <- struct{}{}
 			return nil
 		},
-		notify: func(context.Context, *mongoarchive.Config, bool, string) {},
-		waitForShutdown: func() {
-			scheduler.trigger()
-			<-started
-			scheduler.trigger()
-			close(release)
-			<-finished
-		},
+		notify: notificationSenderFunc(func(context.Context, bool, string) {}),
 		now: func() time.Time {
 			return time.Unix(0, 0)
 		},
 	}
 
-	err := runtime.run(context.Background(), &mongoarchive.Config{ScheduleOptions: mongoarchive.ScheduleOptions{Location: time.UTC, CronExpression: "* * * * *"}})
-	if err != nil {
-		t.Fatalf("run() error = %v", err)
+	runDone := make(chan error, 1)
+	go func() {
+		runDone <- runtime.run(ctx, &mongoarchive.Config{ScheduleOptions: mongoarchive.ScheduleOptions{Location: time.UTC, CronExpression: "* * * * *"}})
+	}()
+
+	select {
+	case <-scheduler.started:
+	case <-time.After(time.Second):
+		t.Fatal("scheduler did not start")
 	}
-	if scheduler.overlap != cronSkipOverlappingRuns {
-		t.Fatalf("overlap policy = %q, want %q", scheduler.overlap, cronSkipOverlappingRuns)
+	scheduler.trigger()
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("first scheduled task did not start")
+	}
+	scheduler.trigger()
+	close(release)
+	select {
+	case <-finished:
+	case <-time.After(time.Second):
+		t.Fatal("scheduled task did not finish")
+	}
+	cancel()
+	select {
+	case err := <-runDone:
+		if err != nil {
+			t.Fatalf("run() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("run() did not return after context cancellation")
+	}
+
+	scheduler.mu.Lock()
+	overlap := scheduler.overlap
+	scheduler.mu.Unlock()
+	if overlap != cronSkipOverlappingRuns {
+		t.Fatalf("overlap policy = %q, want %q", overlap, cronSkipOverlappingRuns)
 	}
 	if runs.Load() != 1 {
 		t.Fatalf("run count = %d, want 1", runs.Load())

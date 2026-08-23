@@ -1,17 +1,41 @@
 name: Check code conventions
 
-on: push
+on:
+  push:
+  pull_request:
+  merge_group:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  pre-commit:
+  pre-commit-check:
+    if: github.event_name != 'push'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+    - name: Setup Tools
+      uses: ./.github/actions/setup-tools
+
+    - name: Run pre-commit
+      uses: egose/actions/precommit@4a6a7482207c0ba30b3b6487cccef3491bde6e7c
+      with:
+        config: .pre-commit-config.yaml
+        commit-on-push: false
+        commit-on-pr: false
+
+  pre-commit-fix:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 

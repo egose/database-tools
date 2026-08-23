@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egose/database-tools/internal/toolconfig"
 	"github.com/egose/database-tools/mongounarchive"
@@ -17,11 +19,8 @@ import (
 )
 
 type restoreStorageStub struct {
+	name       string
 	objectName string
-}
-
-func (s *restoreStorageStub) Upload(context.Context, string, string) (string, error) {
-	return "", errors.New("not implemented")
 }
 
 func (s *restoreStorageStub) Download(context.Context, string, string) error {
@@ -35,11 +34,75 @@ func (s *restoreStorageStub) GetTargetObjectName(_ context.Context, name string)
 	return name, nil
 }
 
-func (s *restoreStorageStub) DeleteOldObjects(context.Context, string) error {
-	return errors.New("not implemented")
+func (s *restoreStorageStub) Close() error { return nil }
+
+func (s *restoreStorageStub) BackendName() string {
+	if s.name != "" {
+		return s.name
+	}
+	return projectstorage.BackendLocal
 }
 
-func (s *restoreStorageStub) Close() error { return nil }
+func TestRestorePipelineRejectsIncompleteStorageBeforeSideEffects(t *testing.T) {
+	workspaceCreated := false
+	storagesConstructed := false
+	pipeline := restorePipeline{
+		createWorkspace: func(string) (string, error) {
+			workspaceCreated = true
+			return t.TempDir(), nil
+		},
+		getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.RestoreBackend, error) {
+			storagesConstructed = true
+			return []projectstorage.RestoreBackend{&restoreStorageStub{}}, nil
+		},
+	}
+
+	err := pipeline.run(context.Background(), &mongounarchive.Config{
+		StorageOptions: toolconfig.StorageOptions{AZAccountName: "restore-account"},
+	})
+	if err == nil {
+		t.Fatal("run() expected error")
+	}
+	if !strings.Contains(err.Error(), "AZ_ACCOUNT_KEY") || strings.Contains(err.Error(), "restore-account") {
+		t.Fatalf("run() error = %q, want missing identifiers without supplied value", err)
+	}
+	if workspaceCreated {
+		t.Fatal("run() created workspace before rejecting incomplete storage config")
+	}
+	if storagesConstructed {
+		t.Fatal("run() constructed storage before rejecting incomplete storage config")
+	}
+}
+
+func TestRestorePipelineRejectsInvalidRuntimeBeforeSideEffects(t *testing.T) {
+	workspaceCreated := false
+	storagesConstructed := false
+	pipeline := restorePipeline{
+		createWorkspace: func(string) (string, error) {
+			workspaceCreated = true
+			return t.TempDir(), nil
+		},
+		getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.RestoreBackend, error) {
+			storagesConstructed = true
+			return []projectstorage.RestoreBackend{&restoreStorageStub{}}, nil
+		},
+	}
+
+	limits := utils.DefaultArchiveExtractionLimits()
+	limits.MaxEntries = 0
+	err := pipeline.run(context.Background(), &mongounarchive.Config{
+		RuntimeOptions: mongounarchive.RuntimeOptions{ArchiveExtractionLimits: limits},
+	})
+	if err == nil {
+		t.Fatal("run() expected runtime validation error")
+	}
+	if workspaceCreated {
+		t.Fatal("run() created workspace before rejecting invalid runtime config")
+	}
+	if storagesConstructed {
+		t.Fatal("run() constructed storage before rejecting invalid runtime config")
+	}
+}
 
 type fakeRestoreRunner struct {
 	result       restoreExecutionResult
@@ -79,46 +142,6 @@ type fakeUpdateDatabase struct {
 func (d *fakeUpdateDatabase) Collection(name string, _ ...mongooptions.Lister[mongooptions.CollectionOptions]) updateCollection {
 	d.name = name
 	return d.collection
-}
-
-func TestGetArchiveExtractionLimitsUsesDefaults(t *testing.T) {
-	limits, err := getArchiveExtractionLimits()
-	if err != nil {
-		t.Fatalf("getArchiveExtractionLimits() error = %v", err)
-	}
-
-	if limits != utils.DefaultArchiveExtractionLimits() {
-		t.Fatalf("getArchiveExtractionLimits() = %+v, want %+v", limits, utils.DefaultArchiveExtractionLimits())
-	}
-}
-
-func TestGetArchiveExtractionLimitsUsesEnvironmentOverrides(t *testing.T) {
-	t.Setenv(envPrefix+"ARCHIVE_MAX_ENTRIES", "12")
-	t.Setenv(envPrefix+"ARCHIVE_MAX_ENTRY_BYTES", "4096")
-	t.Setenv(envPrefix+"ARCHIVE_MAX_TOTAL_BYTES", "8192")
-
-	limits, err := getArchiveExtractionLimits()
-	if err != nil {
-		t.Fatalf("getArchiveExtractionLimits() error = %v", err)
-	}
-
-	if limits.MaxEntries != 12 {
-		t.Fatalf("MaxEntries = %d, want 12", limits.MaxEntries)
-	}
-	if limits.MaxEntryBytes != 4096 {
-		t.Fatalf("MaxEntryBytes = %d, want 4096", limits.MaxEntryBytes)
-	}
-	if limits.MaxTotalBytes != 8192 {
-		t.Fatalf("MaxTotalBytes = %d, want 8192", limits.MaxTotalBytes)
-	}
-}
-
-func TestGetArchiveExtractionLimitsRejectsInvalidEnvironmentValues(t *testing.T) {
-	t.Setenv(envPrefix+"ARCHIVE_MAX_ENTRIES", "0")
-
-	if _, err := getArchiveExtractionLimits(); err == nil {
-		t.Fatal("getArchiveExtractionLimits() expected validation error")
-	}
 }
 
 func TestRestorePipelineCleanupByStage(t *testing.T) {
@@ -189,21 +212,21 @@ func TestRestorePipelineCleanupByStage(t *testing.T) {
 			var dumpDir string
 
 			pipeline := restorePipeline{
-				createWorkspace: func() (string, error) {
+				createWorkspace: func(string) (string, error) {
 					var err error
 					workspace, err = os.MkdirTemp(root, "run-")
 					return workspace, err
 				},
-				getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.Storage, error) {
-					return []projectstorage.Storage{storageStub}, nil
+				getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.RestoreBackend, error) {
+					return []projectstorage.RestoreBackend{storageStub}, nil
 				},
-				selectStorage: func(storages []projectstorage.Storage, backend string) (projectstorage.Storage, error) {
+				selectStorage: func(storages []projectstorage.RestoreBackend, backend string) (projectstorage.RestoreBackend, error) {
 					return storages[0], nil
 				},
-				getExtractionLimit: func() (utils.ArchiveExtractionLimits, error) {
+				getExtractionLimit: func(*mongounarchive.Config) (utils.ArchiveExtractionLimits, error) {
 					return utils.DefaultArchiveExtractionLimits(), nil
 				},
-				download: func(_ context.Context, _ projectstorage.Storage, _ string, destination string) error {
+				download: func(_ context.Context, _ projectstorage.RestoreStorage, _ string, destination string) error {
 					tarFile = destination
 					if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
 						return err
@@ -261,6 +284,85 @@ func TestRestorePipelineCleanupByStage(t *testing.T) {
 	}
 }
 
+func TestRestorePipelinePartialResultFailsBeforeUpdatesAndSuccessLog(t *testing.T) {
+	logs := []string{}
+	updatesApplied := false
+	pipeline := newRestorePipelineTestDouble(t, restoreExecutionResult{Successes: 7, Failures: 2}, true)
+	pipeline.applyUpdates = func(context.Context, *mongounarchive.Config, []update) error {
+		updatesApplied = true
+		return nil
+	}
+	pipeline.logAlways = func(format string, args ...any) {
+		logs = append(logs, fmt.Sprintf(format, args...))
+	}
+
+	err := pipeline.run(context.Background(), &mongounarchive.Config{
+		StorageOptions: toolconfig.StorageOptions{StorageBackend: "local"},
+		UpdateOptions:  mongounarchive.UpdateOptions{Updates: `[{"collection":"users","filter":{"active":true},"update":{"$set":{"active":false}}}]`},
+	})
+	var partialErr restorePartialResultError
+	if !errors.As(err, &partialErr) {
+		t.Fatalf("run() error = %T %[1]v, want restorePartialResultError", err)
+	}
+	if partialErr.Successes != 7 || partialErr.Failures != 2 {
+		t.Fatalf("partial error = %+v, want successes=7 failures=2", partialErr)
+	}
+	if !strings.Contains(err.Error(), "7 document(s) restored successfully") || !strings.Contains(err.Error(), "2 document(s) failed to restore") {
+		t.Fatalf("run() error = %v, want successes and failures", err)
+	}
+	if updatesApplied {
+		t.Fatal("run() applied updates after partial restore result")
+	}
+	for _, log := range logs {
+		if strings.Contains(log, "Unarchive completed successfully") {
+			t.Fatalf("run() logged completion success after partial restore: %q", log)
+		}
+	}
+}
+
+func TestRestorePipelineZeroFailureResultAppliesUpdatesAndSucceeds(t *testing.T) {
+	tests := []struct {
+		name         string
+		acknowledged bool
+		wantLog      string
+	}{
+		{name: "acknowledged", acknowledged: true, wantLog: "3 document(s) restored successfully. 0 document(s) failed to restore."},
+		{name: "unacknowledged", acknowledged: false, wantLog: "done"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logs := []string{}
+			updatesApplied := false
+			pipeline := newRestorePipelineTestDouble(t, restoreExecutionResult{Successes: 3}, tt.acknowledged)
+			pipeline.applyUpdates = func(context.Context, *mongounarchive.Config, []update) error {
+				updatesApplied = true
+				return nil
+			}
+			pipeline.logAlways = func(format string, args ...any) {
+				logs = append(logs, fmt.Sprintf(format, args...))
+			}
+
+			err := pipeline.run(context.Background(), &mongounarchive.Config{
+				StorageOptions: toolconfig.StorageOptions{StorageBackend: "local"},
+				UpdateOptions:  mongounarchive.UpdateOptions{Updates: `[{"collection":"users","filter":{"active":true},"update":{"$set":{"active":false}}}]`},
+			})
+			if err != nil {
+				t.Fatalf("run() error = %v, want nil", err)
+			}
+			if !updatesApplied {
+				t.Fatal("run() did not apply updates after zero-failure restore")
+			}
+			if !containsLog(logs, tt.wantLog) {
+				t.Fatalf("logs = %v, want %q", logs, tt.wantLog)
+			}
+			if !containsLog(logs, "Unarchive completed successfully") {
+				t.Fatalf("logs = %v, want completion success", logs)
+			}
+		})
+	}
+}
+
 func TestRestorePipelineAggregatesCleanupFailure(t *testing.T) {
 	primaryErr := errors.New("restore failed")
 	cleanupErr := errors.New("remove archive failed")
@@ -269,19 +371,19 @@ func TestRestorePipelineAggregatesCleanupFailure(t *testing.T) {
 	var tarFile string
 
 	pipeline := restorePipeline{
-		createWorkspace: func() (string, error) {
+		createWorkspace: func(string) (string, error) {
 			return os.MkdirTemp(root, "run-")
 		},
-		getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.Storage, error) {
-			return []projectstorage.Storage{storageStub}, nil
+		getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.RestoreBackend, error) {
+			return []projectstorage.RestoreBackend{storageStub}, nil
 		},
-		selectStorage: func(storages []projectstorage.Storage, backend string) (projectstorage.Storage, error) {
+		selectStorage: func(storages []projectstorage.RestoreBackend, backend string) (projectstorage.RestoreBackend, error) {
 			return storages[0], nil
 		},
-		getExtractionLimit: func() (utils.ArchiveExtractionLimits, error) {
+		getExtractionLimit: func(*mongounarchive.Config) (utils.ArchiveExtractionLimits, error) {
 			return utils.DefaultArchiveExtractionLimits(), nil
 		},
-		download: func(_ context.Context, _ projectstorage.Storage, _ string, destination string) error {
+		download: func(_ context.Context, _ projectstorage.RestoreStorage, _ string, destination string) error {
 			tarFile = destination
 			if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
 				return err
@@ -324,17 +426,17 @@ func TestRestorePipelinePropagatesCancellationToUpdates(t *testing.T) {
 	storageStub := &restoreStorageStub{objectName: "backups/archive.tar.gz"}
 	started := make(chan struct{}, 1)
 	pipeline := restorePipeline{
-		createWorkspace: func() (string, error) { return t.TempDir(), nil },
-		getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.Storage, error) {
-			return []projectstorage.Storage{storageStub}, nil
+		createWorkspace: func(string) (string, error) { return t.TempDir(), nil },
+		getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.RestoreBackend, error) {
+			return []projectstorage.RestoreBackend{storageStub}, nil
 		},
-		selectStorage: func(storages []projectstorage.Storage, backend string) (projectstorage.Storage, error) {
+		selectStorage: func(storages []projectstorage.RestoreBackend, backend string) (projectstorage.RestoreBackend, error) {
 			return storages[0], nil
 		},
-		getExtractionLimit: func() (utils.ArchiveExtractionLimits, error) {
+		getExtractionLimit: func(*mongounarchive.Config) (utils.ArchiveExtractionLimits, error) {
 			return utils.DefaultArchiveExtractionLimits(), nil
 		},
-		download: func(_ context.Context, _ projectstorage.Storage, _ string, destination string) error {
+		download: func(_ context.Context, _ projectstorage.RestoreStorage, _ string, destination string) error {
 			if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
 				return err
 			}
@@ -397,17 +499,17 @@ func TestRestorePipelineRejectsInvalidUpdatesBeforeDownload(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			downloaded := false
 			pipeline := restorePipeline{
-				createWorkspace: func() (string, error) { return t.TempDir(), nil },
-				getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.Storage, error) {
-					return []projectstorage.Storage{&restoreStorageStub{objectName: "archive.tar.gz"}}, nil
+				createWorkspace: func(string) (string, error) { return t.TempDir(), nil },
+				getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.RestoreBackend, error) {
+					return []projectstorage.RestoreBackend{&restoreStorageStub{objectName: "archive.tar.gz"}}, nil
 				},
-				selectStorage: func(storages []projectstorage.Storage, backend string) (projectstorage.Storage, error) {
+				selectStorage: func(storages []projectstorage.RestoreBackend, backend string) (projectstorage.RestoreBackend, error) {
 					return storages[0], nil
 				},
-				getExtractionLimit: func() (utils.ArchiveExtractionLimits, error) {
+				getExtractionLimit: func(*mongounarchive.Config) (utils.ArchiveExtractionLimits, error) {
 					return utils.DefaultArchiveExtractionLimits(), nil
 				},
-				download: func(context.Context, projectstorage.Storage, string, string) error {
+				download: func(context.Context, projectstorage.RestoreStorage, string, string) error {
 					downloaded = true
 					return nil
 				},
@@ -447,7 +549,7 @@ func TestApplyValidatedUpdatesHonorsCancellation(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- applyValidatedUpdates(ctx, db, []update{{Collection: "users", Filter: map[string]any{"active": true}, Update: map[string]any{"$set": map[string]any{"active": false}}}})
+		errCh <- applyValidatedUpdates(ctx, db, []update{{Collection: "users", Filter: map[string]any{"active": true}, Update: map[string]any{"$set": map[string]any{"active": false}}}}, 0)
 	}()
 
 	<-started
@@ -462,6 +564,22 @@ func TestApplyValidatedUpdatesHonorsCancellation(t *testing.T) {
 	}
 }
 
+func TestApplyValidatedUpdatesUsesParsedTimeoutInsteadOfEnvironment(t *testing.T) {
+	t.Setenv(envPrefix+"UPDATE_TIMEOUT", "not-a-duration")
+
+	db := &fakeUpdateDatabase{
+		collection: fakeUpdateCollection{updateMany: func(ctx context.Context, filter any, update any, _ ...mongooptions.Lister[mongooptions.UpdateManyOptions]) (*mongo.UpdateResult, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}},
+	}
+
+	err := applyValidatedUpdates(context.Background(), db, []update{{Collection: "users", Filter: map[string]any{"active": true}, Update: map[string]any{"$set": map[string]any{"active": false}}}}, time.Nanosecond)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("applyValidatedUpdates() error = %v, want parsed timeout deadline", err)
+	}
+}
+
 func TestParseUpdatesRejectsTrailingData(t *testing.T) {
 	_, err := parseUpdates(&mongounarchive.Config{UpdateOptions: mongounarchive.UpdateOptions{Updates: `[{"collection":"users","filter":{"active":true},"update":{"$set":{"active":false}}}] {}`}})
 	if err == nil || !strings.Contains(err.Error(), "unexpected trailing data") {
@@ -471,7 +589,7 @@ func TestParseUpdatesRejectsTrailingData(t *testing.T) {
 
 func TestCreateRestoreWorkspaceUsesPortablePrivateDefaults(t *testing.T) {
 	t.Setenv(envPrefix+"RESTORE_PATH", "")
-	workspace, err := createRestoreWorkspace()
+	workspace, err := createRestoreWorkspace("")
 	if err != nil {
 		t.Fatalf("createRestoreWorkspace() error = %v", err)
 	}
@@ -497,7 +615,7 @@ func TestCreateRestoreWorkspaceUsesOverrideBasePath(t *testing.T) {
 	basePath := t.TempDir()
 	t.Setenv(envPrefix+"RESTORE_PATH", basePath)
 
-	workspace, err := createRestoreWorkspace()
+	workspace, err := createRestoreWorkspace(basePath)
 	if err != nil {
 		t.Fatalf("createRestoreWorkspace() error = %v", err)
 	}
@@ -508,6 +626,27 @@ func TestCreateRestoreWorkspaceUsesOverrideBasePath(t *testing.T) {
 	wantPrefix := basePath + string(os.PathSeparator)
 	if !strings.HasPrefix(workspace, wantPrefix) {
 		t.Fatalf("createRestoreWorkspace() = %q, want prefix %q", workspace, wantPrefix)
+	}
+}
+
+func TestCreateRestoreWorkspaceUsesParsedBasePathInsteadOfEnvironment(t *testing.T) {
+	parsedBasePath := t.TempDir()
+	envBasePath := t.TempDir()
+	t.Setenv(envPrefix+"RESTORE_PATH", envBasePath)
+
+	workspace, err := createRestoreWorkspace(parsedBasePath)
+	if err != nil {
+		t.Fatalf("createRestoreWorkspace() error = %v", err)
+	}
+	defer func() {
+		_ = os.RemoveAll(workspace)
+	}()
+
+	if !strings.HasPrefix(workspace, parsedBasePath+string(os.PathSeparator)) {
+		t.Fatalf("createRestoreWorkspace() = %q, want parsed base path %q", workspace, parsedBasePath)
+	}
+	if strings.HasPrefix(workspace, envBasePath+string(os.PathSeparator)) {
+		t.Fatalf("createRestoreWorkspace() = %q, unexpectedly used process environment", workspace)
 	}
 }
 
@@ -525,4 +664,46 @@ func assertPathState(t *testing.T, path string, wantExists bool) {
 	if gotExists != wantExists {
 		t.Fatalf("path %q exists = %v, want %v (err=%v)", path, gotExists, wantExists, err)
 	}
+}
+
+func newRestorePipelineTestDouble(t *testing.T, result restoreExecutionResult, acknowledged bool) restorePipeline {
+	t.Helper()
+	storageStub := &restoreStorageStub{objectName: "backups/archive.tar.gz"}
+	return restorePipeline{
+		createWorkspace: func(string) (string, error) { return t.TempDir(), nil },
+		getStorages: func(context.Context, *mongounarchive.Config) ([]projectstorage.RestoreBackend, error) {
+			return []projectstorage.RestoreBackend{storageStub}, nil
+		},
+		selectStorage: func(storages []projectstorage.RestoreBackend, backend string) (projectstorage.RestoreBackend, error) {
+			return storages[0], nil
+		},
+		getExtractionLimit: func(*mongounarchive.Config) (utils.ArchiveExtractionLimits, error) {
+			return utils.DefaultArchiveExtractionLimits(), nil
+		},
+		download: func(_ context.Context, _ projectstorage.RestoreStorage, _ string, destination string) error {
+			if err := os.MkdirAll(filepath.Dir(destination), 0o700); err != nil {
+				return err
+			}
+			return os.WriteFile(destination, []byte("archive"), 0o600)
+		},
+		extract: func(_ string, destination string, _ utils.ArchiveExtractionLimits) error {
+			return os.MkdirAll(destination, 0o700)
+		},
+		newRestore: func([]string) (restoreRunner, error) {
+			return &fakeRestoreRunner{acknowledged: acknowledged, result: result}, nil
+		},
+		applyUpdates:    func(context.Context, *mongounarchive.Config, []update) error { return nil },
+		deleteDirectory: utils.DeleteDirectory,
+		deleteFile:      utils.DeleteFile,
+		handleInterrupt: func(func()) chan struct{} { return nil },
+	}
+}
+
+func containsLog(logs []string, want string) bool {
+	for _, log := range logs {
+		if log == want {
+			return true
+		}
+	}
+	return false
 }

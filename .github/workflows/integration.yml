@@ -1,0 +1,131 @@
+name: Integration verification
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  integration-bats:
+    name: integration-bats (clean start ${{ matrix.startup-attempt }}/5)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        startup-attempt: [1, 2, 3, 4, 5]
+    steps:
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      with:
+        ref: ${{ inputs.ref }}
+
+    - name: Report checkout SHA
+      run: |
+        set -euo pipefail
+        checkout_sha="$(git rev-parse HEAD)"
+        printf 'Requested ref: %s\n' "$REQUESTED_REF"
+        printf 'Checked out SHA: %s\n' "$checkout_sha"
+        {
+          printf "### Integration checkout evidence\n"
+          printf -- "- Requested ref: \`%s\`\n" "$REQUESTED_REF"
+          printf -- "- Checked out SHA: \`%s\`\n" "$checkout_sha"
+        } >> "$GITHUB_STEP_SUMMARY"
+        if [[ "$REQUESTED_REF" =~ ^[0-9a-f]{40}$ ]] && [ "$checkout_sha" != "$REQUESTED_REF" ]; then
+          printf 'Checked out SHA %s does not match requested SHA %s\n' "$checkout_sha" "$REQUESTED_REF" >&2
+          exit 1
+        fi
+      env:
+        REQUESTED_REF: ${{ inputs.ref }}
+
+    - name: Setup Tools
+      uses: ./.github/actions/setup-tools
+
+    - name: Setup NPM Packages
+      uses: ./.github/actions/setup-npm
+
+    - name: Start integration services
+      run: |
+        set -euo pipefail
+
+        mkdir -p ./sandbox/mnt/mongodb
+        mkdir -p ./sandbox/mnt/minio
+        mkdir -p ./sandbox/mnt/azurite
+        mkdir -p ./sandbox/mnt/fake-gcs-server
+
+        cp .env.example .env.test
+        set -a
+        source .env.test
+        set +a
+
+        export MACHINE_HOST_IP
+        MACHINE_HOST_IP=$(hostname -I | awk '{print $1}')
+        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml up -d
+
+        node_modules/.bin/wait-on tcp:127.0.0.1:27017 tcp:127.0.0.1:9000 http://localhost:9001 tcp:127.0.0.1:10000 tcp:127.0.0.1:"$FAKE_GCP_PORT" --timeout 120000
+        for attempt in $(seq 1 120); do
+          minio_init_container=$(docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml ps -q minio-init)
+          if [ -z "$minio_init_container" ]; then
+            printf 'minio-init container was not created\n' >&2
+            docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml logs --no-color minio-init >&2 || true
+            exit 1
+          fi
+
+          minio_init_status=$(docker inspect --format '{{.State.Status}}:{{.State.ExitCode}}' "$minio_init_container")
+          case "$minio_init_status" in
+            exited:0)
+              break
+              ;;
+            exited:*|dead:*)
+              printf 'minio-init failed with state %s\n' "$minio_init_status" >&2
+              docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml logs --no-color minio-init >&2 || true
+              exit 1
+              ;;
+          esac
+
+          if [ "$attempt" -eq 120 ]; then
+            printf 'minio-init did not complete within 120 seconds; last state was %s\n' "$minio_init_status" >&2
+            docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml logs --no-color minio-init >&2 || true
+            exit 1
+          fi
+          sleep 1
+        done
+
+        for attempt in $(seq 1 60); do
+          if output=$(mongosh "$DATABASE_URL" --quiet --eval 'db.adminCommand({ ping: 1 }).ok' 2>/dev/null) && [ "$output" = "1" ]; then
+            break
+          fi
+          if [ "$attempt" -eq 60 ]; then
+            mongosh "$DATABASE_URL" --eval 'db.adminCommand({ ping: 1 })'
+            exit 1
+          fi
+          sleep 2
+        done
+        curl -fsS http://localhost:9000/minio/health/live >/dev/null
+
+    - name: Run Bats suite
+      run: bats --print-output-on-failure test/test.bats
+
+    - name: Capture service logs
+      if: always()
+      run: |
+        mkdir -p ./sandbox/test-logs
+        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml ps > ./sandbox/test-logs/compose-ps.txt || true
+        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml logs --no-color > ./sandbox/test-logs/compose.log || true
+
+    - name: Upload integration logs
+      if: always()
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: integration-service-logs-${{ matrix.startup-attempt }}
+        path: ./sandbox/test-logs
+
+    - name: Cleanup integration services
+      if: always()
+      run: |
+        docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml down -v --remove-orphans || true
+        sudo rm -rf ./sandbox/mnt

@@ -1,0 +1,36 @@
+# Default repository ownership.
+* @egose
+
+# Storage provider, object-selection, retention, and local filesystem boundaries.
+/storage/ @egose
+/internal/toolconfig/ @egose
+/utils/file.go @egose
+
+# Restore, extraction, restore updates, and archive safety boundaries.
+/mongounarchive/ @egose
+/README.md @egose
+/flags.md @egose
+
+# Archive orchestration, multi-backend delivery, and notifications.
+/mongoarchive/ @egose
+/notification/ @egose
+
+# Release, CI, supply-chain, and publication policy.
+/.github/workflows/ @egose
+/.github/actions/ @egose
+/Dockerfile @egose
+/Makefile @egose
+/scripts/ @egose
+/internal/releasegovulncheck/ @egose
+/docs/release-artifact-policy.md @egose
+/renovate.json @egose
+/requirements*.txt @egose
+/package.json @egose
+/pnpm-lock.yaml @egose
+/.tool-versions @egose
+
+# Security and repository governance policy.
+/SECURITY.md @egose
+/CONTRIBUTING.md @egose
+/docs/repository-governance.md @egose
+/.github/CODEOWNERS @egose

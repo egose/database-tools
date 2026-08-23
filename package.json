@@ -1,6 +1,7 @@
 {
   "name": "database-tools",
   "version": "0.15.0",
+  "private": true,
   "description": "This repository provides additional MongoDB Tools with the following functionalities",
   "directories": {
     "doc": "docs",

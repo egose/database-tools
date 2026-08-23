@@ -33,6 +33,10 @@ func httpClientOrDefault(client httpDoer) httpDoer {
 	return defaultHTTPClient
 }
 
+func ValidateWebhookURL(raw string, allowInsecure bool, fieldName string) error {
+	return validateHTTPSURL(raw, allowInsecure, fieldName)
+}
+
 func validateHTTPSURL(raw string, allowInsecure bool, fieldName string) error {
 	if raw == "" {
 		return nil

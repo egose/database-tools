@@ -120,6 +120,10 @@ In one-shot mode, any upload or retention failure returns a nonzero exit. In cro
 - Restores the data to a MongoDB database.
 - Supports applying update operations post-restore using a JSON configuration.
 
+### Restore Result Contract
+
+`mongo-unarchive` treats a restore as successful only when `mongorestore` reports no top-level error and zero document-level failures. If any document fails to restore, the command returns a nonzero exit status and reports the successful and failed document counts. Post-restore update operations are not applied after any top-level restore error or document-level restore failure. The tool does not attempt transactional rollback of documents that were already restored before the failure was reported.
+
 ### Archive Extraction Limits
 
 `mongo-unarchive` extracts only regular files and directories from `.tar.gz` backups. Absolute paths, `..` traversal, symlinks, hard links, devices, FIFOs, and other unsupported archive entries are rejected. Extraction is staged in a private directory and only moved into place after a full successful extract.
@@ -331,13 +335,25 @@ spec:
                 - mongo-archive --db=mydb --read-preference=primary --force-table-scan
               env:
                 - name: MONGOARCHIVE__URI
-                  value: 'mongodb+srv://user:password@cluster0.my.mongodb.net'
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongo-archive-secrets
+                      key: mongodb-uri
                 - name: MONGOARCHIVE__AZ_ACCOUNT_NAME
-                  value: mystorage
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongo-archive-secrets
+                      key: azure-account-name
                 - name: MONGOARCHIVE__AZ_ACCOUNT_KEY
-                  value: myaccountkey
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongo-archive-secrets
+                      key: azure-account-key
                 - name: MONGOARCHIVE__AZ_CONTAINER_NAME
-                  value: mybackup
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongo-archive-secrets
+                      key: azure-container-name
               volumeMounts:
                 - mountPath: /tmp
                   name: backup-volume
@@ -357,6 +373,8 @@ spec:
     requests:
       storage: 1Gi
 ```
+
+Use a maintained image tag in place of `<latest-version>` and provide the referenced `mongo-archive-secrets` Secret separately; example manifests in [`examples/`](./examples) are validated by the Go test suite.
 
 ## 🗂️ Backlog
 

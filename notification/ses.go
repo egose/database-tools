@@ -31,23 +31,7 @@ type SES struct {
 }
 
 func (s *SES) Init(endpoint, region, accessKeyID, secretAccessKey, from, to, subjectPrefix string, notifyOnFailureOnly bool, allowInsecureEndpointHTTPInDevelopment bool) error {
-	if region == "" {
-		return fmt.Errorf("SES region is required")
-	}
-	if err := validateHTTPSURL(endpoint, allowInsecureEndpointHTTPInDevelopment, "SES endpoint override"); err != nil {
-		return err
-	}
-	if from == "" {
-		return fmt.Errorf("SES from address is required")
-	}
-	if _, err := mail.ParseAddress(from); err != nil {
-		return fmt.Errorf("invalid SES from address: %w", err)
-	}
-	if (accessKeyID == "") != (secretAccessKey == "") {
-		return fmt.Errorf("SES access key ID and secret access key must be set together")
-	}
-
-	recipients, err := parseRecipientList(to)
+	recipients, err := ValidateSESOptions(endpoint, region, accessKeyID, secretAccessKey, from, to, allowInsecureEndpointHTTPInDevelopment)
 	if err != nil {
 		return err
 	}
@@ -76,6 +60,31 @@ func (s *SES) Init(endpoint, region, accessKeyID, secretAccessKey, from, to, sub
 	s.notifyOnFailureOnly = notifyOnFailureOnly
 	s.client = ses.New(sess)
 	return nil
+}
+
+func ValidateSESOptions(endpoint, region, accessKeyID, secretAccessKey, from, to string, allowInsecureEndpointHTTPInDevelopment bool) ([]string, error) {
+	if region == "" {
+		return nil, fmt.Errorf("SES region is required")
+	}
+	if err := validateHTTPSURL(endpoint, allowInsecureEndpointHTTPInDevelopment, "SES endpoint override"); err != nil {
+		return nil, err
+	}
+	if from == "" {
+		return nil, fmt.Errorf("SES from address is required")
+	}
+	if _, err := mail.ParseAddress(from); err != nil {
+		return nil, fmt.Errorf("invalid SES from address: %w", err)
+	}
+	if (accessKeyID == "") != (secretAccessKey == "") {
+		return nil, fmt.Errorf("SES access key ID and secret access key must be set together")
+	}
+
+	recipients, err := parseRecipientList(to)
+	if err != nil {
+		return nil, err
+	}
+
+	return recipients, nil
 }
 
 func (s *SES) Send(ctx context.Context, success bool, loc *time.Location, filenameOrError string) error {
