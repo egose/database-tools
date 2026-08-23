@@ -1,0 +1,56 @@
+---
+sidebar_label: Restore
+sidebar_position: 1
+---
+
+# Restore Operations
+
+`mongo-unarchive` downloads an archive from a configured backend and restores it into MongoDB.
+
+## Restore Success Contract
+
+`mongo-unarchive` treats a restore as successful only when `mongorestore` reports no top-level error and zero document-level failures.
+
+If any document fails to restore, the command returns a nonzero exit status and reports the successful and failed document counts. Post-restore update operations are not applied after any top-level restore error or document-level restore failure.
+
+The tool does not attempt transactional rollback of documents that were already restored before `mongorestore` reported the failure.
+
+## Archive Extraction Limits
+
+`mongo-unarchive` extracts only regular files and directories from `.tar.gz` backups.
+
+The extractor rejects absolute paths, `..` traversal, symlinks, hard links, devices, FIFOs, and unsupported archive entries. Extraction is staged in a private directory and only moved into place after a full successful extract.
+
+| Environment Variable                      | Default        | Description                                                      |
+| ----------------------------------------- | -------------- | ---------------------------------------------------------------- |
+| `MONGOUNARCHIVE__ARCHIVE_MAX_ENTRIES`     | `100000`       | Maximum number of archive entries to extract.                    |
+| `MONGOUNARCHIVE__ARCHIVE_MAX_ENTRY_BYTES` | `34359738368`  | Maximum size in bytes for a single extracted file, 32 GiB.       |
+| `MONGOUNARCHIVE__ARCHIVE_MAX_TOTAL_BYTES` | `274877906944` | Maximum combined size in bytes for all extracted files, 256 GiB. |
+
+## Post-Restore Updates
+
+Pass `--updates-file` to apply update operations after a successful restore.
+
+```json
+[
+  {
+    "collection": "users",
+    "filter": {
+      "email": { "$exists": true }
+    },
+    "update": [
+      {
+        "$set": {
+          "email": {
+            "$replaceOne": {
+              "input": "$email",
+              "find": "@",
+              "replacement": "_"
+            }
+          }
+        }
+      }
+    ]
+  }
+]
+```

@@ -1,0 +1,64 @@
+---
+sidebar_label: Quick Start
+sidebar_position: 1
+---
+
+# Quick Start
+
+## Install
+
+Install the released binaries with the `mongodb-database-tools` asdf plugin:
+
+```bash
+asdf plugin add mongodb-database-tools
+asdf install mongodb-database-tools <latest-version>
+asdf global mongodb-database-tools <latest-version>
+```
+
+Or download prebuilt binaries from the [GitHub Releases](https://github.com/egose/database-tools/releases) page and place `mongo-archive` and `mongo-unarchive` in your `PATH`.
+
+Verify the installation:
+
+```bash
+mongo-archive --version
+mongo-unarchive --version
+```
+
+## Archive to Azure Blob Storage
+
+```bash
+mongo-archive \
+  --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+  --db=<dbname> \
+  --az-account-name=<az_account_name> \
+  --az-account-key=<az_account_key> \
+  --az-container-name=<az_container_name>
+```
+
+## Schedule Backups
+
+```bash
+mongo-archive \
+  --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
+  --db=<dbname> \
+  --az-account-name=<az_account_name> \
+  --az-account-key=<az_account_key> \
+  --az-container-name=<az_container_name> \
+  --cron \
+  --cron-expression="0 * * * *"
+```
+
+Scheduled runs skip overlapping executions for the same job while a previous run is still active.
+
+## Restore the Latest Managed Backup
+
+```bash
+mongo-unarchive \
+  --uri="mongodb://localhost:27017" \
+  --db=<dbname> \
+  --az-account-name=<az_account_name> \
+  --az-account-key=<az_account_key> \
+  --az-container-name=<az_container_name>
+```
+
+To restore a legacy or manually named object, pass `--object-name` explicitly.

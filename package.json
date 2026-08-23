@@ -9,7 +9,10 @@
     "test": "test"
   },
   "scripts": {
-    "changelog": "repo-toolkit-changelog"
+    "changelog": "repo-toolkit-changelog",
+    "docs:start": "pnpm --filter @egose/database-tools-website start",
+    "docs:build": "pnpm --filter @egose/database-tools-website build",
+    "docs:typecheck": "pnpm --filter @egose/database-tools-website typecheck"
   },
   "repository": {
     "type": "git",

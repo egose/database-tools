@@ -1,0 +1,53 @@
+---
+sidebar_label: Kubernetes CronJob
+sidebar_position: 1
+---
+
+# Kubernetes CronJob
+
+The image can run `mongo-archive` as a Kubernetes `CronJob`.
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongo-archive
+spec:
+  schedule: '0 12 * * *'
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup-job
+              image: ghcr.io/egose/database-tools:<latest-version>
+              command: ['/bin/sh', '-c']
+              args:
+                - mongo-archive --db=mydb --read-preference=primary --force-table-scan
+              env:
+                - name: MONGOARCHIVE__URI
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongo-archive-secrets
+                      key: mongodb-uri
+                - name: MONGOARCHIVE__AZ_ACCOUNT_NAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongo-archive-secrets
+                      key: azure-account-name
+                - name: MONGOARCHIVE__AZ_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongo-archive-secrets
+                      key: azure-account-key
+                - name: MONGOARCHIVE__AZ_CONTAINER_NAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: mongo-archive-secrets
+                      key: azure-container-name
+```
+
+Provide the referenced `mongo-archive-secrets` Secret separately. Example manifests in the repository `examples/` directory are validated by the Go test suite.

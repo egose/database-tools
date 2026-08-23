@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#020617" />
+  <circle cx="190" cy="130" r="240" fill="#14b8a6" opacity=".22" />
+  <circle cx="1040" cy="120" r="210" fill="#f59e0b" opacity=".16" />
+  <rect x="72" y="76" width="1056" height="478" rx="44" fill="#0f172a" stroke="#334155" stroke-width="2" />
+  <text x="132" y="210" fill="#5eead4" font-family="Inter, Arial, sans-serif" font-size="36" font-weight="800" letter-spacing="4">DATABASE TOOLS</text>
+  <text x="132" y="310" fill="#f8fafc" font-family="Inter, Arial, sans-serif" font-size="78" font-weight="900">MongoDB archive and restore</text>
+  <text x="132" y="394" fill="#cbd5e1" font-family="Inter, Arial, sans-serif" font-size="38">Cloud backups, safe restores, retention, and notifications.</text>
+  <text x="132" y="476" fill="#99f6e4" font-family="Inter, Arial, sans-serif" font-size="32" font-weight="700">mongo-archive  |  mongo-unarchive</text>
+</svg>

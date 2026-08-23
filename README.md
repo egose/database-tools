@@ -85,6 +85,16 @@ Both `mongo-archive` and `mongo-unarchive` follow the conventions of MongoDB’s
 
 The authoritative flag reference lives in [`flags.md`](./flags.md). It is verified by tests against the current flag definitions so documentation drift is caught during CI.
 
+## Documentation Site
+
+The Docusaurus documentation app lives in [`website/`](./website). From the repository root, run:
+
+```sh
+pnpm docs:start
+pnpm docs:build
+pnpm docs:typecheck
+```
+
 ## 📦 `mongo-archive`
 
 ### Functionality

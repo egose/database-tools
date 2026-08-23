@@ -1,0 +1,14 @@
+{
+  "name": "Database Tools",
+  "short_name": "DB Tools",
+  "icons": [
+    {
+      "src": "/img/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "theme_color": "#0f766e",
+  "background_color": "#ffffff",
+  "display": "standalone"
+}
