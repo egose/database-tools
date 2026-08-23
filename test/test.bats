@@ -228,8 +228,8 @@ storage_count() {
 
   run ./dist/mongo-archive --uri="$DATABASE_URL" --db="$DATABASE_NAME" --local-path=./dist/backup --aws-endpoint="$MINIO_URL" --aws-access-key-id="$MINIO_ACCESS_KEY" --aws-secret-access-key="$MINIO_SECRET_KEY" --aws-bucket="$MINIO_BUCKET" --aws-s3-force-path-style=true
   assert_success
-  assert_output_contains "*storage.LocalStorage"
-  assert_output_contains "*storage.AwsS3"
+  assert_output_contains "Successfully uploaded backup to backend #1 (local)"
+  assert_output_contains "Successfully uploaded backup to backend #2 (aws)"
 
   local_after_count="$(storage_count --provider=local --local-path=./dist/backup)"
   s3_after_count="$(storage_count --provider=s3)"
