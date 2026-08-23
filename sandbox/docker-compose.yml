@@ -48,7 +48,7 @@ services:
       svcacct_output=$$(/usr/bin/mc admin user svcacct add minio minioadmin --access-key ${MINIO_ACCESS_KEY} --secret-key ${MINIO_SECRET_KEY} 2>&1) || svcacct_status=$$?;
       if [ "$${svcacct_status:-0}" -ne 0 ]; then
         case "$$svcacct_output" in
-          *[Aa]lready\ exists*) printf '%s\n' "$$svcacct_output" ;;
+          *[Aa]lready*exists*|*[Aa]lready*taken*) printf '%s\n' "$$svcacct_output" ;;
           *) printf '%s\n' "$$svcacct_output" >&2; exit "$$svcacct_status" ;;
         esac;
       else
