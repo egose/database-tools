@@ -1,6 +1,6 @@
 repos:
 - repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # pragma: allowlist secret; frozen: v6.0.0
+  rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c   # pragma: allowlist secret; frozen: v6.0.0
   hooks:
   - id: check-added-large-files
   - id: check-case-conflict
@@ -14,12 +14,12 @@ repos:
   - id: end-of-file-fixer
   - id: trailing-whitespace
 - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
-  rev: 4380fbb73a154b5f5624794c1c78d9719ccc860f  # pragma: allowlist secret; frozen: v2.16.0
+  rev: 4380fbb73a154b5f5624794c1c78d9719ccc860f   # pragma: allowlist secret; frozen: v2.16.0
   hooks:
   - id: pretty-format-yaml
     args: [--autofix, --indent, '2']
 - repo: https://github.com/Yelp/detect-secrets
-  rev: 68e8b45440415753fff70a312ece8da92ba85b4a  # pragma: allowlist secret; frozen: v1.5.0
+  rev: 68e8b45440415753fff70a312ece8da92ba85b4a   # pragma: allowlist secret; frozen: v1.5.0
   hooks:
   - id: detect-secrets
     args: [--baseline, .secrets.baseline]
@@ -48,6 +48,17 @@ repos:
     require_serial: true
     files: \.go$
     exclude: .git/COMMIT_EDITMSG
+  - id: actionlint
+    name: actionlint
+    entry: actionlint
+    language: system
+    pass_filenames: false
+    files: ^\.github/workflows/.*\.ya?ml$
+  - id: shellcheck
+    name: shellcheck
+    entry: shellcheck
+    language: system
+    files: ^((\.bin|scripts)/.*\.sh|bin/(download|install|list-all))$
   - id: commitlint
     name: commitlint
     entry: .bin/commitlint.sh
