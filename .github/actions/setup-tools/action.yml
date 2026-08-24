@@ -5,7 +5,7 @@ runs:
   using: composite
   steps:
   - name: Install asdf
-    uses: egose/actions/asdf-install@4a6a7482207c0ba30b3b6487cccef3491bde6e7c
+    uses: egose/actions/asdf-install@0802d5eb78229994c066ea07b8c576dd38adfb5b
 
   - name: Cache tools
     uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
