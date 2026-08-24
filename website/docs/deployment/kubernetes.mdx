@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Kubernetes CronJob
 
-The image can run `mongo-archive` as a Kubernetes `CronJob`.
+The image can run `mongo-archive` or `postgres-archive` as a Kubernetes `CronJob`. Use `Secret` references for database and cloud credentials; do not put literal passwords, access keys, or password-bearing URIs in manifests.
 
 ```yaml
 apiVersion: batch/v1
@@ -51,3 +51,56 @@ spec:
 ```
 
 Provide the referenced `mongo-archive-secrets` Secret separately. Example manifests in the repository `examples/` directory are validated by the Go test suite.
+
+PostgreSQL example with Kubernetes secret injection:
+
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-archive
+spec:
+  schedule: '0 2 * * *'
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: backup-job
+              image: ghcr.io/egose/database-tools:<latest-version>
+              imagePullPolicy: IfNotPresent
+              command: ['/bin/sh', '-c']
+              args:
+                - |
+                  set -eu
+                  postgres-archive --local-path=/backups
+              env:
+                - name: POSTGRESARCHIVE__HOST
+                  value: postgres.example.com
+                - name: POSTGRESARCHIVE__USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-archive-secrets
+                      key: postgres-user
+                - name: POSTGRESARCHIVE__PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres-archive-secrets
+                      key: postgres-password
+                - name: POSTGRESARCHIVE__DATABASE
+                  value: appdb
+                - name: POSTGRESARCHIVE__SSL_MODE
+                  value: require
+                - name: POSTGRESARCHIVE__LOCAL_PATH
+                  value: /backups
+              volumeMounts:
+                - mountPath: /backups
+                  name: backup-volume
+          volumes:
+            - name: backup-volume
+              persistentVolumeClaim:
+                claimName: backup-pvc
+```

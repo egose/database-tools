@@ -5,7 +5,7 @@ sidebar_position: 1
 
 # Restore Operations
 
-`mongo-unarchive` downloads an archive from a configured backend and restores it into MongoDB.
+`mongo-unarchive` downloads an archive from a configured backend and restores it into MongoDB. `postgres-unarchive` downloads a PostgreSQL archive, validates its manifest and payload, and restores it into an existing PostgreSQL database.
 
 ## Restore Success Contract
 
@@ -17,7 +17,7 @@ The tool does not attempt transactional rollback of documents that were already 
 
 ## Archive Extraction Limits
 
-`mongo-unarchive` extracts only regular files and directories from `.tar.gz` backups.
+Restore commands extract only regular files and directories from `.tar.gz` backups.
 
 The extractor rejects absolute paths, `..` traversal, symlinks, hard links, devices, FIFOs, and unsupported archive entries. Extraction is staged in a private directory and only moved into place after a full successful extract.
 
@@ -53,4 +53,34 @@ Pass `--updates-file` to apply update operations after a successful restore.
     ]
   }
 ]
+```
+
+## PostgreSQL Restore Contract
+
+`postgres-unarchive` selects only PostgreSQL managed backups under `postgres-archive/` by default. Pass `--object-name` for an explicit object, or omit it to select the latest eligible PostgreSQL archive under the configured prefix. When multiple restore backends are configured, pass `--storage-backend` to choose one.
+
+Before starting `pg_restore`, the command downloads atomically, extracts defensively, and validates the PostgreSQL manifest and custom-format dump. Wrong-family archives, missing manifests, malformed manifests, and inconsistent payloads fail before target database changes are attempted.
+
+The target database must already exist. The default invocation uses `pg_restore --exit-on-error` and does not pass `--clean` or `--create`. If `pg_restore` starts and then fails, partial database changes may already exist; the tool does not claim rollback.
+
+```bash
+set -eu
+postgres-unarchive \
+  --host=postgres.example.com \
+  --user=<username> \
+  --database=appdb_restore \
+  --ssl-mode=require \
+  --local-path=/var/backups/database-tools \
+  --object-name="postgres-archive/<generated-name>.tar.gz"
+```
+
+```bash
+set -eu
+postgres-unarchive \
+  --host=postgres.example.com \
+  --user=<username> \
+  --database=appdb_restore \
+  --ssl-mode=require \
+  --aws-region=us-east-1 \
+  --aws-bucket=<bucket_name>
 ```

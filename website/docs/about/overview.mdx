@@ -5,18 +5,22 @@ sidebar_position: 0
 
 # Database Tools
 
-`database-tools` provides supplementary command-line tools for MongoDB backup and restoration workflows.
+`database-tools` provides supplementary command-line tools for MongoDB and PostgreSQL backup and restoration workflows.
 
 - `mongo-archive` dumps MongoDB data, writes the archive locally, and uploads it to configured storage backends.
 - `mongo-unarchive` downloads an archive from storage, restores it into MongoDB, and can run post-restore update operations.
+- `postgres-archive` runs `pg_dump` in custom format, packages the dump with a manifest, and uploads the archive to configured storage backends.
+- `postgres-unarchive` validates a PostgreSQL archive and restores it into an existing database with `pg_restore --exit-on-error`.
 
-The tools intentionally follow MongoDB's native command-line conventions where possible. Most options can be supplied either as CLI flags or as environment variables, which makes the same configuration usable on a terminal, in containers, and in Kubernetes jobs.
+Most options can be supplied either as CLI flags or as environment variables, which makes the same configuration usable on a terminal, in containers, and in Kubernetes jobs. MongoDB and PostgreSQL managed objects use separate default prefixes, so automatic latest selection and retention stay database-family scoped.
 
 ## When to Use These Tools
 
 Use `mongo-archive` when you need repeatable MongoDB dumps with upload and retention behavior around Azure Blob Storage, AWS S3, Google Cloud Storage, or local filesystem storage.
 
 Use `mongo-unarchive` when you need an operational restore command that can select the latest managed backup, download it, enforce archive extraction limits, run `mongorestore`, and optionally apply update operations after a successful restore.
+
+Use `postgres-archive` and `postgres-unarchive` when you need single-database PostgreSQL logical backups using PostgreSQL client tools. Native installs require compatible host `pg_dump` and `pg_restore` clients in `PATH`; the published container includes pinned PostgreSQL clients.
 
 ## Documentation Map
 

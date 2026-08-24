@@ -7,27 +7,44 @@ import (
 	"time"
 )
 
-const DefaultBackupPrefix = "mongo-archive/"
+const (
+	MongoDefaultBackupPrefix      = "mongo-archive/"
+	PostgreSQLDefaultBackupPrefix = "postgres-archive/"
+
+	// DefaultBackupPrefix preserves the original MongoDB storage API default.
+	DefaultBackupPrefix = MongoDefaultBackupPrefix
+)
 
 var backupObjectPattern = regexp.MustCompile(`^\d{13}-\d{4}-\d{2}-\d{2}T\d{6}\.\d{3}Z\.tar\.gz$`)
 
 func NormalizeBackupPrefix(prefix string) string {
+	return NormalizeBackupPrefixWithDefault(prefix, DefaultBackupPrefix)
+}
+
+func NormalizeBackupPrefixWithDefault(prefix string, defaultPrefix string) string {
 	prefix = strings.TrimSpace(prefix)
 	prefix = strings.Trim(prefix, "/")
 	if prefix == "" {
-		return DefaultBackupPrefix
+		prefix = strings.Trim(strings.TrimSpace(defaultPrefix), "/")
+	}
+	if prefix == "" {
+		prefix = strings.TrimSuffix(DefaultBackupPrefix, "/")
 	}
 
 	return prefix + "/"
 }
 
 func BuildBackupObjectName(prefix string, filename string) (string, error) {
+	return BuildBackupObjectNameWithDefault(prefix, filename, DefaultBackupPrefix)
+}
+
+func BuildBackupObjectNameWithDefault(prefix string, filename string, defaultPrefix string) (string, error) {
 	filename = strings.TrimSpace(filename)
 	if !backupObjectPattern.MatchString(filename) {
 		return "", fmt.Errorf("invalid backup filename %q", filename)
 	}
 
-	return NormalizeBackupPrefix(prefix) + filename, nil
+	return NormalizeBackupPrefixWithDefault(prefix, defaultPrefix) + filename, nil
 }
 
 func lookupObjectCandidates(prefix string, objectName string) []string {

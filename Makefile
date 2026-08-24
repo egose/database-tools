@@ -30,15 +30,22 @@ release-verify: check-toolchain test-asdf $(GOVULNCHECK)
 	trap 'docker image rm -f "$$image" >/dev/null 2>&1 || true' EXIT; \
 	docker build --build-arg VERSION="$(VERSION)" --tag "$$image" .; \
 	docker run --rm "$$image" mongo-archive --version; \
-	docker run --rm "$$image" mongo-unarchive --version
+	docker run --rm "$$image" mongo-unarchive --version; \
+	docker run --rm "$$image" postgres-archive --version; \
+	docker run --rm "$$image" postgres-unarchive --version; \
+	docker run --rm "$$image" pg_dump --version; \
+	docker run --rm "$$image" pg_restore --version; \
+	bash ./scripts/container-roundtrip.sh "$$image"
 	VERSION="$(VERSION)" SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" pnpm run release:build
 	VERSION="$(VERSION)" SOURCE_DATE_EPOCH="$(SOURCE_DATE_EPOCH)" pnpm run release:verify
 
 .PHONY: build
 build:
 	mkdir -p "$(DIST_DIR)"
-	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o "$(DIST_DIR)/mongo-archive" ./mongoarchive/main/mongoarchive.go
-	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o "$(DIST_DIR)/mongo-unarchive" ./mongounarchive/main/mongounarchive.go
+	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o "$(DIST_DIR)/mongo-archive" ./mongoarchive/main
+	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o "$(DIST_DIR)/mongo-unarchive" ./mongounarchive/main
+	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o "$(DIST_DIR)/postgres-archive" ./postgresarchive/main
+	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o "$(DIST_DIR)/postgres-unarchive" ./postgresunarchive/main
 	echo complete
 
 .PHONY: format

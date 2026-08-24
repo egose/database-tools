@@ -83,6 +83,23 @@ func TestLatestEligibleObjectIgnoresMalformedAndOutOfScopeObjects(t *testing.T) 
 	}
 }
 
+func TestLatestEligibleObjectKeepsDatabasePrefixesIsolated(t *testing.T) {
+	now := time.Date(2026, time.August, 24, 12, 0, 0, 0, time.UTC)
+	objects := []objectTimestamp{
+		{Name: "mongo-archive/9987654321000-2026-08-24T100000.000Z.tar.gz", ModifiedAt: now.Add(-time.Hour)},
+		{Name: "postgres-archive/9987654320999-2026-08-24T110000.000Z.tar.gz", ModifiedAt: now},
+	}
+
+	mongo, ok := latestEligibleObject(objects, DefaultBackupPrefix)
+	if !ok || mongo.Name != objects[0].Name {
+		t.Fatalf("MongoDB latest = %#v, %v; want %q", mongo, ok, objects[0].Name)
+	}
+	postgres, ok := latestEligibleObject(objects, "postgres-archive/")
+	if !ok || postgres.Name != objects[1].Name {
+		t.Fatalf("PostgreSQL latest = %#v, %v; want %q", postgres, ok, objects[1].Name)
+	}
+}
+
 func TestResolveExplicitObjectNamePrefersManagedPrefixCandidate(t *testing.T) {
 	var tried []string
 	got, found, err := resolveExplicitObjectName(DefaultBackupPrefix, "9987654320999-2026-08-12T010203.456Z.tar.gz", func(candidate string) (bool, error) {

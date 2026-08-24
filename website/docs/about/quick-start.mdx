@@ -15,13 +15,17 @@ asdf install database-tools <latest-version>
 asdf set -u database-tools <latest-version>
 ```
 
-Or download prebuilt binaries from the [GitHub Releases](https://github.com/egose/database-tools/releases) page and place `mongo-archive` and `mongo-unarchive` in your `PATH`.
+Or download prebuilt binaries from the [GitHub Releases](https://github.com/egose/database-tools/releases) page and place `mongo-archive`, `mongo-unarchive`, `postgres-archive`, and `postgres-unarchive` in your `PATH`.
+
+Native PostgreSQL operations also require compatible `pg_dump` and `pg_restore` clients in `PATH`. The published container image includes pinned PostgreSQL clients.
 
 Verify the installation:
 
 ```bash
 mongo-archive --version
 mongo-unarchive --version
+postgres-archive --version
+postgres-unarchive --version
 ```
 
 ## Archive to Azure Blob Storage
@@ -62,3 +66,32 @@ mongo-unarchive \
 ```
 
 To restore a legacy or manually named object, pass `--object-name` explicitly.
+
+## Archive PostgreSQL to Local Storage
+
+```bash
+set -eu
+postgres-archive \
+  --host=postgres.example.com \
+  --user=<username> \
+  --database=appdb \
+  --ssl-mode=require \
+  --local-path=/var/backups/database-tools
+```
+
+Supply `POSTGRESARCHIVE__PASSWORD` through secret injection rather than putting it in the command line.
+
+## Restore the Latest PostgreSQL Backup from S3
+
+```bash
+set -eu
+postgres-unarchive \
+  --host=postgres.example.com \
+  --user=<username> \
+  --database=appdb_restore \
+  --ssl-mode=require \
+  --aws-region=us-east-1 \
+  --aws-bucket=<bucket_name>
+```
+
+`postgres-unarchive` restores into an existing database and may leave partial changes if `pg_restore` fails after it starts.

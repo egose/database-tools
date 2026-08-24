@@ -1,0 +1,60 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-archive
+spec:
+  schedule: 0 2 * * *
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: backup-job
+            image: ghcr.io/egose/database-tools:<latest-version>
+            imagePullPolicy: IfNotPresent
+            command: [/bin/sh, -c]
+            args:
+            - |
+              set -eu
+              postgres-archive --local-path=/backups
+            env:
+            - name: POSTGRESARCHIVE__HOST
+              value: postgres.example.com
+            - name: POSTGRESARCHIVE__USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-archive-secrets
+                  key: postgres-user
+            - name: POSTGRESARCHIVE__PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-archive-secrets
+                  key: postgres-password
+            - name: POSTGRESARCHIVE__DATABASE
+              value: appdb
+            - name: POSTGRESARCHIVE__SSL_MODE
+              value: require
+            - name: POSTGRESARCHIVE__LOCAL_PATH
+              value: /backups
+            volumeMounts:
+            - mountPath: /backups
+              name: backup-volume
+          volumes:
+          - name: backup-volume
+            persistentVolumeClaim:
+              claimName: backup-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi

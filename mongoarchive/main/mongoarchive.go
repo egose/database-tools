@@ -6,10 +6,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strings"
 	"syscall"
 	"time"
 
+	"github.com/egose/database-tools/internal/archivedelivery"
 	"github.com/egose/database-tools/internal/toolruntime"
 	"github.com/egose/database-tools/mongoarchive"
 	"github.com/egose/database-tools/notification"
@@ -49,11 +49,6 @@ type archivePipeline struct {
 	deleteFile      func(string) error
 	handleInterrupt func(func()) chan struct{}
 	notify          notificationSender
-}
-
-type multiBackendArchiveError struct {
-	message string
-	cause   error
 }
 
 type cronOverlapPolicy string
@@ -404,105 +399,10 @@ func (s *gocronScheduler) Shutdown() error {
 	return s.scheduler.Shutdown()
 }
 
-func (e *multiBackendArchiveError) Error() string {
-	return e.message
-}
-
-func (e *multiBackendArchiveError) Unwrap() error {
-	return e.cause
-}
-
 func uploadBackupToStorages(ctx context.Context, storages []storage.ArchiveBackend, objectName string, tarfilePath string, operationTimeout time.Duration) error {
-	if len(storages) <= 1 {
-		return uploadBackupToSingleStorage(ctx, storages, objectName, tarfilePath, operationTimeout)
-	}
-
-	uploadedBackends := make([]string, 0, len(storages))
-	for i, s := range storages {
-		backendName := describeStorageBackend(i, s)
-		uploadCtx, cancel := toolruntime.OperationContext(ctx, operationTimeout)
-		result, err := s.Upload(uploadCtx, objectName, tarfilePath)
-		cancel()
-		if err != nil {
-			partialState := "before any backend upload completed"
-			if len(uploadedBackends) > 0 {
-				partialState = "after successful uploads to " + formatCompletedBackends(uploadedBackends, "none")
-			}
-			return &multiBackendArchiveError{
-				message: fmt.Sprintf(
-					"archive upload failed %s; retention was not run on any backend: failed to upload to %s: %v",
-					partialState,
-					backendName,
-					err,
-				),
-				cause: err,
-			}
-		}
-		uploadedBackends = append(uploadedBackends, backendName)
-		mlog.Logvf(mlog.Always, "Successfully uploaded backup to %s: %v", backendName, result)
-	}
-
-	mlog.Logvf(mlog.Always, "Verified archive upload across %d storage backends; starting retention.", len(uploadedBackends))
-
-	retainedBackends := make([]string, 0, len(storages))
-	for i, s := range storages {
-		backendName := describeStorageBackend(i, s)
-		deleteCtx, cancel := toolruntime.OperationContext(ctx, operationTimeout)
-		err := s.DeleteOldObjects(deleteCtx, objectName)
-		cancel()
-		if err != nil {
-			return &multiBackendArchiveError{
-				message: fmt.Sprintf(
-					"archive retention failed after successful retention on %s; archive upload completed on all configured backends: failed to delete old objects in %s: %v",
-					formatCompletedBackends(retainedBackends, "none"),
-					backendName,
-					err,
-				),
-				cause: err,
-			}
-		}
-		retainedBackends = append(retainedBackends, backendName)
-	}
-
-	return nil
-}
-
-func uploadBackupToSingleStorage(ctx context.Context, storages []storage.ArchiveBackend, objectName string, tarfilePath string, operationTimeout time.Duration) error {
-	for _, s := range storages {
-		uploadCtx, cancel := toolruntime.OperationContext(ctx, operationTimeout)
-		result, err := s.Upload(uploadCtx, objectName, tarfilePath)
-		cancel()
-		if err != nil {
-			return fmt.Errorf("failed to upload to %T: %w", s, err)
-		}
-		mlog.Logvf(mlog.Always, "Successfully uploaded backup to %T: %v", s, result)
-
-		deleteCtx, cancel := toolruntime.OperationContext(ctx, operationTimeout)
-		err = s.DeleteOldObjects(deleteCtx, objectName)
-		cancel()
-		if err != nil {
-			return fmt.Errorf("failed to delete old objects in %T: %w", s, err)
-		}
-	}
-
-	return nil
-}
-
-func describeStorageBackend(index int, storageBackend storage.ArchiveBackend) string {
-	if named, ok := storageBackend.(storage.BackendIdentifier); ok {
-		if name, err := storage.BackendName(named); err == nil {
-			return fmt.Sprintf("backend #%d (%s)", index+1, name)
-		}
-	}
-	return fmt.Sprintf("backend #%d (%T)", index+1, storageBackend)
-}
-
-func formatCompletedBackends(backends []string, empty string) string {
-	if len(backends) == 0 {
-		return empty
-	}
-
-	return strings.Join(backends, ", ")
+	return archivedelivery.Deliver(ctx, storages, objectName, tarfilePath, operationTimeout, func(format string, args ...any) {
+		mlog.Logvf(mlog.Always, format, args...)
+	})
 }
 
 func newNotificationGroup(cfg *mongoarchive.Config) (*notificationGroup, error) {

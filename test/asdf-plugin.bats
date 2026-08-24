@@ -16,8 +16,10 @@ make_release_archive() {
   mkdir -p "$WORK/source"
   printf '#!/bin/sh\nexit 0\n' > "$WORK/source/mongo-archive"
   printf '#!/bin/sh\nexit 0\n' > "$WORK/source/mongo-unarchive"
+  printf '#!/bin/sh\nexit 0\n' > "$WORK/source/postgres-archive"
+  printf '#!/bin/sh\nexit 0\n' > "$WORK/source/postgres-unarchive"
   printf 'Apache License\n' > "$WORK/source/LICENSE"
-  tar -C "$WORK/source" -czf "$archive" mongo-archive mongo-unarchive LICENSE
+  tar -C "$WORK/source" -czf "$archive" mongo-archive mongo-unarchive postgres-archive postgres-unarchive LICENSE
 }
 
 make_uname() {
@@ -74,7 +76,7 @@ EOF
   [[ $output == *"Checksum verification failed"* ]]
 }
 
-@test "install atomically installs both executables and the license" {
+@test "install atomically installs all executables and the license" {
   mkdir -p "$WORK/download" "$WORK/installs"
   make_release_archive "$WORK/download/database-tools-linux-amd64.tar.gz"
 
@@ -83,21 +85,42 @@ EOF
   [ "$status" -eq 0 ]
   [ -x "$WORK/installs/1.2.3/bin/mongo-archive" ]
   [ -x "$WORK/installs/1.2.3/bin/mongo-unarchive" ]
+  [ -x "$WORK/installs/1.2.3/bin/postgres-archive" ]
+  [ -x "$WORK/installs/1.2.3/bin/postgres-unarchive" ]
   [ -f "$WORK/installs/1.2.3/LICENSE" ]
   [ -z "$(find "$WORK/installs" -maxdepth 1 -name '.database-tools.install.*' -print)" ]
+  [[ $output == *"PostgreSQL operations require compatible external pg_dump and pg_restore clients in PATH"* ]]
 }
 
-@test "install accepts the checksummed legacy archive without a license" {
+@test "install accepts the checksummed archive without a license" {
   mkdir -p "$WORK/download" "$WORK/source"
   printf '#!/bin/sh\nexit 0\n' > "$WORK/source/mongo-archive"
   printf '#!/bin/sh\nexit 0\n' > "$WORK/source/mongo-unarchive"
-  tar -C "$WORK/source" -czf "$WORK/download/database-tools-linux-amd64.tar.gz" mongo-archive mongo-unarchive
+  printf '#!/bin/sh\nexit 0\n' > "$WORK/source/postgres-archive"
+  printf '#!/bin/sh\nexit 0\n' > "$WORK/source/postgres-unarchive"
+  tar -C "$WORK/source" -czf "$WORK/download/database-tools-linux-amd64.tar.gz" mongo-archive mongo-unarchive postgres-archive postgres-unarchive
 
   run env ASDF_INSTALL_TYPE=version ASDF_INSTALL_VERSION=0.16.0 ASDF_DOWNLOAD_PATH="$WORK/download" ASDF_INSTALL_PATH="$WORK/install" "$REPO_ROOT/bin/install"
 
   [ "$status" -eq 0 ]
   [ -x "$WORK/install/bin/mongo-archive" ]
   [ -x "$WORK/install/bin/mongo-unarchive" ]
+  [ -x "$WORK/install/bin/postgres-archive" ]
+  [ -x "$WORK/install/bin/postgres-unarchive" ]
+}
+
+@test "install rejects archives missing PostgreSQL wrappers" {
+  mkdir -p "$WORK/download" "$WORK/source"
+  printf '#!/bin/sh\nexit 0\n' > "$WORK/source/mongo-archive"
+  printf '#!/bin/sh\nexit 0\n' > "$WORK/source/mongo-unarchive"
+  printf 'Apache License\n' > "$WORK/source/LICENSE"
+  tar -C "$WORK/source" -czf "$WORK/download/database-tools-linux-amd64.tar.gz" mongo-archive mongo-unarchive LICENSE
+
+  run env ASDF_INSTALL_TYPE=version ASDF_INSTALL_VERSION=1.2.3 ASDF_DOWNLOAD_PATH="$WORK/download" ASDF_INSTALL_PATH="$WORK/install" "$REPO_ROOT/bin/install"
+
+  [ "$status" -ne 0 ]
+  [ ! -e "$WORK/install" ]
+  [[ $output == *"PostgreSQL native clients are external runtime dependencies and must not be bundled"* ]]
 }
 
 @test "install rejects unexpected archive members" {
@@ -115,8 +138,10 @@ EOF
   mkdir -p "$WORK/download" "$WORK/source"
   ln -s /bin/sh "$WORK/source/mongo-archive"
   printf '#!/bin/sh\nexit 0\n' > "$WORK/source/mongo-unarchive"
+  printf '#!/bin/sh\nexit 0\n' > "$WORK/source/postgres-archive"
+  printf '#!/bin/sh\nexit 0\n' > "$WORK/source/postgres-unarchive"
   printf 'Apache License\n' > "$WORK/source/LICENSE"
-  tar -C "$WORK/source" -czf "$WORK/download/database-tools-linux-amd64.tar.gz" mongo-archive mongo-unarchive LICENSE
+  tar -C "$WORK/source" -czf "$WORK/download/database-tools-linux-amd64.tar.gz" mongo-archive mongo-unarchive postgres-archive postgres-unarchive LICENSE
 
   run env ASDF_INSTALL_TYPE=version ASDF_INSTALL_VERSION=1.2.3 ASDF_DOWNLOAD_PATH="$WORK/download" ASDF_INSTALL_PATH="$WORK/install" "$REPO_ROOT/bin/install"
 

@@ -77,6 +77,16 @@ func TestGetStoragesUsesConfiguredLocalBackend(t *testing.T) {
 	}
 }
 
+func TestParseFlagsPreservesMongoBackupPrefixDefault(t *testing.T) {
+	cfg, _, err := parseFlags(newRestoreTestFlagSet("mongo-unarchive"), restoreMapEnv{}, nil)
+	if err != nil {
+		t.Fatalf("parseFlags() error = %v", err)
+	}
+	if cfg.BackupPrefix != "mongo-archive/" {
+		t.Fatalf("BackupPrefix = %q, want %q", cfg.BackupPrefix, "mongo-archive/")
+	}
+}
+
 func TestGetUpdatesRejectsOversizedInlineAndFileInputs(t *testing.T) {
 	t.Run("inline", func(t *testing.T) {
 		_, err := (&Config{UpdateOptions: UpdateOptions{Updates: `[{"a":1}]`}, RuntimeOptions: RuntimeOptions{UpdateMaxBytes: 8}}).GetUpdates()

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egose/database-tools/utils"
 )
@@ -213,6 +214,80 @@ func TestLocalStorageGetTargetObjectNameUsesManagedPrefix(t *testing.T) {
 	}
 	if got != "mongo-archive/9987654320999-2026-08-12T010203.456Z.tar.gz" {
 		t.Fatalf("GetTargetObjectName() = %q", got)
+	}
+}
+
+func TestLocalStorageMixedPrefixesKeepLatestSelectionAndRetentionIsolated(t *testing.T) {
+	now := time.Now()
+	objects := map[string]time.Time{
+		"mongo-archive/9987654321000-2026-08-20T010203.456Z.tar.gz":    now.Add(-72 * time.Hour),
+		"mongo-archive/9987654320999-2026-08-24T010203.456Z.tar.gz":    now.Add(-time.Hour),
+		"postgres-archive/9987654321000-2026-08-20T010203.456Z.tar.gz": now.Add(-72 * time.Hour),
+		"postgres-archive/9987654320999-2026-08-24T020304.567Z.tar.gz": now,
+		"custom/nested/9987654320998-2026-08-24T030405.678Z.tar.gz":    now.Add(time.Hour),
+	}
+	tests := []struct {
+		name       string
+		prefix     string
+		wantLatest string
+		wantOld    string
+	}{
+		{
+			name:       "MongoDB",
+			prefix:     MongoDefaultBackupPrefix,
+			wantLatest: "mongo-archive/9987654320999-2026-08-24T010203.456Z.tar.gz",
+			wantOld:    "mongo-archive/9987654321000-2026-08-20T010203.456Z.tar.gz",
+		},
+		{
+			name:       "PostgreSQL",
+			prefix:     PostgreSQLDefaultBackupPrefix,
+			wantLatest: "postgres-archive/9987654320999-2026-08-24T020304.567Z.tar.gz",
+			wantOld:    "postgres-archive/9987654321000-2026-08-20T010203.456Z.tar.gz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			for name, modifiedAt := range objects {
+				path := filepath.Join(root, filepath.FromSlash(name))
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					t.Fatalf("MkdirAll() error = %v", err)
+				}
+				if err := os.WriteFile(path, []byte(name), 0o600); err != nil {
+					t.Fatalf("WriteFile() error = %v", err)
+				}
+				if err := os.Chtimes(path, modifiedAt, modifiedAt); err != nil {
+					t.Fatalf("Chtimes() error = %v", err)
+				}
+			}
+
+			s := &LocalStorage{}
+			if err := s.Init(root, 1, tt.prefix); err != nil {
+				t.Fatalf("Init() error = %v", err)
+			}
+			got, err := s.GetTargetObjectName(context.Background(), "")
+			if err != nil {
+				t.Fatalf("GetTargetObjectName() error = %v", err)
+			}
+			if got != tt.wantLatest {
+				t.Fatalf("GetTargetObjectName() = %q, want %q", got, tt.wantLatest)
+			}
+			if err := s.DeleteOldObjects(context.Background(), tt.wantLatest); err != nil {
+				t.Fatalf("DeleteOldObjects() error = %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(tt.wantOld))); !os.IsNotExist(err) {
+				t.Fatalf("expired object %q still exists or stat failed: %v", tt.wantOld, err)
+			}
+			for name := range objects {
+				if name == tt.wantOld {
+					continue
+				}
+				if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(name))); err != nil {
+					t.Fatalf("out-of-scope object %q was changed: %v", name, err)
+				}
+			}
+		})
 	}
 }
 

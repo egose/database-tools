@@ -1,4 +1,25 @@
 services:
+  postgres:
+    container_name: database-tools-postgres
+    # See https://hub.docker.com/_/postgres/tags
+    image: postgres:16.10-bookworm@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74
+    environment:
+      POSTGRES_DB: integration
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres # pragma: allowlist secret
+    ports:
+    - 127.0.0.1:${POSTGRES_PORT:-5432}:5432
+    volumes:
+    - type: bind
+      source: ./mnt/postgres
+      target: /var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d integration -t 5]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
   mongodb:
     platform: linux/amd64
     container_name: database-tools-mongodb

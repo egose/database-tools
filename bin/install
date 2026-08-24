@@ -24,13 +24,12 @@ fi
     *-windows-*) suffix=".exe" ;;
     *) suffix="" ;;
   esac
-  archive_bin="mongo-archive${suffix}"
-  unarchive_bin="mongo-unarchive${suffix}"
-  expected=$(printf '%s\n' "$archive_bin" "$unarchive_bin" | LC_ALL=C sort)
-  expected_with_license=$(printf '%s\n' LICENSE "$archive_bin" "$unarchive_bin" | LC_ALL=C sort)
+  executables=("mongo-archive${suffix}" "mongo-unarchive${suffix}" "postgres-archive${suffix}" "postgres-unarchive${suffix}")
+  expected=$(printf '%s\n' "${executables[@]}" | LC_ALL=C sort)
+  expected_with_license=$(printf '%s\n' LICENSE "${executables[@]}" | LC_ALL=C sort)
   members=$(tar -tzf "${archives[0]}" | sed 's#^\./##' | sed '/^$/d' | LC_ALL=C sort)
   if [ "$members" != "$expected" ] && [ "$members" != "$expected_with_license" ]; then
-    printf 'Release archive must contain exactly %s and %s, with an optional LICENSE.\n' "$archive_bin" "$unarchive_bin" >&2
+    printf 'Release archive must contain exactly %s, with an optional LICENSE. PostgreSQL native clients are external runtime dependencies and must not be bundled in this archive.\n' "${executables[*]}" >&2
     exit 1
   fi
   if ! tar -tvzf "${archives[0]}" | awk '$1 ~ /^d/ && $NF == "./" { next } $1 !~ /^-/ { exit 1 }'; then
@@ -44,7 +43,7 @@ fi
   stage=$(mktemp -d "$parent/.${tool_name}.install.XXXXXX")
   trap 'rm -rf "$stage"' EXIT
   tar --no-same-owner --no-same-permissions -xzf "${archives[0]}" -C "$stage"
-  for executable in "$archive_bin" "$unarchive_bin"; do
+  for executable in "${executables[@]}"; do
     if [ ! -f "$stage/$executable" ] || [ -L "$stage/$executable" ]; then
       printf 'Release archive member %s must be a regular file.\n' "$executable" >&2
       exit 1
@@ -56,8 +55,10 @@ fi
   fi
 
   mkdir "$stage/bin"
-  mv "$stage/$archive_bin" "$stage/$unarchive_bin" "$stage/bin/"
-  chmod 0755 "$stage/bin/$archive_bin" "$stage/bin/$unarchive_bin"
+  for executable in "${executables[@]}"; do
+    mv "$stage/$executable" "$stage/bin/"
+    chmod 0755 "$stage/bin/$executable"
+  done
   if [ -f "$stage/LICENSE" ]; then
     chmod 0644 "$stage/LICENSE"
   fi
@@ -71,6 +72,7 @@ fi
   mv "$stage" "$install_path"
   trap - EXIT
   printf '%s v%s installation was successful.\n' "$tool_name" "$version"
+  printf 'PostgreSQL operations require compatible external pg_dump and pg_restore clients in PATH. They are not bundled by native release archives.\n'
 ) || {
   printf 'Error: Installation failed.\n' >&2
   exit 1

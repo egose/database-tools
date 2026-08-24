@@ -43,6 +43,16 @@ func TestConfigCronDefaults(t *testing.T) {
 	}
 }
 
+func TestParseFlagsPreservesMongoBackupPrefixDefault(t *testing.T) {
+	cfg, _, err := parseFlags(newTestFlagSet("mongo-archive"), mapEnv{}, nil)
+	if err != nil {
+		t.Fatalf("parseFlags() error = %v", err)
+	}
+	if cfg.BackupPrefix != "mongo-archive/" {
+		t.Fatalf("BackupPrefix = %q, want %q", cfg.BackupPrefix, "mongo-archive/")
+	}
+}
+
 func TestParseFlagsRejectsInvalidRetentionAndNotificationConfig(t *testing.T) {
 	t.Run("expiry", func(t *testing.T) {
 		_, _, err := parseFlags(newTestFlagSet("mongo-archive"), mapEnv{}, []string{"--expiry-days=-1"})

@@ -235,6 +235,13 @@ var storageFlagDefs = struct {
 var restoreStorageBackendFlagDef = StringFlagDef{Name: "storage-backend", EnvKey: "STORAGE_BACKEND", Usage: "Storage backend to use for restore when multiple backends are configured (azure, aws, gcp, local)"}
 
 func BindStorageFlags(fs FlagBinder, env EnvReader) StorageFlagBindings {
+	return BindStorageFlagsWithDefaultPrefix(fs, env, storage.DefaultBackupPrefix)
+}
+
+func BindStorageFlagsWithDefaultPrefix(fs FlagBinder, env EnvReader, defaultPrefix string) StorageFlagBindings {
+	backupPrefixDef := storageFlagDefs.backupPrefix
+	backupPrefixDef.Defaults = []string{storage.NormalizeBackupPrefixWithDefault("", defaultPrefix)}
+
 	return StorageFlagBindings{
 		AZEndpoint:          storageFlagDefs.azEndpoint.Bind(fs, env),
 		AZAccountName:       storageFlagDefs.azAccountName.Bind(fs, env),
@@ -255,7 +262,7 @@ func BindStorageFlags(fs FlagBinder, env EnvReader) StorageFlagBindings {
 		GCPClientEmail:      storageFlagDefs.gcpClientEmail.Bind(fs, env),
 		GCPClientID:         storageFlagDefs.gcpClientID.Bind(fs, env),
 		LocalPath:           storageFlagDefs.localPath.Bind(fs, env),
-		BackupPrefix:        storageFlagDefs.backupPrefix.Bind(fs, env),
+		BackupPrefix:        backupPrefixDef.Bind(fs, env),
 	}
 }
 

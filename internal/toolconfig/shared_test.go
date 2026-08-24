@@ -7,6 +7,8 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"flag"
+	"io"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -16,6 +18,68 @@ import (
 
 	"github.com/egose/database-tools/storage"
 )
+
+func TestBindStorageFlagsUsesDatabaseSpecificDefaultPrefix(t *testing.T) {
+	tests := []struct {
+		name          string
+		defaultPrefix string
+		compatibility bool
+		want          string
+	}{
+		{name: "MongoDB compatibility wrapper", compatibility: true, want: storage.MongoDefaultBackupPrefix},
+		{name: "MongoDB explicit default", defaultPrefix: storage.MongoDefaultBackupPrefix, want: storage.MongoDefaultBackupPrefix},
+		{name: "PostgreSQL explicit default", defaultPrefix: storage.PostgreSQLDefaultBackupPrefix, want: storage.PostgreSQLDefaultBackupPrefix},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := flag.NewFlagSet(tt.name, flag.ContinueOnError)
+			fs.SetOutput(io.Discard)
+			var bindings StorageFlagBindings
+			if tt.compatibility {
+				bindings = BindStorageFlags(fs, testEnv{})
+			} else {
+				bindings = BindStorageFlagsWithDefaultPrefix(fs, testEnv{}, tt.defaultPrefix)
+			}
+
+			options := StorageOptions{}
+			bindings.Apply(&options)
+			if options.BackupPrefix != tt.want {
+				t.Fatalf("BackupPrefix = %q, want %q", options.BackupPrefix, tt.want)
+			}
+		})
+	}
+}
+
+func TestBindStorageFlagsKeepsCustomPrefixForBothDatabaseFamilies(t *testing.T) {
+	for _, defaultPrefix := range []string{storage.MongoDefaultBackupPrefix, storage.PostgreSQLDefaultBackupPrefix} {
+		t.Run(defaultPrefix, func(t *testing.T) {
+			fs := flag.NewFlagSet(defaultPrefix, flag.ContinueOnError)
+			fs.SetOutput(io.Discard)
+			bindings := BindStorageFlagsWithDefaultPrefix(fs, testEnv{
+				"BACKUP_PREFIX": "/shared/custom/",
+				"LOCAL_PATH":    t.TempDir(),
+			}, defaultPrefix)
+			options := StorageOptions{}
+			bindings.Apply(&options)
+
+			storages, err := options.GetArchiveStorages(context.Background(), 0)
+			if err != nil {
+				t.Fatalf("GetArchiveStorages() error = %v", err)
+			}
+			if len(storages) != 1 {
+				t.Fatalf("GetArchiveStorages() len = %d, want 1", len(storages))
+			}
+			local, ok := storages[0].(*storage.LocalStorage)
+			if !ok {
+				t.Fatalf("GetArchiveStorages()[0] = %T, want *storage.LocalStorage", storages[0])
+			}
+			if local.BackupPrefix != "shared/custom/" {
+				t.Fatalf("BackupPrefix = %q, want %q", local.BackupPrefix, "shared/custom/")
+			}
+		})
+	}
+}
 
 func TestGetStoragesReturnsConfiguredLocalBackend(t *testing.T) {
 	options := StorageOptions{LocalPath: t.TempDir()}

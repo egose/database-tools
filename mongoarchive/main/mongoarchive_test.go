@@ -351,7 +351,7 @@ func TestUploadBackupToStoragesMultiBackendReturnsExplicitPartialUploadFailure(t
 	}
 }
 
-func TestUploadBackupToStoragesMultiBackendStopsBeforeLaterMutationWhenFirstUploadFails(t *testing.T) {
+func TestUploadBackupToStoragesMultiBackendAttemptsLaterUploadWhenFirstUploadFails(t *testing.T) {
 	uploadErr := errors.New("upload failed")
 	var callLog []string
 	first := &recordingStorage{name: "first", callLog: &callLog, uploadErr: uploadErr}
@@ -366,7 +366,10 @@ func TestUploadBackupToStoragesMultiBackendStopsBeforeLaterMutationWhenFirstUplo
 		t.Fatalf("uploadBackupToStorages() error = %v, want explicit retention state", err)
 	}
 
-	want := []string{"first:upload:" + objectName}
+	want := []string{
+		"first:upload:" + objectName,
+		"second:upload:" + objectName,
+	}
 	if !reflect.DeepEqual(callLog, want) {
 		t.Fatalf("uploadBackupToStorages() call log = %#v, want %#v", callLog, want)
 	}
