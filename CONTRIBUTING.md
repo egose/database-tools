@@ -11,7 +11,7 @@ Thank you for helping improve `database-tools`. This project contains backup and
 
 ## Tooling
 
-Use the versions in `.tool-versions` when possible. The repository currently expects Go `1.26.6`, pnpm `11.17.0`, Node.js `26.7.0`, Python `3.14.6`, Bats `1.14.0`, Docker Compose `5.4.0`, actionlint `1.7.12`, and shellcheck `0.11.0`.
+Use the versions in `.tool-versions` when possible. The repository currently expects Go `1.26.6`, pnpm `11.24.0`, Node.js `26.7.0`, Python `3.14.7`, Bats `1.14.0`, Docker Compose `5.5.0`, actionlint `1.7.12`, and shellcheck `0.11.0`.
 
 Install JavaScript tooling with:
 
