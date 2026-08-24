@@ -1,3 +1,13 @@
+## [0.19.0](https://github.com/egose/database-tools/compare/v0.18.0...v0.19.0) (2026-08-24)
+
+### Features
+
+* cache Go builds and parallelize archive generation ([f05fdcb](https://github.com/egose/database-tools/commit/f05fdcbe1b85d5b8ef574dfdbd88b78d911a50f1))
+
+### Documentation
+
+* update release artifact reproducibility policy ([2ca7df5](https://github.com/egose/database-tools/commit/2ca7df59b94ff9012244a29775c20bd1993c5f3c))
+
 ## [0.18.0](https://github.com/egose/database-tools/compare/v0.17.1...v0.18.0) (2026-08-24)
 
 ### Features
