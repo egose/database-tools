@@ -7,7 +7,6 @@ ARG VERSION=localdev
 ARG REVISION=unknown
 
 COPY Makefile go.mod go.sum ./
-COPY common ./common
 COPY internal ./internal
 COPY mongoarchive ./mongoarchive
 COPY mongounarchive ./mongounarchive
