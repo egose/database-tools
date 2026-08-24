@@ -62,8 +62,6 @@ jobs:
         source .env.test
         set +a
 
-        export MACHINE_HOST_IP
-        MACHINE_HOST_IP=$(hostname -I | awk '{print $1}')
         docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml up -d
 
         node_modules/.bin/wait-on tcp:127.0.0.1:27017 tcp:127.0.0.1:9000 http://localhost:9001 tcp:127.0.0.1:10000 tcp:127.0.0.1:"$FAKE_GCP_PORT" --timeout 120000

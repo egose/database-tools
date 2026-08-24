@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tool_name="database-tools"
+github_coordinates="${ASDF_DATABASE_TOOLS_GITHUB_REPOSITORY:-egose/database-tools}"
+base_download_url="https://github.com/${github_coordinates}/releases/download"
+version="$ASDF_INSTALL_VERSION"
+download_path="$ASDF_DOWNLOAD_PATH"
+
+identifier='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+[[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-${identifier}(\.${identifier})*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]] || {
+  printf 'Invalid version: %s\n' "$version" >&2
+  exit 1
+}
+
+case "$(uname -s)" in
+  Darwin) os="darwin" ;;
+  Linux) os="linux" ;;
+  FreeBSD) os="freebsd" ;;
+  OpenBSD) os="openbsd" ;;
+  NetBSD) os="netbsd" ;;
+  *) printf 'Unsupported OS: %s\n' "$(uname -s)" >&2; exit 1 ;;
+esac
+
+case "$(uname -m)" in
+  x86_64|amd64) arch="amd64" ;;
+  arm64|aarch64) arch="arm64" ;;
+  i386|i686) arch="386" ;;
+  armv6l|armv7l|arm) arch="arm" ;;
+  mips) arch="mips" ;;
+  mips64) arch="mips64" ;;
+  *) printf 'Unsupported architecture: %s\n' "$(uname -m)" >&2; exit 1 ;;
+esac
+
+case "${os}:${arch}" in
+  linux:amd64|linux:arm64|linux:386|linux:arm|linux:mips|linux:mips64|darwin:amd64|darwin:arm64|freebsd:amd64|freebsd:arm64|openbsd:amd64|openbsd:arm64|netbsd:amd64) ;;
+  *) printf 'Unsupported platform: %s:%s\n' "$os" "$arch" >&2; exit 1 ;;
+esac
+
+filename="${tool_name}-${os}-${arch}.tar.gz"
+checksums_filename="${tool_name}-v${version}-sha256.txt"
+download_url="${base_download_url}/v${version}/${filename}"
+checksums_url="${base_download_url}/v${version}/${checksums_filename}"
+
+mkdir -p "$download_path"
+archive_tmp="$download_path/.${filename}.tmp"
+checksums_tmp="$download_path/.${checksums_filename}.tmp"
+trap 'rm -f "$archive_tmp" "$checksums_tmp"' EXIT
+
+curl -fsSL --connect-timeout 10 --retry 3 "$download_url" -o "$archive_tmp"
+curl -fsSL --connect-timeout 10 --retry 3 "$checksums_url" -o "$checksums_tmp"
+
+expected=$(awk -v name="$filename" '$2 == name || $2 == "*" name || $2 == "./" name || $2 == "dist/" name { print $1 }' "$checksums_tmp")
+[[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || {
+  printf 'Expected exactly one SHA-256 checksum for %s.\n' "$filename" >&2
+  exit 1
+}
+
+if command -v sha256sum >/dev/null 2>&1; then
+  actual=$(sha256sum "$archive_tmp")
+else
+  actual=$(shasum -a 256 "$archive_tmp")
+fi
+actual=$(printf '%s' "${actual%% *}" | tr '[:upper:]' '[:lower:]')
+expected=$(printf '%s' "$expected" | tr '[:upper:]' '[:lower:]')
+test "$actual" = "$expected" || {
+  printf 'Checksum verification failed for %s.\n' "$filename" >&2
+  exit 1
+}
+
+mv "$archive_tmp" "$download_path/$filename"
+mv "$checksums_tmp" "$download_path/$checksums_filename"
+trap - EXIT
+printf 'Download and checksum verification successful.\n'

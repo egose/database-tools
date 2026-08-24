@@ -1,9 +1,12 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:base"],
-  "docker": {
-    "pinDigests": true
-  },
+  "extends": ["config:recommended"],
+  "packageRules": [
+    {
+      "matchDatasources": ["docker"],
+      "pinDigests": true
+    }
+  ],
   "customManagers": [
     {
       "customType": "regex",
@@ -16,20 +19,10 @@
     },
     {
       "customType": "regex",
-      "fileMatch": ["^\\.github/actions/setup-tools/action\\.yml$"],
+      "fileMatch": ["^scripts/setup-asdf-tools\\.sh$"],
       "matchStrings": [
-        "add_pinned_plugin mongodb https://github\\.com/junminahn/asdf-mongodb\\.git (?<currentDigest>[a-f0-9]{40})"
+        "add_pinned_plugin [^ ]+ https://github\\.com/(?<depName>[^ ]+)\\.git (?<currentDigest>[a-f0-9]{40})"
       ],
-      "depNameTemplate": "junminahn/asdf-mongodb",
-      "datasourceTemplate": "git-refs"
-    },
-    {
-      "customType": "regex",
-      "fileMatch": ["^\\.github/actions/setup-tools/action\\.yml$"],
-      "matchStrings": [
-        "add_pinned_plugin docker-compose https://github\\.com/egose/asdf-docker-compose\\.git (?<currentDigest>[a-f0-9]{40})"
-      ],
-      "depNameTemplate": "egose/asdf-docker-compose",
       "datasourceTemplate": "git-refs"
     }
   ]

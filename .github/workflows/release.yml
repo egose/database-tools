@@ -5,6 +5,10 @@ on:
     tags:
     - v*.*.*
 
+concurrency:
+  group: release-publication
+  cancel-in-progress: false
+
 jobs:
   verify:
     runs-on: ubuntu-24.04
@@ -50,14 +54,23 @@ jobs:
     - name: Setup Tools
       uses: ./.github/actions/setup-tools
 
+    - name: Validate release tag
+      run: bash scripts/validate-release-tag.sh "$RELEASE_TAG"
+      env:
+        RELEASE_TAG: ${{ github.ref_name }}
+
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c
 
     - name: Verify tagged release candidate
-      run: make release-verify VERSION=${{ github.ref_name }}
+      run: make release-verify VERSION="$RELEASE_TAG"
+      env:
+        RELEASE_TAG: ${{ github.ref_name }}
 
     - name: Write checksums
-      run: sha256sum dist/*.tar.gz > dist/database-tools-${{ github.ref_name }}-sha256.txt
+      run: (cd dist && sha256sum ./*.tar.gz > "database-tools-${RELEASE_TAG}-sha256.txt")
+      env:
+        RELEASE_TAG: ${{ github.ref_name }}
 
     - name: Generate SBOM
       run: |
@@ -65,7 +78,9 @@ jobs:
           -v "$PWD:/workspace" \
           anchore/syft:v1.38.0@sha256:825cad3a952c87676a6d07e9a3bb05ac9c401d598360070e970aa46d54c1727e \
           dir:/workspace/dist \
-          -o spdx-json=/workspace/dist/database-tools-${{ github.ref_name }}-sbom.spdx.json
+          -o "spdx-json=/workspace/dist/database-tools-${RELEASE_TAG}-sbom.spdx.json"
+      env:
+        RELEASE_TAG: ${{ github.ref_name }}
 
     - name: Attest release artifacts
       uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8

@@ -50,7 +50,6 @@ Integration tests require Docker services and a test environment file:
 ```sh
 cp .env.example .env.test
 mkdir -p ./sandbox/mnt/mongodb ./sandbox/mnt/minio ./sandbox/mnt/azurite ./sandbox/mnt/fake-gcs-server
-export MACHINE_HOST_IP=$(hostname -I | awk '{print $1}')
 docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml up -d
 bats --print-output-on-failure test/test.bats
 docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml down -v --remove-orphans

@@ -9,6 +9,10 @@ on:
         required: false
         default: ''
 
+concurrency:
+  group: release-publication
+  cancel-in-progress: false
+
 jobs:
   tag-changelog:
     runs-on: ubuntu-24.04
@@ -31,6 +35,12 @@ jobs:
 
     - name: Setup NPM Packages
       uses: ./.github/actions/setup-npm
+
+    - name: Validate requested version
+      if: github.event.inputs.tag != ''
+      run: bash scripts/validate-release-tag.sh "v$RELEASE_VERSION"
+      env:
+        RELEASE_VERSION: ${{ github.event.inputs.tag }}
 
     - name: Create Release Tag
       uses: egose/actions/release-tag@4a6a7482207c0ba30b3b6487cccef3491bde6e7c

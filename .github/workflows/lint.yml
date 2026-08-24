@@ -30,6 +30,12 @@ jobs:
         commit-on-push: false
         commit-on-pr: false
 
+    - name: Lint workflows
+      run: actionlint
+
+    - name: Lint shell scripts
+      run: shellcheck .bin/*.sh scripts/*.sh bin/*
+
   pre-commit-fix:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
@@ -48,3 +54,9 @@ jobs:
         config: .pre-commit-config.yaml
         commit-on-push: true
         commit-on-pr: false
+
+    - name: Lint workflows
+      run: actionlint
+
+    - name: Lint shell scripts
+      run: shellcheck .bin/*.sh scripts/*.sh bin/*

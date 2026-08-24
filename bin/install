@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+tool_name="database-tools"
+install_type="$ASDF_INSTALL_TYPE"
+version="$ASDF_INSTALL_VERSION"
+install_path="$ASDF_INSTALL_PATH"
+download_path="$ASDF_DOWNLOAD_PATH"
+
+if [ "$install_type" != "version" ]; then
+  printf 'asdf-%s supports install type version only (got: %s)\n' "$tool_name" "$install_type" >&2
+  exit 1
+fi
+
+(
+  shopt -s nullglob
+  archives=("$download_path"/*.tar.gz)
+  if [ "${#archives[@]}" -ne 1 ]; then
+    printf 'Expected exactly one release archive in %s, found %s.\n' "$download_path" "${#archives[@]}" >&2
+    exit 1
+  fi
+
+  case "${archives[0]}" in
+    *-windows-*) suffix=".exe" ;;
+    *) suffix="" ;;
+  esac
+  archive_bin="mongo-archive${suffix}"
+  unarchive_bin="mongo-unarchive${suffix}"
+  expected=$(printf '%s\n' "$archive_bin" "$unarchive_bin" | LC_ALL=C sort)
+  expected_with_license=$(printf '%s\n' LICENSE "$archive_bin" "$unarchive_bin" | LC_ALL=C sort)
+  members=$(tar -tzf "${archives[0]}" | sed 's#^\./##' | sed '/^$/d' | LC_ALL=C sort)
+  if [ "$members" != "$expected" ] && [ "$members" != "$expected_with_license" ]; then
+    printf 'Release archive must contain exactly %s and %s, with an optional LICENSE.\n' "$archive_bin" "$unarchive_bin" >&2
+    exit 1
+  fi
+  if ! tar -tvzf "${archives[0]}" | awk '$1 ~ /^d/ && $NF == "./" { next } $1 !~ /^-/ { exit 1 }'; then
+    printf 'Release archive members must be regular files.\n' >&2
+    exit 1
+  fi
+
+  parent=${install_path%/*}
+  [ "$parent" != "$install_path" ] || parent=.
+  mkdir -p "$parent"
+  stage=$(mktemp -d "$parent/.${tool_name}.install.XXXXXX")
+  trap 'rm -rf "$stage"' EXIT
+  tar --no-same-owner --no-same-permissions -xzf "${archives[0]}" -C "$stage"
+  for executable in "$archive_bin" "$unarchive_bin"; do
+    if [ ! -f "$stage/$executable" ] || [ -L "$stage/$executable" ]; then
+      printf 'Release archive member %s must be a regular file.\n' "$executable" >&2
+      exit 1
+    fi
+  done
+  if [ -e "$stage/LICENSE" ] && { [ ! -f "$stage/LICENSE" ] || [ -L "$stage/LICENSE" ]; }; then
+    printf 'Release archive member LICENSE must be a regular file.\n' >&2
+    exit 1
+  fi
+
+  mkdir "$stage/bin"
+  mv "$stage/$archive_bin" "$stage/$unarchive_bin" "$stage/bin/"
+  chmod 0755 "$stage/bin/$archive_bin" "$stage/bin/$unarchive_bin"
+  if [ -f "$stage/LICENSE" ]; then
+    chmod 0644 "$stage/LICENSE"
+  fi
+
+  if [ -d "$install_path" ]; then
+    rmdir "$install_path" || { printf 'Install path already exists and is not empty: %s\n' "$install_path" >&2; exit 1; }
+  elif [ -e "$install_path" ]; then
+    printf 'Install path already exists: %s\n' "$install_path" >&2
+    exit 1
+  fi
+  mv "$stage" "$install_path"
+  trap - EXIT
+  printf '%s v%s installation was successful.\n' "$tool_name" "$version"
+) || {
+  printf 'Error: Installation failed.\n' >&2
+  exit 1
+}

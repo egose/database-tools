@@ -3,7 +3,7 @@ services:
     platform: linux/amd64
     container_name: database-tools-mongodb
     # See https://hub.docker.com/r/bitnami/mongodb/tags
-    image: ghcr.io/egose/bitnami-mongodb:8.2.7
+    image: ghcr.io/egose/bitnami-mongodb:8.2.7@sha256:2683244a60e66970271aee7fe509354f60c1a7e1dfbcaf8e025fc5e2c4b1bb27
     environment:
     - MONGODB_ADVERTISED_HOSTNAME=127.0.0.1
     - MONGODB_REPLICA_SET_MODE=primary
@@ -11,7 +11,7 @@ services:
     - MONGODB_ROOT_PASSWORD=mongodb
     - MONGODB_REPLICA_SET_KEY=replicasetkey123
     ports:
-    - 27017:27017
+    - 127.0.0.1:27017:27017
     volumes:
     - type: bind
       source: ./mnt/mongodb
@@ -20,10 +20,10 @@ services:
   minio:
     platform: linux/amd64
     container_name: database-tools-minio
-    image: minio/minio:RELEASE.2025-02-07T23-21-09Z
+    image: minio/minio:RELEASE.2025-02-07T23-21-09Z@sha256:640c22768ed5dbc92eacc14502a1b06a1c708fa60431345c78dfc22917062e93
     ports:
-    - 9000:9000
-    - 9001:9001
+    - 127.0.0.1:9000:9000
+    - 127.0.0.1:9001:9001
     volumes:
     - type: bind
       source: ./mnt/minio
@@ -36,25 +36,30 @@ services:
   minio-init:
     platform: linux/amd64
     # See https://hub.docker.com/r/minio/mc/tags
-    image: minio/mc:RELEASE.2025-02-08T19-14-21Z
-    entrypoint: >
-      /bin/sh -c "
-      set -eu;
-      until /usr/bin/mc alias set minio http://minio:9000 minioadmin minioadmin; do sleep 1; done;
-      until /usr/bin/mc ready minio; do sleep 1; done;
-      /usr/bin/mc rb --force minio/${MINIO_BUCKET} || true;
-      /usr/bin/mc mb minio/${MINIO_BUCKET};
-      /usr/bin/mc anonymous set download minio/${MINIO_BUCKET};
-      svcacct_output=$$(/usr/bin/mc admin user svcacct add minio minioadmin --access-key ${MINIO_ACCESS_KEY} --secret-key ${MINIO_SECRET_KEY} 2>&1) || svcacct_status=$$?;
+    image: minio/mc:RELEASE.2025-02-08T19-14-21Z@sha256:5e8d8a62846797a34d1aaaafe9d9bebe75ac71229063383eadc497bd0e3f6317
+    environment:
+      MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    entrypoint:
+    - /bin/sh
+    - -c
+    - |
+      set -eu
+      until /usr/bin/mc alias set minio http://minio:9000 minioadmin minioadmin; do sleep 1; done
+      until /usr/bin/mc ready minio; do sleep 1; done
+      /usr/bin/mc rb --force "minio/$${MINIO_BUCKET}" || true
+      /usr/bin/mc mb "minio/$${MINIO_BUCKET}"
+      /usr/bin/mc anonymous set download "minio/$${MINIO_BUCKET}"
+      svcacct_output=$$(/usr/bin/mc admin user svcacct add minio minioadmin --access-key "$${MINIO_ACCESS_KEY}" --secret-key "$${MINIO_SECRET_KEY}" 2>&1) || svcacct_status=$$?
       if [ "$${svcacct_status:-0}" -ne 0 ]; then
         case "$$svcacct_output" in
           *[Aa]lready*exists*|*[Aa]lready*taken*) printf '%s\n' "$$svcacct_output" ;;
           *) printf '%s\n' "$$svcacct_output" >&2; exit "$$svcacct_status" ;;
-        esac;
+        esac
       else
-        printf '%s\n' "$$svcacct_output";
-      fi;
-      "
+        printf '%s\n' "$$svcacct_output"
+      fi
     depends_on:
     - minio
 
@@ -62,13 +67,13 @@ services:
     platform: linux/amd64
     container_name: database-tools-azurite
     # See https://github.com/Azure/Azurite/tags
-    image: mcr.microsoft.com/azure-storage/azurite:3.36.0
+    image: mcr.microsoft.com/azure-storage/azurite:3.36.0@sha256:76b8127d608fab8287a14a4bfeb9a5502cdcffb4bf1e86f09f324ebb0e70edba
     restart: always
     environment:
       AZURITE_ACCOUNTS: ${AZURITE_ACCOUNT_NAME}:${AZURITE_ACCOUNT_KEY}
     ports:
-    - 10000:10000
-    - 10001:10001
+    - 127.0.0.1:10000:10000
+    - 127.0.0.1:10001:10001
     volumes:
     - type: bind
       source: ./mnt/azurite
@@ -80,16 +85,20 @@ services:
   fake-gcs-server:
     platform: linux/amd64
     container_name: database-tools-fake-gcs-server
-    image: fsouza/fake-gcs-server:1.55.1
+    image: fsouza/fake-gcs-server:1.55.1@sha256:91afded49de804aa61b5f3eb6c7cd65205acf9e5c5e047cf0ba7d9507af806c8
     restart: always
     ports:
-    - ${FAKE_GCP_PORT}:${FAKE_GCP_PORT}
+    - 127.0.0.1:${FAKE_GCP_PORT}:${FAKE_GCP_PORT}
+    environment:
+      FAKE_GCP_BUCKET: ${FAKE_GCP_BUCKET}
+      FAKE_GCP_PORT: ${FAKE_GCP_PORT}
     volumes:
     - type: bind
       source: ./mnt/fake-gcs-server
       target: /data
-    entrypoint: >
-      /bin/sh -c "
-       mkdir -p /data/${FAKE_GCP_BUCKET};
-      exec /bin/fake-gcs-server -data /data -scheme http -port ${FAKE_GCP_PORT} -public-host localhost:${FAKE_GCP_PORT};
-      "
+    entrypoint:
+    - /bin/sh
+    - -c
+    - |
+      mkdir -p "/data/$${FAKE_GCP_BUCKET}"
+      exec /bin/fake-gcs-server -data /data -scheme http -port "$${FAKE_GCP_PORT}" -public-host "localhost:$${FAKE_GCP_PORT}"
