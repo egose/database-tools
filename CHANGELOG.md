@@ -1,3 +1,13 @@
+## [0.18.0](https://github.com/egose/database-tools/compare/v0.17.1...v0.18.0) (2026-08-24)
+
+### Features
+
+* adopt shared docker publish action and update release workflows ([c66478c](https://github.com/egose/database-tools/commit/c66478c7fac0cb74bd388e7613c634c0941705b2))
+
+### Documentation
+
+* update release artifact policy for gated image publication ([95190e4](https://github.com/egose/database-tools/commit/95190e40c9ab82aef0c75190c0a17ae840834f23))
+
 ## [0.17.1](https://github.com/egose/database-tools/compare/v0.17.0...v0.17.1) (2026-08-24)
 
 ### Bug Fixes
