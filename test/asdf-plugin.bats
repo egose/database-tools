@@ -52,7 +52,7 @@ EOF
   make_curl
   mkdir -p "$WORK/release"
   make_release_archive "$WORK/release/database-tools-linux-amd64.tar.gz"
-  (cd "$WORK/release" && sha256sum ./database-tools-linux-amd64.tar.gz > database-tools-v1.2.3-sha256.txt)
+  (cd "$WORK/release" && sha256sum database-tools-linux-amd64.tar.gz > database-tools-v1.2.3-sha256.txt)
 
   run env PATH="$MOCK_BIN:$PATH" CURL_LOG="$WORK/urls" FIXTURES="$WORK/release" ASDF_INSTALL_VERSION=1.2.3 ASDF_DOWNLOAD_PATH="$WORK/download" "$REPO_ROOT/bin/download"
 

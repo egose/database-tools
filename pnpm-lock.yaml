@@ -21,8 +21,11 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6(release-it@20.2.1(@types/node@25.9.5)(supports-color@8.1.1))
       '@repo-toolkit/changelog':
-        specifier: ^0.7.2
-        version: 0.7.2(conventional-commits-filter@5.0.0)
+        specifier: ^0.14.0
+        version: 0.14.0(conventional-commits-filter@5.0.0)
+      '@repo-toolkit/go-release':
+        specifier: ^0.14.0
+        version: 0.14.0
       '@types/node':
         specifier: ^25.9.5
         version: 25.9.5
@@ -748,6 +751,14 @@ packages:
   '@babel/types@7.29.8':
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
+
+  '@clack/core@1.4.3':
+    resolution: {integrity: sha512-/kr3UWNtdJfxZtPgDqUOmG2pvwlmcLGheex5yiZKdwbzZJxhV+HMNR9QNmyY5cGwTNV6LrR7Jtp+KjhUAP1qBQ==}
+    engines: {node: '>= 20.12.0'}
+
+  '@clack/prompts@1.7.0':
+    resolution: {integrity: sha512-y7/yvZ2TPAnR9+jnc00klvNNLkJiXFFrQA/hlLCcxA9a2A4zQIOimyFQ9XfwYKiGD1fb5GY8vbKIIgO8d5Tb2A==}
+    engines: {node: '>= 20.12.0'}
 
   '@colors/colors@1.5.0':
     resolution: {integrity: sha512-ooWCrlZP11i8GImSjTHYHLkvFDP48nS4+204nGb1RiX/WXYHmJA2III9/e2DWVabCESdW7hBAEzHRqUn9OUVvQ==}
@@ -1848,13 +1859,18 @@ packages:
     peerDependencies:
       release-it: ^18.0.0 || ^19.0.0 || ^20.0.0
 
-  '@repo-toolkit/changelog@0.7.2':
-    resolution: {integrity: sha512-u91IxH5NQd5avn470shFY6d40oDA4DmKirTFpOQ8VanWzvAmUM4/bsPVrU5hkvoMpD4eVaDnRpvJbfQfJPdXHg==}
+  '@repo-toolkit/changelog@0.14.0':
+    resolution: {integrity: sha512-QHW0zYomxSC7nM4fapipmkT9aluVRuN34KUVvExsuVeL+Q+KiUOb6swEAWNJ65JfYYQpeytZ3gq6twDwBMd+yw==}
     engines: {node: '>=20'}
     hasBin: true
 
-  '@repo-toolkit/publish-package@0.7.2':
-    resolution: {integrity: sha512-8CtEX6mZQK/wMUMRIER7S3m6CQ6dNwX55zcway/ZHoZzBOb7c7bgG7BIQVD67rj2bsJKT79xxei/b7aGHxOv6w==}
+  '@repo-toolkit/go-release@0.14.0':
+    resolution: {integrity: sha512-beNzBUGHkDDkiGV6/L+Fr1o4zDvhMEpnghSXeFL06LmJaizrWOUMmNHXeanIpE/5Hp2NPgtvVHmLC8TLcZWdXg==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  '@repo-toolkit/publish-package@0.14.0':
+    resolution: {integrity: sha512-eaz6bI47KQVDgnlOEYl/iCzAxBYnnHqGLB7/NedevxSdM/LrReIIfJVBii2OSJ9iSKzLagLWuM3zF5NdUwqA7w==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -7424,6 +7440,18 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
+  '@clack/core@1.4.3':
+    dependencies:
+      fast-wrap-ansi: 0.2.2
+      sisteransi: 1.0.5
+
+  '@clack/prompts@1.7.0':
+    dependencies:
+      '@clack/core': 1.4.3
+      fast-string-width: 3.0.2
+      fast-wrap-ansi: 0.2.2
+      sisteransi: 1.0.5
+
   '@colors/colors@1.5.0':
     optional: true
 
@@ -9413,15 +9441,21 @@ snapshots:
       release-it: 20.2.1(@types/node@25.9.5)(supports-color@8.1.1)
       semver: 7.8.5
 
-  '@repo-toolkit/changelog@0.7.2(conventional-commits-filter@5.0.0)':
+  '@repo-toolkit/changelog@0.14.0(conventional-commits-filter@5.0.0)':
     dependencies:
-      '@repo-toolkit/publish-package': 0.7.2
+      '@repo-toolkit/publish-package': 0.14.0
       conventional-changelog: 7.2.1(conventional-commits-filter@5.0.0)
       conventional-changelog-conventionalcommits: 9.3.1
     transitivePeerDependencies:
       - conventional-commits-filter
 
-  '@repo-toolkit/publish-package@0.7.2': {}
+  '@repo-toolkit/go-release@0.14.0':
+    dependencies:
+      '@repo-toolkit/publish-package': 0.14.0
+
+  '@repo-toolkit/publish-package@0.14.0':
+    dependencies:
+      '@clack/prompts': 1.7.0
 
   '@rspack/binding-darwin-arm64@1.7.12':
     optional: true

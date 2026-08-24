@@ -8,3 +8,8 @@ onlyBuiltDependencies:
 allowBuilds:
   '@swc/core': true
   core-js: true
+
+minimumReleaseAgeExclude:
+- '@repo-toolkit/changelog@0.14.0'
+- '@repo-toolkit/go-release@0.14.0'
+- '@repo-toolkit/publish-package@0.14.0'
