@@ -67,6 +67,13 @@ make release-verify VERSION=v0.15.0
 
 The release gate runs supply-chain checks, frozen pnpm install, unit tests, race tests, vet, module verification, `govulncheck -json` through the repository gate, Dockerfile build checks, cross-platform builds, release archive creation, and reproducible archive verification. See `docs/release-artifact-policy.md` for the release and vulnerability exception policy.
 
+To exercise only the release artifact pipeline, pass the release tag and deterministic timestamp through the trusted configuration:
+
+```sh
+VERSION=v0.15.0 SOURCE_DATE_EPOCH=0 pnpm run release:build
+VERSION=v0.15.0 SOURCE_DATE_EPOCH=0 pnpm run release:verify
+```
+
 ## Review Expectations
 
 Pull requests that touch sensitive boundaries should request the matching CODEOWNERS review. In particular, storage behavior, restore extraction, release workflows, security policy, vulnerability exceptions, credential handling, and generated public docs should not merge without owner review.

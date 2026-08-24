@@ -15,9 +15,8 @@ The release gate for `v*.*.*` tags runs the following checks against the tagged 
 - `govulncheck -json ./...` through `scripts/release-govulncheck.sh`
 - `docker buildx build --check .`
 - a real Docker image build followed by `mongo-archive --version` and `mongo-unarchive --version` smoke tests
-- `make build-all VERSION=<tag>`
-- `make build-archive VERSION=<tag>` (each archive includes `LICENSE`)
-- `make check-reproducible-archives VERSION=<tag> SOURCE_DATE_EPOCH=<epoch>`
+- `pnpm run release:build` with `VERSION=<tag>` and `SOURCE_DATE_EPOCH=<epoch>`
+- `pnpm run release:verify` with the same environment, including independent reproducibility builds
 
 ## Published Release Assets
 
@@ -47,4 +46,4 @@ Release-critical container inputs are content-addressed. The Docker build uses t
 
 Python CI/release tools are installed from `requirements-lock.txt` with `pip --require-hashes`; `requirements.txt` remains the short input constraint file for regenerating that lock with `uv pip compile requirements.txt --generate-hashes --prerelease allow -o requirements-lock.txt`.
 
-Builds use `CGO_ENABLED=0`, `-trimpath`, `-buildvcs=false`, and an empty Go build ID to remove local path, VCS dirty-state, and linker build-ID variance. CI caches compiled Go packages by runner, job, toolchain, and `go.sum`. Cross-platform builds run two platform jobs concurrently by default; `BUILD_JOBS` can override that limit. Release archives are written with sorted entries, owner/group `0`, numeric owners, gzip `-n`, and all archive entry mtimes set from `SOURCE_DATE_EPOCH`, which defaults to `0` if not supplied. With identical source and epoch, `make check-reproducible-archives VERSION=<tag> SOURCE_DATE_EPOCH=<epoch>` compares the release archives already built in `dist/` with an independent build and fails if any SHA-256 differs.
+`@repo-toolkit/go-release` builds the 15-target matrix with two targets in flight. Builds use `CGO_ENABLED=0`, `-trimpath`, `-buildvcs=false`, and an empty Go build ID to remove local path, VCS dirty-state, and linker build-ID variance. Each binary embeds the exact release tag and target as `<version> <os>-<arch>`. CI caches compiled Go packages by runner, job, toolchain, and `go.sum`. Release archives contain both binaries and `LICENSE`, with sorted entries, owner/group `0`, numeric owners, deterministic gzip metadata, and all archive entry mtimes set from `SOURCE_DATE_EPOCH`, which defaults to `0` if not supplied. The build writes `database-tools-<version>-sha256.txt`, preserving the release tag exactly. With identical source and epoch, `pnpm run release:verify` validates every archive, checksum, exact host-compatible `--version` output, and two independent release builds.

@@ -12,7 +12,9 @@
     "changelog": "repo-toolkit-changelog",
     "docs:start": "pnpm --filter @egose/database-tools-website start",
     "docs:build": "pnpm --filter @egose/database-tools-website build",
-    "docs:typecheck": "pnpm --filter @egose/database-tools-website typecheck"
+    "docs:typecheck": "pnpm --filter @egose/database-tools-website typecheck",
+    "release:build": "repo-toolkit-build-go-release --config go-release.mjs",
+    "release:verify": "repo-toolkit-verify-go-release --config go-release.mjs --reproducibility"
   },
   "repository": {
     "type": "git",
@@ -33,7 +35,8 @@
     "@commitlint/config-conventional": "^20.5.3",
     "@commitlint/format": "^20.5.0",
     "@release-it/bumper": "^7.0.6",
-    "@repo-toolkit/changelog": "^0.7.2",
+    "@repo-toolkit/changelog": "^0.14.0",
+    "@repo-toolkit/go-release": "^0.14.0",
     "@types/node": "^25.9.5",
     "globals": "^17.8.0",
     "prettier": "4.0.0-alpha.13",

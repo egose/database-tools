@@ -67,11 +67,6 @@ jobs:
       env:
         RELEASE_TAG: ${{ github.ref_name }}
 
-    - name: Write checksums
-      run: (cd dist && sha256sum ./*.tar.gz > "database-tools-${RELEASE_TAG}-sha256.txt")
-      env:
-        RELEASE_TAG: ${{ github.ref_name }}
-
     - name: Generate SBOM
       run: |
         docker run --rm \
