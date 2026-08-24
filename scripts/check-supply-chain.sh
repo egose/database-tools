@@ -28,10 +28,12 @@ go_mod_version=$(awk '$1 == "go" { print $2; exit }' go.mod)
 tool_versions_go=$(awk '$1 == "golang" { print $2; exit }' .tool-versions)
 docker_go_version=$(awk '/^FROM golang:/ { sub(/^FROM golang:/, ""); sub(/@.*/, ""); print; exit }' Dockerfile)
 policy_go_version=$(awk '/Go `/ { value=$0; sub(/^.*Go `/, "", value); sub(/`.*/, "", value); print value; exit }' docs/release-artifact-policy.md)
+postgres_client_package=$(awk '/^ARG POSTGRESQL_CLIENT_PACKAGE=/ { sub(/^ARG POSTGRESQL_CLIENT_PACKAGE=/, ""); print; exit }' Dockerfile)
 
 require_equal "Go version in .tool-versions" "$go_mod_version" "$tool_versions_go"
 require_equal "Go version in Dockerfile" "$go_mod_version" "$docker_go_version"
 require_equal "Go version in release policy" "$go_mod_version" "$policy_go_version"
+require_match "Dockerfile PostgreSQL client package" "$postgres_client_package" '^postgresql[0-9]+-client=[0-9]+\.[0-9]+-r[0-9]+$'
 
 package_manager=$(python3 - <<'PY'
 import json

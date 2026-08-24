@@ -5,20 +5,21 @@ sidebar_position: 0
 
 # Archive Operations
 
-`mongo-archive` creates MongoDB dumps and uploads the resulting archive to every configured storage backend.
+`mongo-archive` creates MongoDB dumps and uploads the resulting archive to every configured storage backend. `postgres-archive` creates single-database PostgreSQL logical backups with `pg_dump` custom format and uses the same storage delivery contract.
 
 ## Managed Backup Prefix
 
-Managed backup objects are stored under a dedicated prefix. The default prefix is `mongo-archive/`, and it can be changed with `--backup-prefix` or `MONGOARCHIVE__BACKUP_PREFIX`.
+Managed backup objects are stored under a dedicated prefix. MongoDB defaults to `mongo-archive/`; PostgreSQL defaults to `postgres-archive/`. The prefix can be changed with `--backup-prefix` or the command-specific `*_BACKUP_PREFIX` environment variable.
 
 - Managed object names use `<backup-prefix><generated-name>.tar.gz`.
 - Automatic latest-object selection and retention only consider objects inside the prefix whose filename matches the generated backup format.
 - Objects outside the prefix, or malformed objects inside the prefix, are ignored by automatic selection and retention.
 - Legacy backups outside the managed prefix are not selected automatically; restore them by passing `--object-name` to `mongo-unarchive`.
+- Keep custom prefixes isolated by database family and environment. PostgreSQL and MongoDB objects in the same bucket or directory are not cross-selected or cross-retained unless an operator deliberately points both commands at the same custom prefix.
 
 ## Multi-Backend Contract
 
-When multiple archive backends are configured, `mongo-archive` runs in two phases:
+When multiple archive backends are configured, archive commands run in two phases:
 
 1. Upload the new archive to every configured backend.
 2. Run retention on each backend only after every upload succeeds.
@@ -30,3 +31,25 @@ Error output names which backends already received the new archive or completed 
 ## Retention
 
 Use `--expiry-days` or `MONGOARCHIVE__EXPIRY_DAYS` to remove managed backups older than the configured maximum age. New uploads are verified before retention runs, so a failed upload does not trigger deletions.
+
+## PostgreSQL Scope and Payload
+
+`postgres-archive` archives exactly one database. It does not include cluster-global roles, tablespaces, physical backups, WAL, point-in-time recovery state, replication slots, or multiple databases.
+
+The outer storage object is still the managed `.tar.gz` transport file. Inside it are a PostgreSQL custom-format dump and a JSON manifest identifying the format version, database family, dump format, creation time, source database name, and producing PostgreSQL client version. Credentials and password-bearing connection strings are not written to the manifest.
+
+Native installations require compatible `pg_dump` in `PATH`. The container image includes pinned PostgreSQL clients; an older client may reject or incompletely support a newer PostgreSQL server.
+
+## PostgreSQL Example
+
+```bash
+set -eu
+postgres-archive \
+  --host=postgres.example.com \
+  --user=<username> \
+  --database=appdb \
+  --ssl-mode=require \
+  --local-path=/var/backups/database-tools
+```
+
+Provide `POSTGRESARCHIVE__PASSWORD` through a secret manager or job secret, not as a literal command argument.

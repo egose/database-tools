@@ -3,6 +3,7 @@ package storage
 import (
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -49,6 +50,42 @@ func TestNormalizeBackupPrefix(t *testing.T) {
 	}
 }
 
+func TestNormalizeBackupPrefixWithDatabaseDefault(t *testing.T) {
+	tests := []struct {
+		name          string
+		prefix        string
+		defaultPrefix string
+		want          string
+	}{
+		{name: "MongoDB", defaultPrefix: MongoDefaultBackupPrefix, want: "mongo-archive/"},
+		{name: "PostgreSQL", defaultPrefix: PostgreSQLDefaultBackupPrefix, want: "postgres-archive/"},
+		{name: "normalized custom overrides MongoDB", prefix: " /tenant/mongo/ ", defaultPrefix: MongoDefaultBackupPrefix, want: "tenant/mongo/"},
+		{name: "normalized custom overrides PostgreSQL", prefix: " /tenant/postgres/ ", defaultPrefix: PostgreSQLDefaultBackupPrefix, want: "tenant/postgres/"},
+		{name: "empty custom default preserves MongoDB compatibility", want: DefaultBackupPrefix},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NormalizeBackupPrefixWithDefault(tt.prefix, tt.defaultPrefix); got != tt.want {
+				t.Fatalf("NormalizeBackupPrefixWithDefault() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMongoDefaultBackupObjectNameRemainsCompatible(t *testing.T) {
+	if DefaultBackupPrefix != "mongo-archive/" {
+		t.Fatalf("DefaultBackupPrefix = %q, want %q", DefaultBackupPrefix, "mongo-archive/")
+	}
+	got, err := BuildBackupObjectName("", "9987654321000-2026-08-24T010203.456Z.tar.gz")
+	if err != nil {
+		t.Fatalf("BuildBackupObjectName() error = %v", err)
+	}
+	if got != "mongo-archive/9987654321000-2026-08-24T010203.456Z.tar.gz" {
+		t.Fatalf("BuildBackupObjectName() = %q", got)
+	}
+}
+
 func TestBuildBackupObjectName(t *testing.T) {
 	got, err := BuildBackupObjectName("custom", "9987654321000-2026-08-12T010203.456Z.tar.gz")
 	if err != nil {
@@ -60,6 +97,17 @@ func TestBuildBackupObjectName(t *testing.T) {
 
 	if _, err := BuildBackupObjectName("custom", "not-a-backup.tar.gz"); err == nil {
 		t.Fatal("BuildBackupObjectName() expected contract error")
+	}
+}
+
+func TestBuildBackupObjectNameUsesDatabaseDefault(t *testing.T) {
+	filename := "9987654321000-2026-08-12T010203.456Z.tar.gz"
+	got, err := BuildBackupObjectNameWithDefault("", filename, PostgreSQLDefaultBackupPrefix)
+	if err != nil {
+		t.Fatalf("BuildBackupObjectNameWithDefault() error = %v", err)
+	}
+	if got != "postgres-archive/"+filename {
+		t.Fatalf("BuildBackupObjectNameWithDefault() = %q", got)
 	}
 }
 
@@ -95,6 +143,29 @@ func TestDeleteExpiredObjectsOnlyDeletesEligibleScopedBackups(t *testing.T) {
 	want := []string{"custom/9987654321000-2026-08-10T010203.456Z.tar.gz"}
 	if !reflect.DeepEqual(deleted, want) {
 		t.Fatalf("deleteExpiredObjects() deleted = %#v, want %#v", deleted, want)
+	}
+}
+
+func TestDeleteExpiredObjectsKeepsDatabasePrefixesIsolated(t *testing.T) {
+	now := time.Date(2026, time.August, 24, 12, 0, 0, 0, time.UTC)
+	objects := []objectTimestamp{
+		{Name: "mongo-archive/9987654321000-2026-08-20T010203.456Z.tar.gz", ModifiedAt: now.Add(-96 * time.Hour)},
+		{Name: "postgres-archive/9987654320999-2026-08-20T010203.456Z.tar.gz", ModifiedAt: now.Add(-96 * time.Hour)},
+	}
+
+	for _, prefix := range []string{"mongo-archive/", "postgres-archive/"} {
+		t.Run(prefix, func(t *testing.T) {
+			var deleted []string
+			if err := deleteExpiredObjects(objects, prefix, 1, now, "", func(name string) error {
+				deleted = append(deleted, name)
+				return nil
+			}); err != nil {
+				t.Fatalf("deleteExpiredObjects() error = %v", err)
+			}
+			if len(deleted) != 1 || !strings.HasPrefix(deleted[0], prefix) {
+				t.Fatalf("deleted = %v, want only prefix %q", deleted, prefix)
+			}
+		})
 	}
 }
 

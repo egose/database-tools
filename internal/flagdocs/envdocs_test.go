@@ -12,6 +12,8 @@ import (
 	"github.com/egose/database-tools/internal/toolconfig"
 	"github.com/egose/database-tools/mongoarchive"
 	"github.com/egose/database-tools/mongounarchive"
+	"github.com/egose/database-tools/postgresarchive"
+	"github.com/egose/database-tools/postgresunarchive"
 )
 
 func TestPublicEnvironmentLookupsAreDocumented(t *testing.T) {
@@ -86,7 +88,7 @@ func TestPublicEnvironmentLookupsAreDocumented(t *testing.T) {
 
 func documentedEnvKeys() map[string]bool {
 	documented := map[string]bool{}
-	for _, command := range []toolconfig.CommandDoc{mongoarchive.FlagDocumentation(), mongounarchive.FlagDocumentation()} {
+	for _, command := range []toolconfig.CommandDoc{mongoarchive.FlagDocumentation(), mongounarchive.FlagDocumentation(), postgresarchive.FlagDocumentation(), postgresunarchive.FlagDocumentation()} {
 		for _, flag := range command.Flags {
 			addDocumentedEnvKey(documented, flag.EnvVar)
 		}
@@ -103,7 +105,7 @@ func addDocumentedEnvKey(documented map[string]bool, markdownEnv string) {
 	}
 	envVar := strings.Trim(markdownEnv, "`")
 	documented[envVar] = true
-	for _, prefix := range []string{"MONGOARCHIVE__", "MONGOUNARCHIVE__", "MONGO__"} {
+	for _, prefix := range []string{"MONGOARCHIVE__", "MONGOUNARCHIVE__", "MONGO__", "POSTGRESARCHIVE__", "POSTGRESUNARCHIVE__", "POSTGRES__"} {
 		if strings.HasPrefix(envVar, prefix) {
 			documented[strings.TrimPrefix(envVar, prefix)] = true
 		}

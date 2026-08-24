@@ -18,9 +18,10 @@ import (
 func main() {
 	provider := flag.String("provider", "", "storage provider to inspect")
 	localPath := flag.String("local-path", "", "local storage path")
+	backupPrefix := flag.String("backup-prefix", "", "managed backup prefix")
 	flag.Parse()
 
-	count, err := getObjectCount(*provider, *localPath)
+	count, err := getObjectCount(*provider, *localPath, *backupPrefix)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -29,27 +30,27 @@ func main() {
 	fmt.Println(count)
 }
 
-func getObjectCount(provider string, localPath string) (int, error) {
+func getObjectCount(provider string, localPath string, backupPrefix string) (int, error) {
 	switch provider {
 	case "local":
-		return countLocalObjects(localPath)
+		return countLocalObjects(localPath, backupPrefix)
 	case "s3":
-		return countS3Objects()
+		return countS3Objects(backupPrefix)
 	case "azure":
-		return countAzureObjects()
+		return countAzureObjects(backupPrefix)
 	case "gcp":
-		return countGCPObjects()
+		return countGCPObjects(backupPrefix)
 	default:
 		return 0, fmt.Errorf("unsupported provider %q", provider)
 	}
 }
 
-func countLocalObjects(localPath string) (int, error) {
+func countLocalObjects(localPath string, backupPrefix string) (int, error) {
 	if localPath == "" {
 		return 0, fmt.Errorf("--local-path is required for local storage")
 	}
 
-	scopeRoot := filepath.Join(localPath, filepath.FromSlash(getBackupPrefix()))
+	scopeRoot := filepath.Join(localPath, filepath.FromSlash(getBackupPrefix(backupPrefix)))
 	count := 0
 	err := filepath.Walk(scopeRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -71,7 +72,7 @@ func countLocalObjects(localPath string) (int, error) {
 	return count, nil
 }
 
-func countS3Objects() (int, error) {
+func countS3Objects(backupPrefix string) (int, error) {
 	backend := new(projectstorage.AwsS3)
 	if err := backend.Init(
 		os.Getenv("MINIO_URL"),
@@ -81,7 +82,7 @@ func countS3Objects() (int, error) {
 		os.Getenv("MINIO_BUCKET"),
 		true,
 		0,
-		getBackupPrefix(),
+		getBackupPrefix(backupPrefix),
 	); err != nil {
 		return 0, err
 	}
@@ -101,7 +102,7 @@ func countS3Objects() (int, error) {
 	return count, nil
 }
 
-func countAzureObjects() (int, error) {
+func countAzureObjects(backupPrefix string) (int, error) {
 	backend := new(projectstorage.AzBlob)
 	if err := backend.Init(
 		os.Getenv("AZURITE_ACCOUNT_NAME"),
@@ -109,12 +110,12 @@ func countAzureObjects() (int, error) {
 		os.Getenv("AZURITE_CONTAINER"),
 		os.Getenv("AZURITE_URL"),
 		0,
-		getBackupPrefix(),
+		getBackupPrefix(backupPrefix),
 	); err != nil {
 		return 0, err
 	}
 
-	pager := backend.BlobContainerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: aws.String(getBackupPrefix())})
+	pager := backend.BlobContainerClient.NewListBlobsFlatPager(&container.ListBlobsFlatOptions{Prefix: aws.String(getBackupPrefix(backupPrefix))})
 	count := 0
 	for pager.More() {
 		resp, err := pager.NextPage(context.Background())
@@ -132,7 +133,7 @@ func countAzureObjects() (int, error) {
 	return count, nil
 }
 
-func countGCPObjects() (int, error) {
+func countGCPObjects(backupPrefix string) (int, error) {
 	backend := new(projectstorage.GcpStorage)
 	if err := backend.Init(
 		context.Background(),
@@ -145,14 +146,14 @@ func countGCPObjects() (int, error) {
 		"",
 		"",
 		0,
-		getBackupPrefix(),
+		getBackupPrefix(backupPrefix),
 	); err != nil {
 		return 0, err
 	}
 	defer backend.Close()
 
 	count := 0
-	it := backend.StorageClient.Bucket(backend.Bucket).Objects(context.Background(), &gcs.Query{Prefix: getBackupPrefix()})
+	it := backend.StorageClient.Bucket(backend.Bucket).Objects(context.Background(), &gcs.Query{Prefix: getBackupPrefix(backupPrefix)})
 	for {
 		_, err := it.Next()
 		if err == iterator.Done {
@@ -168,6 +169,9 @@ func countGCPObjects() (int, error) {
 	return count, nil
 }
 
-func getBackupPrefix() string {
+func getBackupPrefix(backupPrefix string) string {
+	if backupPrefix != "" {
+		return projectstorage.NormalizeBackupPrefix(backupPrefix)
+	}
 	return projectstorage.NormalizeBackupPrefix(os.Getenv("MONGOARCHIVE__BACKUP_PREFIX"))
 }

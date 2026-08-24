@@ -1,3 +1,6 @@
 services:
+  postgres:
+    platform: linux/amd64
+
   mongodb:
     platform: linux/amd64

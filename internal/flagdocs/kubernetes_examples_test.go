@@ -15,6 +15,7 @@ func TestKubernetesExamplesAreStrictAndSecretBacked(t *testing.T) {
 	paths := []string{
 		filepath.Join(repoRoot, "examples", "cronjob-archive.yaml"),
 		filepath.Join(repoRoot, "examples", "job-copy.yaml"),
+		filepath.Join(repoRoot, "examples", "postgres-cronjob-archive.yaml"),
 	}
 
 	for _, path := range paths {

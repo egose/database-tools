@@ -1,9 +1,13 @@
-# Extra MongoDB Tools
+# Database Tools
 
-This repository provides supplementary tools for MongoDB, supporting both backup and restoration workflows:
+This repository provides supplementary tools for MongoDB and PostgreSQL backup and restoration workflows:
 
 - **`mongo-archive`** – Dumps MongoDB data to disk and uploads it to supported cloud storage services.
 - **`mongo-unarchive`** – Downloads archived dumps from cloud storage and restores them into a live MongoDB database.
+- **`postgres-archive`** – Runs `pg_dump` in custom format, packages the dump with a manifest, and uploads it to supported storage services.
+- **`postgres-unarchive`** – Downloads a PostgreSQL archive, validates its manifest and payload, and restores it with `pg_restore --exit-on-error`.
+
+Native release archives install the four Go wrappers only. PostgreSQL operations on native installs require compatible `pg_dump` and `pg_restore` executables in `PATH`; the wrappers' `--version` commands do not require those clients. The published container image includes pinned PostgreSQL client tools and verifies `pg_dump` and `pg_restore` during release.
 
 ## 🚀 Building the Tools
 
@@ -27,7 +31,7 @@ To build the binaries from source:
 
 ## Installation
 
-You can install **mongo-archive** and **mongo-unarchive** in two ways:
+You can install `mongo-archive`, `mongo-unarchive`, `postgres-archive`, and `postgres-unarchive` in two ways:
 
 ### 1. Install via [asdf](https://asdf-vm.com/) (Recommended)
 
@@ -51,6 +55,8 @@ After installation, you can run:
 ```bash
 mongo-archive --version
 mongo-unarchive --version
+postgres-archive --version
+postgres-unarchive --version
 ```
 
 ### 2. Download from GitHub Releases
@@ -61,13 +67,11 @@ You can also manually download the prebuilt binaries from the official releases 
 
 1. Visit the release page for **version <latest-version>**.
 2. Download and extract the `.tar.gz` archive for your operating system and architecture.
-3. Make both extracted binaries executable and move them into a directory in your `PATH`:
+3. Make the extracted binaries executable and move them into a directory in your `PATH`:
 
 ```bash
-chmod +x mongo-archive
-chmod +x mongo-unarchive
-sudo mv mongo-archive /usr/local/bin/
-sudo mv mongo-unarchive /usr/local/bin/
+chmod +x mongo-archive mongo-unarchive postgres-archive postgres-unarchive
+sudo mv mongo-archive mongo-unarchive postgres-archive postgres-unarchive /usr/local/bin/
 ```
 
 ### Verify Installation
@@ -77,11 +81,17 @@ Run the following commands to confirm the installed version:
 ```bash
 mongo-archive --version
 mongo-unarchive --version
+postgres-archive --version
+postgres-unarchive --version
+pg_dump --version
+pg_restore --version
 ```
 
 ## ⚙️ Configuration: CLI Flags & Environment Variables
 
-Both `mongo-archive` and `mongo-unarchive` follow the conventions of MongoDB’s native tools (e.g., `mongodump`, `mongorestore`), using similar command-line arguments. Configuration values can also be passed via environment variables for convenience or container-based execution.
+MongoDB commands follow the conventions of MongoDB’s native tools. PostgreSQL commands use typed libpq-style connection options (`--host`, `--port`, `--user`, `--database`, `--ssl-mode`, `--uri`, and `--password`) and execute PostgreSQL clients directly without a shell. Configuration values can also be passed via environment variables for convenience or container-based execution.
+
+PostgreSQL environment lookup checks command-specific variables first, then shared PostgreSQL variables, then unprefixed variables. For example, `postgres-archive` checks `POSTGRESARCHIVE__DATABASE`, then `POSTGRES__DATABASE`, then `DATABASE`; `postgres-unarchive` checks `POSTGRESUNARCHIVE__DATABASE`, then `POSTGRES__DATABASE`, then `DATABASE`.
 
 The authoritative flag reference lives in [`flags.md`](./flags.md). It is verified by tests against the current flag definitions so documentation drift is caught during CI.
 
@@ -158,6 +168,18 @@ Each backend can be enabled independently, and multiple backends can be enabled 
 ### Failure-Only Notifications
 
 Each backend supports its own `*-notify-on-failure-only` flag/env var. When enabled, success notifications are skipped for that backend while failure notifications are still sent.
+
+## 🐘 PostgreSQL Operations
+
+`postgres-archive` archives exactly one PostgreSQL database per run. Cluster-global roles, tablespaces, physical backups, WAL archiving, point-in-time recovery, replication slots, and multi-database dumps are outside the initial scope.
+
+PostgreSQL managed objects use `postgres-archive/` by default. MongoDB managed objects use `mongo-archive/`. Latest selection and retention are prefix-scoped, so PostgreSQL does not automatically select or delete MongoDB backups and MongoDB does not automatically select or delete PostgreSQL backups. If you set `--backup-prefix`, keep prefixes separated by database family and environment.
+
+The outer storage object remains a managed `.tar.gz` file. Inside it, PostgreSQL archives contain a custom-format `pg_dump` payload and a JSON manifest with format version, database family, dump format, creation time, source database name, and PostgreSQL client version. Credentials and password-bearing connection strings are not written to the manifest.
+
+`postgres-unarchive` restores into an existing target database. It validates the manifest and custom-format dump before invoking `pg_restore --exit-on-error`. It does not pass `--clean` or `--create` by default, does not create a database, and does not promise rollback. A failed restore can leave partial database changes.
+
+PostgreSQL client compatibility follows PostgreSQL's client/server rules: use a `pg_dump` major version compatible with the source server and a `pg_restore` version compatible with the dump and target server. The container image currently includes pinned PostgreSQL 18 clients; native users choose and patch their host clients.
 
 ### Suggested Setup
 
@@ -267,6 +289,48 @@ mongo-unarchive \
   --updates-file=/home/nonroot/updates.json
 ```
 
+### Archive a PostgreSQL Database to Local Storage
+
+```sh
+set -eu
+postgres-archive \
+  --host=postgres.example.com \
+  --port=5432 \
+  --user=<username> \
+  --database=appdb \
+  --ssl-mode=require \
+  --local-path=/var/backups/database-tools
+```
+
+Supply `POSTGRESARCHIVE__PASSWORD` from your shell's secret manager or job secret injection rather than putting it in the command line.
+
+### Restore a Specific PostgreSQL Object
+
+```sh
+set -eu
+postgres-unarchive \
+  --host=postgres.example.com \
+  --port=5432 \
+  --user=<username> \
+  --database=appdb_restore \
+  --ssl-mode=require \
+  --local-path=/var/backups/database-tools \
+  --object-name="postgres-archive/<generated-name>.tar.gz"
+```
+
+### Restore the Latest PostgreSQL Archive from S3
+
+```sh
+set -eu
+postgres-unarchive \
+  --database=appdb_restore \
+  --host=postgres.example.com \
+  --user=<username> \
+  --ssl-mode=require \
+  --aws-region=us-east-1 \
+  --aws-bucket=<bucket_name>
+```
+
 #### Sample `updates.json`
 
 ```json
@@ -307,6 +371,20 @@ docker run --rm \
   --az-account-key=<az_account_key> \
   --az-container-name=<az_container_name> \
   --keep
+```
+
+The container image includes `pg_dump` and `pg_restore`, so PostgreSQL container jobs do not need host PostgreSQL clients:
+
+```sh
+docker run --rm \
+  -e POSTGRESARCHIVE__HOST=postgres.example.com \
+  -e POSTGRESARCHIVE__USER=<username> \
+  -e POSTGRESARCHIVE__DATABASE=appdb \
+  -e POSTGRESARCHIVE__SSL_MODE=require \
+  -e POSTGRESARCHIVE__PASSWORD \
+  -v "$(pwd)/backups:/backups" \
+  ghcr.io/egose/database-tools:<latest-version> \
+  postgres-archive --local-path=/backups
 ```
 
 ## ☁️ Running as a Kubernetes CronJob

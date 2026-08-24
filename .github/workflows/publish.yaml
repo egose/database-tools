@@ -80,6 +80,10 @@ jobs:
           revision_label="$(docker image inspect "$IMAGE_REF" --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}')"
           archive_version="$(docker run --rm "$IMAGE_REF" mongo-archive --version)"
           unarchive_version="$(docker run --rm "$IMAGE_REF" mongo-unarchive --version)"
+          postgres_archive_version="$(docker run --rm "$IMAGE_REF" postgres-archive --version)"
+          postgres_unarchive_version="$(docker run --rm "$IMAGE_REF" postgres-unarchive --version)"
+          pg_dump_version="$(docker run --rm "$IMAGE_REF" pg_dump --version)"
+          pg_restore_version="$(docker run --rm "$IMAGE_REF" pg_restore --version)"
 
           if [ "$version_label" != "$TAG_NAME" ]; then
             printf 'OCI version label mismatch: expected %s, got %s\n' "$TAG_NAME" "$version_label" >&2
@@ -99,10 +103,25 @@ jobs:
             *"$TAG_NAME"*|*"$expected_normalized"*) ;;
             *) printf 'mongo-unarchive version mismatch: %s\n' "$unarchive_version" >&2; exit 1 ;;
           esac
+          case "$postgres_archive_version" in
+            *"$TAG_NAME"*|*"$expected_normalized"*) ;;
+            *) printf 'postgres-archive version mismatch: %s\n' "$postgres_archive_version" >&2; exit 1 ;;
+          esac
+          case "$postgres_unarchive_version" in
+            *"$TAG_NAME"*|*"$expected_normalized"*) ;;
+            *) printf 'postgres-unarchive version mismatch: %s\n' "$postgres_unarchive_version" >&2; exit 1 ;;
+          esac
+
+          bash ./scripts/container-roundtrip.sh "$IMAGE_REF"
 
           {
             printf -- '- `mongo-archive --version`: `%s`\n' "$archive_version"
             printf -- '- `mongo-unarchive --version`: `%s`\n' "$unarchive_version"
+            printf -- '- `postgres-archive --version`: `%s`\n' "$postgres_archive_version"
+            printf -- '- `postgres-unarchive --version`: `%s`\n' "$postgres_unarchive_version"
+            printf -- '- `pg_dump --version`: `%s`\n' "$pg_dump_version"
+            printf -- '- `pg_restore --version`: `%s`\n' "$pg_restore_version"
+            printf -- '- Container PostgreSQL round trip: passed\n'
             printf -- '- OCI version label: `%s`\n' "$version_label"
             printf -- '- OCI revision label: `%s`\n' "$revision_label"
           } >> "$GITHUB_STEP_SUMMARY"

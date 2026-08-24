@@ -15,11 +15,13 @@ The release gate includes:
 - `go mod verify`.
 - `govulncheck` through the repository release script.
 - Docker build checks.
+- Container smoke checks for all four wrappers plus `pg_dump` and `pg_restore`.
+- A containerized PostgreSQL archive/restore round trip.
 - Cross-platform binary builds.
 - Reproducible archive checks.
 
-Published binary releases include SHA-256 checksums, an SPDX JSON SBOM, and GitHub artifact provenance attestations.
+Published binary releases include SHA-256 checksums, an SPDX JSON SBOM, and GitHub artifact provenance attestations. Native release archives include the four Go wrappers and do not bundle PostgreSQL native clients; native PostgreSQL operations require compatible external `pg_dump` and `pg_restore` in `PATH`.
 
-Container publication is scan-before-push: the workflow builds and scans a local image before authenticating to GHCR or publishing tags.
+Container publication is scan-before-push: the workflow builds and scans a local image before authenticating to GHCR or publishing tags. The container image includes pinned PostgreSQL clients and verifies their versions before publication.
 
 For the detailed policy, see [`docs/release-artifact-policy.md`](https://github.com/egose/database-tools/blob/main/docs/release-artifact-policy.md).

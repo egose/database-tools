@@ -48,11 +48,21 @@ jobs:
     - name: Setup NPM Packages
       uses: ./.github/actions/setup-npm
 
-    - name: Start integration services
+    - name: Install PostgreSQL client
       run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install --yes --no-install-recommends postgresql-client-16
+        pg_dump --version
+        pg_restore --version
+        psql --version
+
+    - name: Start integration services
+      run: | # pragma: allowlist secret
         set -euo pipefail
 
         mkdir -p ./sandbox/mnt/mongodb
+        mkdir -p ./sandbox/mnt/postgres
         mkdir -p ./sandbox/mnt/minio
         mkdir -p ./sandbox/mnt/azurite
         mkdir -p ./sandbox/mnt/fake-gcs-server
@@ -64,7 +74,7 @@ jobs:
 
         docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml up -d
 
-        node_modules/.bin/wait-on tcp:127.0.0.1:27017 tcp:127.0.0.1:9000 http://localhost:9001 tcp:127.0.0.1:10000 tcp:127.0.0.1:"$FAKE_GCP_PORT" --timeout 120000
+        node_modules/.bin/wait-on tcp:127.0.0.1:5432 tcp:127.0.0.1:27017 tcp:127.0.0.1:9000 http://localhost:9001 tcp:127.0.0.1:10000 tcp:127.0.0.1:"$FAKE_GCP_PORT" --timeout 120000
         for attempt in $(seq 1 120); do
           minio_init_container=$(docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml ps -aq minio-init)
           if [ -z "$minio_init_container" ]; then
@@ -99,6 +109,16 @@ jobs:
           fi
           if [ "$attempt" -eq 60 ]; then
             mongosh "$DATABASE_URL" --eval 'db.adminCommand({ ping: 1 })'
+            exit 1
+          fi
+          sleep 2
+        done
+        for attempt in $(seq 1 60); do
+          if PGPASSWORD=postgres PGCONNECT_TIMEOUT=5 psql --no-psqlrc -X --quiet --tuples-only --no-align --host=127.0.0.1 --port=5432 --username=postgres --dbname=integration --command='SELECT 1' | grep -qx '1'; then
+            break
+          fi
+          if [ "$attempt" -eq 60 ]; then
+            docker-compose --env-file .env.test -f sandbox/docker-compose.yml -f sandbox/docker-compose-ci.yml logs --no-color postgres >&2 || true
             exit 1
           fi
           sleep 2

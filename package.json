@@ -2,7 +2,7 @@
   "name": "database-tools",
   "version": "0.20.1",
   "private": true,
-  "description": "This repository provides additional MongoDB Tools with the following functionalities",
+  "description": "Supplementary MongoDB and PostgreSQL backup and restore tools",
   "directories": {
     "doc": "docs",
     "example": "examples",

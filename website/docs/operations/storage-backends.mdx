@@ -5,7 +5,9 @@ sidebar_position: 2
 
 # Storage Backends
 
-The tools support Azure Blob Storage, AWS S3, Google Cloud Storage, and local filesystem storage. Configure one or more archive backends for `mongo-archive`; configure the matching backend for `mongo-unarchive` when restoring.
+The tools support Azure Blob Storage, AWS S3, Google Cloud Storage, and local filesystem storage. Configure one or more archive backends for `mongo-archive` or `postgres-archive`; configure the matching backend for the restore command.
+
+MongoDB managed backups default to `mongo-archive/`. PostgreSQL managed backups default to `postgres-archive/`. Automatic latest selection and retention are scoped to the configured prefix, including custom prefixes.
 
 ## Azure Blob Storage
 
@@ -34,6 +36,19 @@ mongo-archive \
 
 Use `--aws-endpoint` and `--aws-s3-force-path-style` for S3-compatible services or local test backends.
 
+PostgreSQL example:
+
+```bash
+set -eu
+postgres-archive \
+  --host=postgres.example.com \
+  --user=<username> \
+  --database=appdb \
+  --ssl-mode=require \
+  --aws-region=us-east-1 \
+  --aws-bucket=<bucket_name>
+```
+
 ## Google Cloud Storage
 
 ```bash
@@ -49,3 +64,13 @@ Service account fields can also be supplied directly with the `--gcp-project-id`
 ## Local Filesystem
 
 Use `--local-path` for local archive storage. This is useful for local development, controlled test environments, or a container mounted to persistent storage.
+
+```bash
+set -eu
+postgres-archive \
+  --host=postgres.example.com \
+  --user=<username> \
+  --database=appdb \
+  --ssl-mode=require \
+  --local-path=/var/backups/database-tools
+```

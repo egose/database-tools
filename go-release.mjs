@@ -1,32 +1,26 @@
 const version = process.env.VERSION ?? 'localdev';
 const sourceDateEpoch = Number(process.env.SOURCE_DATE_EPOCH ?? 0);
 
+const binaries = [
+  { name: 'mongo-archive', package: 'github.com/egose/database-tools/mongoarchive/main' },
+  { name: 'mongo-unarchive', package: 'github.com/egose/database-tools/mongounarchive/main' },
+  { name: 'postgres-archive', package: 'github.com/egose/database-tools/postgresarchive/main' },
+  { name: 'postgres-unarchive', package: 'github.com/egose/database-tools/postgresunarchive/main' },
+];
+
 export default {
   toolName: 'database-tools',
   version,
   outputDir: 'dist',
-  binaries: [
-    {
-      name: 'mongo-archive',
-      package: 'mongoarchive/main/mongoarchive.go',
-      linkerValues: [{ symbol: 'main.version', value: '{version} {os}-{arch}' }],
-      versionCommand: {
-        args: ['--version'],
-        expectedOutput: 'mongo-archive version: {version} {os}-{arch}\n',
-        match: 'exact',
-      },
+  binaries: binaries.map((binary) => ({
+    ...binary,
+    linkerValues: [{ symbol: 'main.version', value: '{version} {os}-{arch}' }],
+    versionCommand: {
+      args: ['--version'],
+      expectedOutput: `${binary.name} version: {version} {os}-{arch}\n`,
+      match: 'exact',
     },
-    {
-      name: 'mongo-unarchive',
-      package: 'mongounarchive/main/mongounarchive.go',
-      linkerValues: [{ symbol: 'main.version', value: '{version} {os}-{arch}' }],
-      versionCommand: {
-        args: ['--version'],
-        expectedOutput: 'mongo-unarchive version: {version} {os}-{arch}\n',
-        match: 'exact',
-      },
-    },
-  ],
+  })),
   targets: [
     { os: 'linux', arch: 'amd64' },
     { os: 'linux', arch: 'arm64' },

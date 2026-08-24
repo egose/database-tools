@@ -22,3 +22,33 @@ docker run --rm \
 ```
 
 Use a maintained version tag instead of `latest` for production jobs.
+
+The container image includes pinned PostgreSQL client tools, so `postgres-archive` and `postgres-unarchive` do not depend on host `pg_dump` or `pg_restore`.
+
+```bash
+set -eu
+docker run --rm \
+  -e POSTGRESARCHIVE__HOST=postgres.example.com \
+  -e POSTGRESARCHIVE__USER=<username> \
+  -e POSTGRESARCHIVE__DATABASE=appdb \
+  -e POSTGRESARCHIVE__SSL_MODE=require \
+  -e POSTGRESARCHIVE__PASSWORD \
+  -v "$(pwd)/backups:/backups" \
+  ghcr.io/egose/database-tools:<latest-version> \
+  postgres-archive --local-path=/backups
+```
+
+Set `POSTGRESARCHIVE__PASSWORD` in the parent environment from a secret manager before running the container. Avoid passing password-bearing PostgreSQL URIs or literal passwords in the command line.
+
+```bash
+set -eu
+docker run --rm \
+  -e POSTGRESUNARCHIVE__HOST=postgres.example.com \
+  -e POSTGRESUNARCHIVE__USER=<username> \
+  -e POSTGRESUNARCHIVE__DATABASE=appdb_restore \
+  -e POSTGRESUNARCHIVE__SSL_MODE=require \
+  -e POSTGRESUNARCHIVE__PASSWORD \
+  -v "$(pwd)/backups:/backups" \
+  ghcr.io/egose/database-tools:<latest-version> \
+  postgres-unarchive --local-path=/backups
+```
