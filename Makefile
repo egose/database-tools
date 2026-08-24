@@ -4,6 +4,7 @@ TOOLS_DIR := tmp/bin
 GOVULNCHECK := $(TOOLS_DIR)/govulncheck
 GO_BUILD_FLAGS := -trimpath -buildvcs=false
 SOURCE_DATE_EPOCH ?= 0
+BUILD_JOBS ?= 2
 
 PREFIX := database-tools
 VERSION := localdev
@@ -31,8 +32,9 @@ OS_ARCH_PAIRS := \
 
 build-all:
 	@set -euo pipefail; \
+	printf '%s\n' $(OS_ARCH_PAIRS) | \
+		xargs -P "$(BUILD_JOBS)" -I {} $(MAKE) --no-print-directory build-single OS_ARCH={} VERSION="$(VERSION)"; \
 	for pair in $(OS_ARCH_PAIRS); do \
-		$(MAKE) --no-print-directory build-single OS_ARCH=$$pair VERSION=$(VERSION); \
 		os=$${pair%%:*}; \
 		arch=$${pair##*:}; \
 		ext=""; \
@@ -106,11 +108,11 @@ check-reproducible-archives:
 	@set -euo pipefail; \
 	tmp=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp"' EXIT; \
-	$(MAKE) --no-print-directory build-all build-archive DIST_DIR="$$tmp/one" VERSION=$(VERSION) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH); \
-	$(MAKE) --no-print-directory build-all build-archive DIST_DIR="$$tmp/two" VERSION=$(VERSION) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH); \
-	sha256sum "$$tmp"/one/*.tar.gz | sed "s#$$tmp/one/##" | sort -k2 > "$$tmp/one.sha256"; \
-	sha256sum "$$tmp"/two/*.tar.gz | sed "s#$$tmp/two/##" | sort -k2 > "$$tmp/two.sha256"; \
-	diff -u "$$tmp/one.sha256" "$$tmp/two.sha256"
+	compgen -G "$(DIST_DIR)/*.tar.gz" >/dev/null; \
+	$(MAKE) --no-print-directory build-all build-archive DIST_DIR="$$tmp/rebuilt" VERSION=$(VERSION) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH); \
+	sha256sum "$(DIST_DIR)"/*.tar.gz | sed "s#$(DIST_DIR)/##" | sort -k2 > "$$tmp/release.sha256"; \
+	sha256sum "$$tmp"/rebuilt/*.tar.gz | sed "s#$$tmp/rebuilt/##" | sort -k2 > "$$tmp/rebuilt.sha256"; \
+	diff -u "$$tmp/release.sha256" "$$tmp/rebuilt.sha256"
 
 
 .PHONY: format

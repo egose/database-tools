@@ -15,6 +15,15 @@ runs:
       restore-keys: |
         asdf-${{ runner.os }}-${{ runner.arch }}-
 
+  - name: Cache Go builds
+    uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+    with:
+      path: ~/.cache/go-build
+      key: go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ hashFiles('.tool-versions', 'go.sum') }}
+      restore-keys: |
+        go-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
+        go-${{ runner.os }}-${{ runner.arch }}-
+
   - name: Install pinned asdf tools
     run: bash scripts/setup-asdf-tools.sh
     shell: bash
