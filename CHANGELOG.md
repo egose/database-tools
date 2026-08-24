@@ -1,3 +1,9 @@
+## [0.17.1](https://github.com/egose/database-tools/compare/v0.17.0...v0.17.1) (2026-08-24)
+
+### Bug Fixes
+
+* remove unused common copy from image build ([b8dd969](https://github.com/egose/database-tools/commit/b8dd969303b7417409888340e4603e56ed9fb30c))
+
 ## [0.17.0](https://github.com/egose/database-tools/compare/v0.16.0...v0.17.0) (2026-08-24)
 
 ### Features
