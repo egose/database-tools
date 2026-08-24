@@ -3,7 +3,7 @@
 set -euo pipefail
 
 image_ref="${1:-database-tools:release-verify}"
-postgres_image="postgres:16.10-bookworm@sha256:38471f330eb885e04de130b768d6db4e10469e2311879c7e5c699f6d2d8a1c74"
+postgres_image="postgres:18.6-bookworm@sha256:7d2695c3aa88e792e8b3b233e7e4adb296a20412c6c0ca361e3edaaacfada108"
 suffix="$(date +%s)-$$"
 network="database-tools-container-roundtrip-$suffix"
 postgres_container="database-tools-container-roundtrip-postgres-$suffix"
@@ -25,7 +25,7 @@ docker run --rm --mount "type=volume,source=$storage_volume,target=/backup" alpi
   sh -c 'chown 1000:1000 /backup && chmod 700 /backup'
 
 docker run -d --name "$postgres_container" --network "$network" \
-  --mount "type=volume,source=$postgres_volume,target=/var/lib/postgresql/data" \
+  --mount "type=volume,source=$postgres_volume,target=/var/lib/postgresql" \
   -e POSTGRES_DB=integration \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=postgres \
