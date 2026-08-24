@@ -38,7 +38,7 @@ Published container images include OCI labels for title, description, source, ve
 
 ## Toolchain Contract
 
-Release builds use Go `1.26.6` across `go.mod`, `.tool-versions`, the Docker build stage, and this policy. JavaScript tooling uses pnpm `11.17.0` across `package.json` and `.tool-versions`. `package.json` is marked private because npm publication is not a release product for this repository.
+Release builds use Go `1.26.6` across `go.mod`, `.tool-versions`, the Docker build stage, and this policy. JavaScript tooling uses pnpm `11.24.0` across `package.json` and `.tool-versions`. `package.json` is marked private because npm publication is not a release product for this repository.
 
 `scripts/check-supply-chain.sh` is the automated consistency gate. It fails release verification when Go or pnpm declarations drift, when Dockerfile bases or release-workflow container invocations are not digest-pinned, when the Dockerfile PostgreSQL client package is not version-pinned, when any declared asdf plugin is not pinned to a full commit SHA, when any Python lock entry lacks a hash, or when `package.json` stops being private.
 
