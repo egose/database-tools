@@ -11,42 +11,14 @@ runs:
     uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
     with:
       path: ~/.asdf
-      key: asdf-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.tool-versions') }}
+      key: asdf-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.tool-versions', '.github/actions/setup-tools/action.yml', 'scripts/setup-asdf-tools.sh', 'requirements.txt', 'requirements-lock.txt') }}
       restore-keys: |
         asdf-${{ runner.os }}-${{ runner.arch }}-
 
   - name: Install pinned asdf tools
-    run: |
-      set -euo pipefail
-
-      add_pinned_plugin() {
-        local name="$1"
-        local url="$2"
-        local ref="$3"
-        asdf plugin add "$name" "$url" || true
-        local plugin_dir="${ASDF_DATA_DIR:-$HOME/.asdf}/plugins/$name"
-        git -C "$plugin_dir" fetch --depth 1 origin "$ref"
-        git -C "$plugin_dir" checkout --detach "$ref"
-      }
-
-      add_pinned_plugin mongodb https://github.com/junminahn/asdf-mongodb.git 8ff6fa5467522dc54b92af00c8d65c653250f1d0
-      add_pinned_plugin docker-compose https://github.com/egose/asdf-docker-compose.git 477ce07b7e17666cc1a3f06c486e0bde2d92db08
-
-      while IFS= read -r line; do
-        if [[ -z "$line" || "$line" =~ ^# ]]; then
-          continue
-        fi
-        tool="${line%% *}"
-        asdf plugin add "$tool" || true
-      done < .tool-versions
-
-      asdf plugin list --urls --refs
-      asdf install
-      asdf reshim
+    run: bash scripts/setup-asdf-tools.sh
     shell: bash
 
   - name: Install python tools
-    run: |
-      python3 -m pip install --require-hashes -r requirements-lock.txt
-      asdf reshim
+    run: bash scripts/install-python-tools.sh
     shell: bash

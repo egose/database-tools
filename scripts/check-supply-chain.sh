@@ -27,7 +27,7 @@ require_match() {
 go_mod_version=$(awk '$1 == "go" { print $2; exit }' go.mod)
 tool_versions_go=$(awk '$1 == "golang" { print $2; exit }' .tool-versions)
 docker_go_version=$(awk '/^FROM golang:/ { sub(/^FROM golang:/, ""); sub(/@.*/, ""); print; exit }' Dockerfile)
-policy_go_version=$(sed -n 's/.*Go `\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\)`.*/\1/p' docs/release-artifact-policy.md | head -n 1)
+policy_go_version=$(awk '/Go `/ { value=$0; sub(/^.*Go `/, "", value); sub(/`.*/, "", value); print value; exit }' docs/release-artifact-policy.md)
 
 require_equal "Go version in .tool-versions" "$go_mod_version" "$tool_versions_go"
 require_equal "Go version in Dockerfile" "$go_mod_version" "$docker_go_version"
@@ -56,10 +56,36 @@ done < <(awk '/anchore\/syft:/ { print $1 }' .github/workflows/release.yml)
 
 while IFS= read -r plugin_pin; do
   require_match "asdf plugin pin" "$plugin_pin" '^[a-z0-9_-]+:[0-9a-f]{40}$'
-done < <(awk '/add_pinned_plugin / { print $2 ":" $4 }' .github/actions/setup-tools/action.yml)
+done < <(awk '/^add_pinned_plugin / { print $2 ":" $4 }' scripts/setup-asdf-tools.sh)
 
-if ! awk '/^    --hash=sha256:/ { found=1 } END { exit(found ? 0 : 1) }' requirements-lock.txt; then
-  printf 'requirements-lock.txt does not contain package hashes\n' >&2
+declared_plugins=$(awk '!/^($|#)/ { print $1 }' .tool-versions | sort)
+pinned_plugins=$(awk '/^add_pinned_plugin / { print $2 }' scripts/setup-asdf-tools.sh | sort)
+require_equal "declared and pinned asdf plugins" "$declared_plugins" "$pinned_plugins"
+
+if ! python3 - <<'PY'
+from pathlib import Path
+
+entries = []
+current = []
+for raw_line in Path("requirements-lock.txt").read_text().splitlines():
+    line = raw_line.strip()
+    if not line or line.startswith("#"):
+        continue
+    if not raw_line[:1].isspace():
+        if current:
+            entries.append(current)
+        current = [line]
+    elif current:
+        current.append(line)
+if current:
+    entries.append(current)
+
+unhashed = [entry[0] for entry in entries if not any(part.startswith("--hash=sha256:") for part in entry[1:])]
+if unhashed:
+    raise SystemExit("unhashed Python lock entries: " + ", ".join(unhashed))
+PY
+then
+  printf 'requirements-lock.txt is not fully hashed\n' >&2
   failures=$((failures + 1))
 fi
 

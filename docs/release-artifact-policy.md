@@ -14,8 +14,9 @@ The release gate for `v*.*.*` tags runs the following checks against the tagged 
 - `go mod verify`
 - `govulncheck -json ./...` through `scripts/release-govulncheck.sh`
 - `docker buildx build --check .`
+- a real Docker image build followed by `mongo-archive --version` and `mongo-unarchive --version` smoke tests
 - `make build-all VERSION=<tag>`
-- `make build-archive VERSION=<tag>`
+- `make build-archive VERSION=<tag>` (each archive includes `LICENSE`)
 - `make check-reproducible-archives VERSION=<tag> SOURCE_DATE_EPOCH=<epoch>`
 
 ## Published Release Assets
@@ -40,9 +41,9 @@ Published container images include OCI labels for title, description, source, ve
 
 Release builds use Go `1.26.6` across `go.mod`, `.tool-versions`, the Docker build stage, and this policy. JavaScript tooling uses pnpm `11.17.0` across `package.json` and `.tool-versions`. `package.json` is marked private because npm publication is not a release product for this repository.
 
-`scripts/check-supply-chain.sh` is the automated consistency gate. It fails release verification when Go or pnpm declarations drift, when Dockerfile bases or release-workflow container invocations are not digest-pinned, when custom asdf plugins are not pinned to full commit SHAs, when the Python lock lacks hashes, or when `package.json` stops being private.
+`scripts/check-supply-chain.sh` is the automated consistency gate. It fails release verification when Go or pnpm declarations drift, when Dockerfile bases or release-workflow container invocations are not digest-pinned, when any declared asdf plugin is not pinned to a full commit SHA, when any Python lock entry lacks a hash, or when `package.json` stops being private.
 
-Release-critical container inputs are content-addressed. The Docker build uses tagged digest references for the Go build image and Alpine runtime image, and the release SBOM generation image is invoked by tag plus digest. Renovate is configured to update Docker digests and the workflow `anchore/syft` digest. Custom asdf plugin repositories are checked out to explicit commit SHAs before tool installation, and Renovate is configured to propose updates for those git refs.
+Release-critical container inputs are content-addressed. The Docker build uses tagged digest references for the Go build image and Alpine runtime image, and the release SBOM generation image is invoked by tag plus digest. Renovate is configured to update Docker and Compose digests and the workflow `anchore/syft` digest. All asdf plugin repositories are checked out to explicit commit SHAs before tool installation, and Renovate is configured to propose updates for those git refs.
 
 Python CI/release tools are installed from `requirements-lock.txt` with `pip --require-hashes`; `requirements.txt` remains the short input constraint file for regenerating that lock with `uv pip compile requirements.txt --generate-hashes --prerelease allow -o requirements-lock.txt`.
 

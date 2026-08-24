@@ -31,19 +31,19 @@ You can install **mongo-archive** and **mongo-unarchive** in two ways:
 
 ### 1. Install via [asdf](https://asdf-vm.com/) (Recommended)
 
-If you use [asdf](https://asdf-vm.com/) to manage CLI tools, you can install the `mongodb-database-tools` plugin and make the CLI available globally.
+If you use [asdf](https://asdf-vm.com/) to manage CLI tools, install the embedded `database-tools` plugin from this repository.
 
 ```bash
-# Add the mongodb-database-tools plugin (only once)
-asdf plugin add mongodb-database-tools
+# Add the database-tools plugin (only once)
+asdf plugin add database-tools https://github.com/egose/database-tools.git
 
 # Install the desired version
-asdf install mongodb-database-tools <latest-version>
+asdf install database-tools <latest-version>
 
 # Set it as the global version
-asdf global mongodb-database-tools <latest-version>
+asdf set -u database-tools <latest-version>
 # Or set it locally for a project
-asdf local mongodb-database-tools <latest-version>
+asdf set database-tools <latest-version>
 ```
 
 After installation, you can run:
@@ -60,8 +60,8 @@ You can also manually download the prebuilt binaries from the official releases 
 **Releases:** [https://github.com/egose/database-tools/releases](https://github.com/egose/database-tools/releases)
 
 1. Visit the release page for **version <latest-version>**.
-2. Download the binary for your operating system and architecture.
-3. Make the binary executable and move it into a directory in your `PATH`:
+2. Download and extract the `.tar.gz` archive for your operating system and architecture.
+3. Make both extracted binaries executable and move them into a directory in your `PATH`:
 
 ```bash
 chmod +x mongo-archive
@@ -299,7 +299,7 @@ mongo-unarchive \
 docker run --rm \
   -v "$(pwd)/tmp:/tmp" \
   -e MONGOARCHIVE__DUMP_PATH=/tmp/datadump \
-  ghcr.io/egose/database-tools:latest \
+  ghcr.io/egose/database-tools:0.15.0 \
   mongo-archive \
   --uri="mongodb://<username>:<password>@cluster0.mongodb.net/" \
   --db=<dbname> \

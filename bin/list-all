@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+github_coordinates="${ASDF_DATABASE_TOOLS_GITHUB_REPOSITORY:-egose/database-tools}"
+[[ "$github_coordinates" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || {
+  printf 'Invalid GitHub repository: %s\n' "$github_coordinates" >&2
+  exit 1
+}
+
+identifier='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
+semver="^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-${identifier}(\\.${identifier})*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+releases_url="https://api.github.com/repos/${github_coordinates}/releases"
+tab=$'\t'
+curl_opts=(-fsSL --connect-timeout 10 --retry 3 -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+if [ -n "${GITHUB_API_TOKEN:-}" ]; then
+  curl_opts+=(-H "Authorization: Bearer $GITHUB_API_TOKEN")
+fi
+
+all_tags=""
+page=1
+while :; do
+  response=$(curl "${curl_opts[@]}" "${releases_url}?per_page=100&page=${page}")
+  compact=$(printf '%s' "$response" | tr -d '[:space:]')
+  case "$compact" in
+    \[*\]) ;;
+    *) printf 'GitHub releases API returned an unexpected response.\n' >&2; exit 1 ;;
+  esac
+
+  tags=$(printf '%s\n' "$response" | awk '
+    /"tag_name"[[:space:]]*:/ {
+      tag=$0
+      sub(/^.*"tag_name"[[:space:]]*:[[:space:]]*"/, "", tag)
+      sub(/".*$/, "", tag)
+    }
+    /"name"[[:space:]]*:/ {
+      name=$0
+      sub(/^.*"name"[[:space:]]*:[[:space:]]*"/, "", name)
+      sub(/".*$/, "", name)
+      if (tag != "" && name == "database-tools-" tag "-sha256.txt") {
+        sub(/^v/, "", tag)
+        print tag
+        tag=""
+      }
+    }
+  ')
+  all_tags="${all_tags}${tags}"$'\n'
+  release_count=$(printf '%s\n' "$response" | awk '/"tag_name"[[:space:]]*:/ { count++ } END { print count + 0 }')
+  [ "$release_count" -eq 100 ] || break
+  page=$((page + 1))
+done
+
+while IFS= read -r version; do
+  if [[ "$version" =~ $semver ]]; then
+    printf '%s\n' "$version"
+  fi
+done <<< "$all_tags" |
+  awk '
+    {
+      full=$0
+      core=full
+      sub(/\+.*/, "", core)
+      base=core
+      sub(/-.*/, "", base)
+      split(base, parts, ".")
+      prerelease=""
+      if (length(core) > length(base)) prerelease=substr(core, length(base) + 2)
+      stable=(prerelease == "" ? 1 : 0)
+      prerelease_key=""
+      count=split(prerelease, identifiers, ".")
+      if (prerelease != "") {
+        for (i=1; i<=count; i++) {
+          if (identifiers[i] ~ /^[0-9]+$/) key=sprintf("0%020d", identifiers[i] + 0)
+          else key="1" identifiers[i]
+          prerelease_key=prerelease_key "." key
+        }
+      }
+      printf "%s\t%s\t%s\t%s\t%s\t%s\n", parts[1], parts[2], parts[3], stable, prerelease_key, full
+    }
+  ' |
+  LC_ALL=C sort -t "$tab" -k1,1n -k2,2n -k3,3n -k4,4n -k5,5 -k6,6 |
+  cut -f6 |
+  awk '!seen[$0]++' |
+  paste -sd ' ' -

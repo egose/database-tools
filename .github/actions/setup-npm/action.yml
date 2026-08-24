@@ -6,7 +6,7 @@ runs:
   steps:
   - name: Get pnpm store path
     id: pnpm-store
-    run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_ENV
+    run: bash scripts/setup-pnpm-cache.sh
     shell: bash
 
   - name: Cache pnpm store
@@ -18,5 +18,5 @@ runs:
         pnpm-${{ runner.os }}-
 
   - name: Install packages
-    run: pnpm install --frozen-lockfile
+    run: bash scripts/install-node-packages.sh
     shell: bash

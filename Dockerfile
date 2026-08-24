@@ -28,7 +28,7 @@ LABEL org.opencontainers.image.title="database-tools" \
       org.opencontainers.image.source="${SOURCE}" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${REVISION}" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="Apache-2.0"
 
 RUN adduser -D -u 1000 nonroot
 

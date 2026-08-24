@@ -30,6 +30,11 @@ jobs:
       with:
         ref: ${{ inputs.ref }}
 
+    - name: Validate release tag
+      run: bash scripts/validate-release-tag.sh "$TAG_NAME"
+      env:
+        TAG_NAME: ${{ inputs.tag_name }}
+
     - name: Derive image version
       id: version
       run: printf 'value=%s\n' "${TAG_NAME#v}" >> "$GITHUB_OUTPUT"

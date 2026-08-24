@@ -27,7 +27,7 @@ OS_ARCH_PAIRS := \
 
 # See https://www.digitalocean.com/community/tutorials/how-to-build-go-executables-for-multiple-platforms-on-ubuntu-16-04#step-4-building-executables-for-different-architectures
 
-.PHONY: build-all build-single build-archive check-toolchain check-reproducible-archives release-verify
+.PHONY: build-all build-single build-archive check-toolchain check-reproducible-archives release-verify test-asdf
 
 build-all:
 	@set -euo pipefail; \
@@ -61,7 +61,10 @@ $(GOVULNCHECK):
 check-toolchain:
 	bash ./scripts/check-supply-chain.sh
 
-release-verify: check-toolchain $(GOVULNCHECK)
+test-asdf:
+	bats test/asdf-plugin.bats
+
+release-verify: check-toolchain test-asdf $(GOVULNCHECK)
 	pnpm install --frozen-lockfile
 	go test -shuffle=on ./...
 	go test -race -shuffle=on ./...
@@ -69,14 +72,21 @@ release-verify: check-toolchain $(GOVULNCHECK)
 	go mod verify
 	bash ./scripts/release-govulncheck.sh "$(CURDIR)/$(GOVULNCHECK)" ./...
 	docker buildx build --check .
+	@set -euo pipefail; \
+	image="database-tools:release-verify"; \
+	trap 'docker image rm -f "$$image" >/dev/null 2>&1 || true' EXIT; \
+	docker build --build-arg VERSION="$(VERSION)" --tag "$$image" .; \
+	docker run --rm "$$image" mongo-archive --version; \
+	docker run --rm "$$image" mongo-unarchive --version
 	$(MAKE) --no-print-directory build-all VERSION=$(VERSION)
 	$(MAKE) --no-print-directory build-archive VERSION=$(VERSION)
 	$(MAKE) --no-print-directory check-reproducible-archives VERSION=$(VERSION) SOURCE_DATE_EPOCH=$(SOURCE_DATE_EPOCH)
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o dist/mongo-archive ./mongoarchive/main/mongoarchive.go
-	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o dist/mongo-unarchive ./mongounarchive/main/mongounarchive.go
+	mkdir -p "$(DIST_DIR)"
+	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o "$(DIST_DIR)/mongo-archive" ./mongoarchive/main/mongoarchive.go
+	CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -ldflags "-buildid= -X main.version=$(VERSION)" -o "$(DIST_DIR)/mongo-unarchive" ./mongounarchive/main/mongounarchive.go
 	echo complete
 
 build-archive:
@@ -87,7 +97,7 @@ build-archive:
 		dir="$(DIST_DIR)/$$os-$$arch"; \
 		archive="$(DIST_DIR)/$(PREFIX)-$$os-$$arch.tar.gz"; \
 		test -d "$$dir"; \
-		tar --sort=name --mtime="@$(SOURCE_DATE_EPOCH)" --owner=0 --group=0 --numeric-owner -cf - -C "$$dir" . | gzip -n > "$$archive"; \
+		tar --sort=name --mtime="@$(SOURCE_DATE_EPOCH)" --owner=0 --group=0 --numeric-owner -cf - -C "$$dir" . -C "$(CURDIR)" LICENSE | gzip -n > "$$archive"; \
 		test -s "$$archive"; \
 	done; \
 	echo complete
@@ -116,7 +126,6 @@ db:
 sandbox:
 	mkdir -p ./sandbox/mnt/{mongodb,minio,azurite,fake-gcs-server}
 
-	export MACHINE_HOST_IP=$$(hostname -I | awk '{print $$1}'); \
 	docker-compose --env-file .env.test -f ./sandbox/docker-compose.yml up --build
 
 .PHONY: sandbox-down

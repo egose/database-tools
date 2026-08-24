@@ -7,12 +7,12 @@ sidebar_position: 1
 
 ## Install
 
-Install the released binaries with the `mongodb-database-tools` asdf plugin:
+Install the released binaries with the embedded `database-tools` asdf plugin:
 
 ```bash
-asdf plugin add mongodb-database-tools
-asdf install mongodb-database-tools <latest-version>
-asdf global mongodb-database-tools <latest-version>
+asdf plugin add database-tools https://github.com/egose/database-tools.git
+asdf install database-tools <latest-version>
+asdf set -u database-tools <latest-version>
 ```
 
 Or download prebuilt binaries from the [GitHub Releases](https://github.com/egose/database-tools/releases) page and place `mongo-archive` and `mongo-unarchive` in your `PATH`.
