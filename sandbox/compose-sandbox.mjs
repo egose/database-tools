@@ -1,6 +1,8 @@
 export default {
   cwd: '.',
   compose: {
+    executable: 'docker-compose',
+    prefixArgs: [],
     files: ['sandbox/docker-compose.yml', 'sandbox/docker-compose-ci.yml'],
     envFile: '.env.example',
     projectName: 'database-tools',
