@@ -5,10 +5,6 @@ export default {
     envFile: '.env.example',
     projectName: 'database-tools',
   },
-  // No host bind-mounts – sandbox uses named Docker volumes
-  // (postgres_data, mongodb_data, etc.) to avoid EACCES on
-  // sandbox/mnt/* (postgres/mongo create files as root). Volumes are
-  // removed via `cleanup.volumes: true` + `docker compose down -v`.
   readiness: [
     { type: 'tcp', host: '127.0.0.1', port: 5432 },
     { type: 'tcp', host: '127.0.0.1', port: 27017 },
