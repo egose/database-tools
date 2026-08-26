@@ -5,21 +5,10 @@ export default {
     envFile: '.env.example',
     projectName: 'database-tools',
   },
-  prepare: {
-    directories: [
-      'sandbox/mnt/postgres',
-      'sandbox/mnt/mongodb',
-      'sandbox/mnt/minio',
-      'sandbox/mnt/azurite',
-      'sandbox/mnt/fake-gcs-server',
-    ],
-  },
-  // envFile uses .env.example directly to avoid needing a copy of the
-  // gitignored .env.test. The previous prepare copy triggered
-  // "prepare copy source does not exist: .env.example" in CI when the
-  // workspace hadn't yet materialized the file before the engine's
-  // preflight. Using the tracked example file makes the sandbox
-  // self-contained.
+  // No host bind-mounts – sandbox uses named Docker volumes
+  // (postgres_data, mongodb_data, etc.) to avoid EACCES on
+  // sandbox/mnt/* (postgres/mongo create files as root). Volumes are
+  // removed via `cleanup.volumes: true` + `docker compose down -v`.
   readiness: [
     { type: 'tcp', host: '127.0.0.1', port: 5432 },
     { type: 'tcp', host: '127.0.0.1', port: 27017 },
@@ -70,13 +59,6 @@ export default {
   cleanup: {
     volumes: true,
     removeOrphans: true,
-    paths: [
-      'sandbox/mnt/postgres',
-      'sandbox/mnt/mongodb',
-      'sandbox/mnt/minio',
-      'sandbox/mnt/azurite',
-      'sandbox/mnt/fake-gcs-server',
-    ],
   },
   timeouts: {
     startupMs: 120000,

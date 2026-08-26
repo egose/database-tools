@@ -10,9 +10,7 @@ services:
     ports:
     - 127.0.0.1:${POSTGRES_PORT:-5432}:5432
     volumes:
-    - type: bind
-      source: ./mnt/postgres
-      target: /var/lib/postgresql/data
+    - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: [CMD-SHELL, pg_isready -U postgres -d integration -t 5]
       interval: 2s
@@ -34,9 +32,7 @@ services:
     ports:
     - 127.0.0.1:27017:27017
     volumes:
-    - type: bind
-      source: ./mnt/mongodb
-      target: /data/db
+    - mongodb_data:/data/db
 
   minio:
     platform: linux/amd64
@@ -46,9 +42,7 @@ services:
     - 127.0.0.1:9000:9000
     - 127.0.0.1:9001:9001
     volumes:
-    - type: bind
-      source: ./mnt/minio
-      target: /data
+    - minio_data:/data
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin # pragma: allowlist secret
@@ -96,9 +90,7 @@ services:
     - 127.0.0.1:10000:10000
     - 127.0.0.1:10001:10001
     volumes:
-    - type: bind
-      source: ./mnt/azurite
-      target: /home/host
+    - azurite_data:/home/host
     command: azurite --blobHost 0.0.0.0 --blobPort 10000 --location /home/host --debug /home/host/azure.log --skipApiVersionCheck
 
   # See https://github.com/fsouza/fake-gcs-server
@@ -114,12 +106,17 @@ services:
       FAKE_GCP_BUCKET: ${FAKE_GCP_BUCKET}
       FAKE_GCP_PORT: ${FAKE_GCP_PORT}
     volumes:
-    - type: bind
-      source: ./mnt/fake-gcs-server
-      target: /data
+    - fake_gcs_data:/data
     entrypoint:
     - /bin/sh
     - -c
     - |
       mkdir -p "/data/$${FAKE_GCP_BUCKET}"
       exec /bin/fake-gcs-server -data /data -scheme http -port "$${FAKE_GCP_PORT}" -public-host "localhost:$${FAKE_GCP_PORT}"
+
+volumes:
+  postgres_data:
+  mongodb_data:
+  minio_data:
+  azurite_data:
+  fake_gcs_data:
