@@ -24,7 +24,7 @@ jobs:
       uses: ./.github/actions/setup-tools
 
     - name: Run pre-commit
-      uses: egose/actions/pre-commit@6f27cb186bb9b8455c813722933b01706eaf6141
+      uses: egose/actions/pre-commit@7e353763093d79b6a02c447f8c1393ffad13ded1
       with:
         config: .pre-commit-config.yaml
         commit-on-push: false
@@ -49,7 +49,7 @@ jobs:
       uses: ./.github/actions/setup-tools
 
     - name: Run pre-commit
-      uses: egose/actions/pre-commit@6f27cb186bb9b8455c813722933b01706eaf6141
+      uses: egose/actions/pre-commit@7e353763093d79b6a02c447f8c1393ffad13ded1
       with:
         config: .pre-commit-config.yaml
         commit-on-push: true
