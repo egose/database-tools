@@ -2,7 +2,7 @@ export default {
   cwd: '.',
   compose: {
     files: ['sandbox/docker-compose.yml', 'sandbox/docker-compose-ci.yml'],
-    envFile: '.env.test',
+    envFile: '.env.example',
     projectName: 'database-tools',
   },
   prepare: {
@@ -13,8 +13,13 @@ export default {
       'sandbox/mnt/azurite',
       'sandbox/mnt/fake-gcs-server',
     ],
-    copies: [{ from: '.env.example', to: '.env.test' }],
   },
+  // envFile uses .env.example directly to avoid needing a copy of the
+  // gitignored .env.test. The previous prepare copy triggered
+  // "prepare copy source does not exist: .env.example" in CI when the
+  // workspace hadn't yet materialized the file before the engine's
+  // preflight. Using the tracked example file makes the sandbox
+  // self-contained.
   readiness: [
     { type: 'tcp', host: '127.0.0.1', port: 5432 },
     { type: 'tcp', host: '127.0.0.1', port: 27017 },
