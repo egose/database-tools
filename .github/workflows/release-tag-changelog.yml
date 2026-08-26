@@ -43,7 +43,7 @@ jobs:
         RELEASE_VERSION: ${{ github.event.inputs.tag }}
 
     - name: Create Release Tag
-      uses: egose/actions/release-tag@6f27cb186bb9b8455c813722933b01706eaf6141
+      uses: egose/actions/release-tag@7e353763093d79b6a02c447f8c1393ffad13ded1
       with:
         tag: ${{ github.event.inputs.tag }}
         github-token: ${{ secrets.GITHUB_TOKEN }}

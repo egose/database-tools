@@ -59,8 +59,6 @@ db:
 
 .PHONY: sandbox
 sandbox:
-	mkdir -p ./sandbox/mnt/{mongodb,minio,azurite,fake-gcs-server}
-
 	docker-compose --env-file .env.test -f ./sandbox/docker-compose.yml up --build
 
 .PHONY: sandbox-down
