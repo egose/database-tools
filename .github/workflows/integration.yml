@@ -67,7 +67,3 @@ jobs:
         config: sandbox/compose-sandbox.mjs
         artifact-name: integration-service-logs-${{ matrix.startup-attempt }}
         artifact-policy: always
-
-    - name: Ensure bind-mount cleanup
-      if: always()
-      run: sudo rm -rf ./sandbox/mnt || true
