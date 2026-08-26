@@ -47,7 +47,7 @@ jobs:
 
     - name: Build, scan, and publish verified image
       id: image
-      uses: egose/actions/docker-build-push@7e353763093d79b6a02c447f8c1393ffad13ded1
+      uses: egose/actions/docker-build-push@b61f648b0dc314e25fc81ac7d4e32a24a5ab5486
       env:
         REVISION: ${{ steps.revision.outputs.value }}
         TAG_NAME: ${{ inputs.tag_name }}
