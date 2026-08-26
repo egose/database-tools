@@ -57,6 +57,9 @@ jobs:
         pg_restore --version
         psql --version
 
+    - name: Prepare env file for Bats and compose
+      run: cp .env.example .env.test
+
     - name: Run integration sandbox
       id: sandbox
       uses: egose/actions/compose-sandbox@6f27cb186bb9b8455c813722933b01706eaf6141
