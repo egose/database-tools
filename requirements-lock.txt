@@ -30,9 +30,9 @@ azure-batch==15.0.0b1 \
     --hash=sha256:dfbddd158ffade52193e3e4d86c996ea7236ffd2695a43734fae5e05a974e2ed \
     --hash=sha256:e9cacfa058405c77f27fbf35cecb8f3be81b220deed06d2d9535c8dacae5af10
     # via azure-cli
-azure-cli==2.88.0 \
-    --hash=sha256:1f1b1c7feac72d4eae015ec6b902e293f0b63a67c695b2bd3c5fb19f63600336 \
-    --hash=sha256:4badae62c442cbb36a31b1984c6b1903c0b1029bd61bd9c8f82d1c9a585eb683
+azure-cli==2.90.0 \
+    --hash=sha256:78b9de12248183140f358b245b62f1697ad2c50b8be49cd943fef34c50697b22 \
+    --hash=sha256:e66c4788e262474195a02b81a92cbf7561f0e67ba6a2bd47eba0a32fdb8435a1
     # via -r requirements.txt
 azure-cli-core==2.88.0 \
     --hash=sha256:3a2eb1aafa331c883ddd3b646b548ab80f0584cbf89f121441e4cdf341a69f9f \
