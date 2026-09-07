@@ -31,7 +31,7 @@ importers:
         version: 25.9.5
       globals:
         specifier: ^17.8.0
-        version: 17.8.0
+        version: 17.12.0
       prettier:
         specifier: 4.0.0-alpha.13
         version: 4.0.0-alpha.13
@@ -3738,8 +3738,8 @@ packages:
     resolution: {integrity: sha512-NBcGGFbBA9s1VzD41QXDG+3++t9Mn5t1FpLdhESY6oKY4gYTFpX4wO3sqGUa0Srjtbfj3szX0RnemmrVRUdULA==}
     engines: {node: '>=10'}
 
-  globals@17.8.0:
-    resolution: {integrity: sha512-Zz/LMDZScFmkakeL2cTHzf+PbWKdpU3uclqkZT7TjDG58j5WPt0PpA+n9uPI24fZtlw07q0OtEi84K+umsRzqQ==}
+  globals@17.12.0:
+    resolution: {integrity: sha512-cezEd/DTyyht9cvSSURyygXPfy04GtWO/5e6ZPvH7fCtjKz9PYOmuawphw1Ctd1f6C+5JypXfGD7ahNMXvevBA==}
     engines: {node: '>=18'}
 
   globby@11.1.0:
@@ -11394,7 +11394,7 @@ snapshots:
     dependencies:
       ini: 2.0.0
 
-  globals@17.8.0: {}
+  globals@17.12.0: {}
 
   globby@11.1.0:
     dependencies:
