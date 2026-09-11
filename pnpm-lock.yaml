@@ -21,8 +21,8 @@ importers:
         specifier: ^7.0.6
         version: 7.0.6(release-it@20.2.1(@types/node@25.9.5)(supports-color@8.1.1))
       '@repo-toolkit/changelog':
-        specifier: ^0.14.0
-        version: 0.14.0(conventional-commits-filter@5.0.0)
+        specifier: ^0.30.0
+        version: 0.30.0(conventional-commits-filter@5.0.0)
       '@repo-toolkit/go-release':
         specifier: ^0.14.0
         version: 0.14.0
@@ -1859,8 +1859,8 @@ packages:
     peerDependencies:
       release-it: ^18.0.0 || ^19.0.0 || ^20.0.0
 
-  '@repo-toolkit/changelog@0.14.0':
-    resolution: {integrity: sha512-QHW0zYomxSC7nM4fapipmkT9aluVRuN34KUVvExsuVeL+Q+KiUOb6swEAWNJ65JfYYQpeytZ3gq6twDwBMd+yw==}
+  '@repo-toolkit/changelog@0.30.0':
+    resolution: {integrity: sha512-AQV1/P5zso4aDOjey8/1w0HLKeAX4vK1XFsqxfZYzjatbZ5CsmXMmf3caX7ezhn/YCaFLfaBMTDlmxmrIwRWBw==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -1871,6 +1871,11 @@ packages:
 
   '@repo-toolkit/publish-package@0.14.0':
     resolution: {integrity: sha512-eaz6bI47KQVDgnlOEYl/iCzAxBYnnHqGLB7/NedevxSdM/LrReIIfJVBii2OSJ9iSKzLagLWuM3zF5NdUwqA7w==}
+    engines: {node: '>=20'}
+    hasBin: true
+
+  '@repo-toolkit/publish-package@0.30.0':
+    resolution: {integrity: sha512-r0mM/WYdnObiUTJIm6qqyDu3JjgJQeOBIAI2ENQpCrgpnmpSILh35s0afCp3OhKRrYWsrsEn2AYiN/zY4l1w/g==}
     engines: {node: '>=20'}
     hasBin: true
 
@@ -9441,9 +9446,9 @@ snapshots:
       release-it: 20.2.1(@types/node@25.9.5)(supports-color@8.1.1)
       semver: 7.8.5
 
-  '@repo-toolkit/changelog@0.14.0(conventional-commits-filter@5.0.0)':
+  '@repo-toolkit/changelog@0.30.0(conventional-commits-filter@5.0.0)':
     dependencies:
-      '@repo-toolkit/publish-package': 0.14.0
+      '@repo-toolkit/publish-package': 0.30.0
       conventional-changelog: 7.2.1(conventional-commits-filter@5.0.0)
       conventional-changelog-conventionalcommits: 9.3.1
     transitivePeerDependencies:
@@ -9454,6 +9459,10 @@ snapshots:
       '@repo-toolkit/publish-package': 0.14.0
 
   '@repo-toolkit/publish-package@0.14.0':
+    dependencies:
+      '@clack/prompts': 1.7.0
+
+  '@repo-toolkit/publish-package@0.30.0':
     dependencies:
       '@clack/prompts': 1.7.0
 
