@@ -22,7 +22,7 @@ services:
     platform: linux/amd64
     container_name: database-tools-mongodb
     # See https://hub.docker.com/r/bitnami/mongodb/tags
-    image: ghcr.io/egose/bitnami-mongodb:8.2.7@sha256:2683244a60e66970271aee7fe509354f60c1a7e1dfbcaf8e025fc5e2c4b1bb27
+    image: ghcr.io/egose/bitnami-mongodb:8.3.11@sha256:3293d5c9e79c8d57e927c8f1941281684dc6254b45947b9d392fdcd38cfe5f1e
     environment:
     - MONGODB_ADVERTISED_HOSTNAME=127.0.0.1
     - MONGODB_REPLICA_SET_MODE=primary
