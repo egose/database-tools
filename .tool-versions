@@ -8,3 +8,4 @@ docker-compose 5.5.0
 mongosh 2.10.0
 actionlint 1.7.12
 shellcheck 0.11.0
+gitleaks 8.30.1

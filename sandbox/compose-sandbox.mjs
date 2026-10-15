@@ -11,11 +11,9 @@ export default {
     { type: 'tcp', host: '127.0.0.1', port: 5432 },
     { type: 'tcp', host: '127.0.0.1', port: 27017 },
     { type: 'tcp', host: '127.0.0.1', port: 9000 },
-    { type: 'http', url: 'http://127.0.0.1:9000/minio/health/live' },
-    { type: 'tcp', host: '127.0.0.1', port: 9001 },
     { type: 'tcp', host: '127.0.0.1', port: 10000 },
     { type: 'tcp', host: '127.0.0.1', port: 8080 },
-    { type: 'service-completed', service: 'minio-init' },
+    { type: 'service-completed', service: 'seaweedfs-init' },
     {
       type: 'command',
       executable: 'mongosh',

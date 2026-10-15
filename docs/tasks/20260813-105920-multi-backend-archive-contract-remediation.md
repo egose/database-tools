@@ -208,7 +208,7 @@ Acceptance criteria:
 
 Completion evidence:
 
-- Reviewer: independent general review agent session `ses_003b2dfdaffe8QNgz7uX62TK7Q`
+- Reviewer: REVIEW-01 independent review session
 - Result: no findings were identified in the final reviewed change set
 - Residual risk: reviewed coverage is strong at the unit level, but cron mode with the real scheduler plus concrete notifications and storage backends still lacks an end-to-end test for partial multi-backend failures
 
