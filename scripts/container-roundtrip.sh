@@ -21,7 +21,7 @@ docker network create "$network" >/dev/null
 docker volume create "$storage_volume" >/dev/null
 docker volume create "$postgres_volume" >/dev/null
 
-docker run --rm --mount "type=volume,source=$storage_volume,target=/backup" alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40 \
+docker run --rm --mount "type=volume,source=$storage_volume,target=/backup" alpine:3.23.6@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0 \
   sh -c 'chown 1000:1000 /backup && chmod 700 /backup'
 
 docker run -d --name "$postgres_container" --network "$network" \

@@ -16,24 +16,17 @@ identifier='(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)'
 case "$(uname -s)" in
   Darwin) os="darwin" ;;
   Linux) os="linux" ;;
-  FreeBSD) os="freebsd" ;;
-  OpenBSD) os="openbsd" ;;
-  NetBSD) os="netbsd" ;;
   *) printf 'Unsupported OS: %s\n' "$(uname -s)" >&2; exit 1 ;;
 esac
 
 case "$(uname -m)" in
   x86_64|amd64) arch="amd64" ;;
   arm64|aarch64) arch="arm64" ;;
-  i386|i686) arch="386" ;;
-  armv6l|armv7l|arm) arch="arm" ;;
-  mips) arch="mips" ;;
-  mips64) arch="mips64" ;;
   *) printf 'Unsupported architecture: %s\n' "$(uname -m)" >&2; exit 1 ;;
 esac
 
 case "${os}:${arch}" in
-  linux:amd64|linux:arm64|linux:386|linux:arm|linux:mips|linux:mips64|darwin:amd64|darwin:arm64|freebsd:amd64|freebsd:arm64|openbsd:amd64|openbsd:arm64|netbsd:amd64) ;;
+  linux:amd64|linux:arm64|darwin:amd64|darwin:arm64) ;;
   *) printf 'Unsupported platform: %s:%s\n' "$os" "$arch" >&2; exit 1 ;;
 esac
 
