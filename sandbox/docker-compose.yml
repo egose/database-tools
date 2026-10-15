@@ -34,49 +34,47 @@ services:
     volumes:
     - mongodb_data:/data/db
 
-  minio:
+  seaweedfs:
     platform: linux/amd64
-    container_name: database-tools-minio
-    image: minio/minio:RELEASE.2025-02-07T23-21-09Z@sha256:640c22768ed5dbc92eacc14502a1b06a1c708fa60431345c78dfc22917062e93
+    container_name: database-tools-seaweedfs
+    # See https://hub.docker.com/r/chrislusf/seaweedfs/tags
+    # See https://github.com/seaweedfs/seaweedfs/releases
+    image: chrislusf/seaweedfs:4.48@sha256:4e61d15fd35994cb1e43e1e553dff106794841fd9a99ade2fc8c8bfce4d7872d
     ports:
-    - 127.0.0.1:9000:9000
-    - 127.0.0.1:9001:9001
+    - 127.0.0.1:9000:8333
     volumes:
-    - minio_data:/data
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin # pragma: allowlist secret
-    command: server --console-address ":9001" /data
+    - seaweedfs_data:/data
+    - ./seaweedfs-s3.json:/etc/seaweedfs/s3.json:ro
+    command: server -dir /data -filer -s3 -s3.port=8333 -s3.config=/etc/seaweedfs/s3.json -s3.autoCreateBucket=false
 
-  minio-init:
+  seaweedfs-init:
     platform: linux/amd64
-    # See https://hub.docker.com/r/minio/mc/tags
-    image: minio/mc:RELEASE.2025-02-08T19-14-21Z@sha256:5e8d8a62846797a34d1aaaafe9d9bebe75ac71229063383eadc497bd0e3f6317
+    # See https://hub.docker.com/r/amazon/aws-cli/tags
+    image: amazon/aws-cli:2.38.1@sha256:733d5be1015825e4038c6016f3fa9954868ddee1f611b73be795a9cc2e706bfd
     environment:
+      AWS_ACCESS_KEY_ID: ${MINIO_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${MINIO_SECRET_KEY}
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_EC2_METADATA_DISABLED: 'true'
       MINIO_BUCKET: ${MINIO_BUCKET}
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
     entrypoint:
     - /bin/sh
     - -c
     - |
       set -eu
-      until /usr/bin/mc alias set minio http://minio:9000 minioadmin minioadmin; do sleep 1; done
-      until /usr/bin/mc ready minio; do sleep 1; done
-      /usr/bin/mc rb --force "minio/$${MINIO_BUCKET}" || true
-      /usr/bin/mc mb "minio/$${MINIO_BUCKET}"
-      /usr/bin/mc anonymous set download "minio/$${MINIO_BUCKET}"
-      svcacct_output=$$(/usr/bin/mc admin user svcacct add minio minioadmin --access-key "$${MINIO_ACCESS_KEY}" --secret-key "$${MINIO_SECRET_KEY}" 2>&1) || svcacct_status=$$?
-      if [ "$${svcacct_status:-0}" -ne 0 ]; then
-        case "$$svcacct_output" in
-          *[Aa]lready*exists*|*[Aa]lready*taken*) printf '%s\n' "$$svcacct_output" ;;
-          *) printf '%s\n' "$$svcacct_output" >&2; exit "$$svcacct_status" ;;
-        esac
-      else
-        printf '%s\n' "$$svcacct_output"
-      fi
+      endpoint="http://seaweedfs:8333"
+      i=0
+      until /usr/local/bin/aws --endpoint-url "$$endpoint" s3api head-bucket --bucket "$MINIO_BUCKET" 2>/dev/null; do
+        i=$$((i + 1))
+        if [ "$$i" -gt 110 ]; then
+          echo "seaweedfs bucket \"$MINIO_BUCKET\" did not become available" >&2
+          exit 1
+        fi
+        /usr/local/bin/aws --endpoint-url "$$endpoint" s3 mb "s3://$MINIO_BUCKET" 2>/dev/null || true
+        sleep 1
+      done
     depends_on:
-    - minio
+    - seaweedfs
 
   azurite:
     platform: linux/amd64
@@ -117,6 +115,6 @@ services:
 volumes:
   postgres_data:
   mongodb_data:
-  minio_data:
+  seaweedfs_data:
   azurite_data:
   fake_gcs_data:
