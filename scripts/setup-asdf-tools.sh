@@ -25,6 +25,7 @@ add_pinned_plugin docker-compose https://github.com/egose/asdf-docker-compose.gi
 add_pinned_plugin mongosh https://github.com/itspngu/asdf-mongosh.git 1b249027e87d9c7f5b4b8850182bf84e1e79fc95
 add_pinned_plugin actionlint https://github.com/crazy-matt/asdf-actionlint.git f8df3cfa05a1c875415b015808548bc8bac3b3a4
 add_pinned_plugin shellcheck https://github.com/luizm/asdf-shellcheck.git 8b954a95d44b8d8a6c6cd5a5a52ed643b7bb52e3
+add_pinned_plugin gitleaks https://github.com/jmcvetta/asdf-gitleaks.git 0cc0d7ef27a70041f12707aa0c5586a1ed4f1fbe
 
 asdf plugin list --urls --refs
 asdf install
