@@ -18,7 +18,7 @@ COPY utils ./utils
 RUN make build VERSION="${VERSION}"
 
 # See https://hub.docker.com/_/alpine/tags
-FROM alpine:3.23.6@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
+FROM alpine:3.24.4@sha256:93b41ef40b1677fce8fcc64ff4af09daddfacf5040afde618bc46c1e2d1cc7d4
 
 ARG VERSION=localdev
 ARG REVISION=unknown
